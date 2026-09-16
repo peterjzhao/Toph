@@ -1,0 +1,39 @@
+{
+  "name": "toph-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "db:up": "docker compose -f compose.db.yaml up -d",
+    "db:stop": "docker compose -f compose.db.yaml stop",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/db/migrate.ts",
+    "db:seed": "tsx scripts/db/seed.ts",
+    "db:check": "tsx scripts/db/check.ts",
+    "test:backend": "vitest run --config tests/backend/vitest.config.mts"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "geist": "1.7.2",
+    "lucide-react": "1.46.0",
+    "next": "16.3.5",
+    "postgres": "3.4.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "0.0.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "17.4.2",
+    "drizzle-kit": "0.31.10",
+    "tsx": "4.23.13",
+    "typescript": "^5",
+    "vitest": "4.1.11"
+  }
+}
