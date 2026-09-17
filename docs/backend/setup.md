@@ -7,8 +7,8 @@ the migration and test commands below are operator tools, not deployment build s
 ## Prerequisites
 
 - Node.js 24 LTS (the pinned Vercel runtime) and npm.
-- One PostgreSQL 17 database: the isolated Docker container below (requires Docker, provided on
-  this machine by OrbStack) or a Supabase project.
+- The hosted Supabase database. It is the only application database; local development uses it too.
+- Docker (OrbStack on this machine), only for the disposable backend test database.
 - No Postgres client tools are required; the scripts use the bundled `postgres` driver.
 
 ## Environment variables
@@ -19,7 +19,7 @@ server-only. Nothing may use a `NEXT_PUBLIC_` prefix.
 | Key | Used by | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | App runtime (`/api/*`) | Restricted role (`toph_app`): reads plus the tag and workspace write paths. |
-| `DATABASE_MIGRATION_URL` | `db:migrate`, `db:seed`, `db:check` | Owner role with DDL privileges. Session or direct connection, never the transaction pooler. |
+| `DATABASE_MIGRATION_URL` | `db:migrate`, `db:seed`, `db:reset-sample`, `db:check` | Owner role with DDL privileges. Session or direct connection, never the transaction pooler. |
 | `TEST_DATABASE_URL` | `test:backend` | Separate disposable database. The database name must contain `test`; tests refuse to run if it matches the runtime database. |
 | `TEST_DATABASE_APP_URL` | `test:backend` (optional) | The same test database as the restricted role, used to verify grants. Those tests are skipped when unset. |
 | `DATABASE_APP_ROLE` | `db:migrate`, `db:check` | Role that receives runtime grants after migrations (default `toph_app`; empty skips grants). |
@@ -28,59 +28,31 @@ server-only. Nothing may use a `NEXT_PUBLIC_` prefix.
 | `TOPH_FARM_ID` | App runtime | UUID of the farm this deployment serves. Missing, malformed, or absent from the database answers 503 `NOT_CONFIGURED`. |
 | `APP_ORIGIN` | App runtime | Browser origin required on `POST`, `PATCH`, and `DELETE` requests, e.g. `http://127.0.0.1:3000`. |
 
-## Option A: isolated local PostgreSQL in Docker
+## Backend test database
 
-`compose.db.yaml` starts `postgres:17-alpine` bound to `127.0.0.1:54329` only, with a named
-volume (`toph_toph-postgres-data`). On first initialization
-`scripts/db/docker-init/01-local-roles.sql` creates the restricted role `toph_app` and the
-disposable database `toph_test`. The credentials are local-only.
-
-```bash
-npm run db:up
-```
-
-`.env.local` for this container:
-
-```dotenv
-DATABASE_URL=postgresql://toph_app:toph_app_local_dev_password@127.0.0.1:54329/toph
-DATABASE_MIGRATION_URL=postgresql://toph_owner:toph_owner_local_dev_password@127.0.0.1:54329/toph
-TEST_DATABASE_URL=postgresql://toph_owner:toph_owner_local_dev_password@127.0.0.1:54329/toph_test
-TEST_DATABASE_APP_URL=postgresql://toph_app:toph_app_local_dev_password@127.0.0.1:54329/toph_test
-DATABASE_APP_ROLE=toph_app
-TOPH_FARM_ID=00000000-0000-4000-8000-000000000001
-APP_ORIGIN=http://127.0.0.1:3000
-```
-
-Then:
+`compose.db.yaml` starts a disposable `postgres:17-alpine` bound to `127.0.0.1:54329`, with
+the database `toph_test`. On first initialization `scripts/db/docker-init/01-local-roles.sql`
+creates the restricted role `toph_app`. The credentials are test-only placeholders and are
+already filled in `.env.example`. It holds no application data; each test run rebuilds it.
 
 ```bash
-npm run db:migrate
+npm run test:db:up
 ```
 
 ```bash
-npm run db:seed
+npm run test:backend
 ```
 
-```bash
-npm run db:check
-```
+Stop it with `npm run test:db:stop`, or wipe it with
+`docker compose -f compose.db.yaml down -v`. If Docker commands fail with a socket error, start
+OrbStack with `orbctl start` and retry.
 
 `db:migrate` applies the SQL under `drizzle/` and grants `DATABASE_APP_ROLE` its runtime
 privileges. `db:seed` loads the Bays Ranch initial dataset and is idempotent: it inserts what is
 missing and never overwrites existing rows or tags. `db:check` reports connectivity, migration
 state, data state, and the runtime role's effective privileges without printing secrets.
 
-Stop the container without losing data with `npm run db:stop`. Deleting the local data volume
-is a deliberate local-only reset:
-
-```bash
-docker compose -f compose.db.yaml down -v
-```
-
-If Docker commands fail with a socket error, the OrbStack runtime is not running; start it with
-`orbctl start` and retry.
-
-## Option B: Supabase
+## Supabase
 
 Existing installations may still have the older twelve-employee seed. Migration `0005`
 removes the extra seeded Peter profile; the eleven employees plus the separate administrator
@@ -111,8 +83,8 @@ just to deploy the website. Keep owner credentials in local configuration only.
 ## Database roles and privileges
 
 - Migration/owner role (`DATABASE_MIGRATION_URL`): owns the `toph` schema, runs DDL, loads data,
-  applies grants. Local Docker: `toph_owner`. Supabase: `postgres`.
-- Runtime role (`DATABASE_URL`): what the Next.js server uses. `toph_app` in both setups.
+  applies grants. Supabase: `postgres`; test container: `toph_owner`.
+- Runtime role (`DATABASE_URL`): what the Next.js server uses: `toph_app`.
 
 Grants applied by `db:migrate` (see `src/server/db/grants.ts`):
 
@@ -161,6 +133,11 @@ objects such as the function are not managed by drizzle-kit), then `npm run db:m
 logs with deterministic IDs (`src/server/db/initial-data.ts`). Every log references the
 recording and waveform assets under `public/assets`. The tag catalog starts empty. Re-running
 inserts nothing and changes nothing; nothing is loaded at application startup.
+
+`npm run db:reset-sample -- --yes` restores Bays Ranch to that seeded state. It deletes the
+farm's logs, tags, recordings, messages, workspace edits, accounts and sessions, then seeds
+again, including the admin's Figma photo in the workspace settings. Other farms are not
+touched. Without `--yes` it only prints which database it would reset.
 
 The administrator is the existing separate account shown in Switch User, not a twelfth
 employee profile. `activeWorkers` includes this account once. Run `npm run db:migrate` on

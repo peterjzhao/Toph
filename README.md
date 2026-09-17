@@ -1,77 +1,110 @@
 # Toph
 
-Toph is a Next.js management dashboard backed by Drizzle and PostgreSQL. The website serves
-one shared farm with persistent sample data. See [Vercel deployment](docs/deployment.md) for
-the existing project's settings and deployment checks.
+Toph is a work log for farms. Workers record what they did in the field on their phone, by
+voice or by typing, and the farm admin sees those logs on a web dashboard.
 
-The [Expo recording app](mobile/README.md) uses the same server and existing farm
-accounts. It supports account switching, profile/photo editing, and syncing recordings or
-written logs. See [mobile connection setup](docs/backend/mobile.md). Recording processing returns a transcript plus structured form suggestions when the server
-OpenAI key and transcription flag are configured. See [what runs where](docs/system-map.md).
+The repo has two apps that share one backend:
 
-## Repository layout
+- a Next.js web dashboard for the admin, which also serves the API (`src/`)
+- an Expo app for workers on iOS and Android (`mobile/`)
+
+Data lives in PostgreSQL (Supabase in production), and the web app is deployed on Vercel.
+
+## The phone app
+
+A worker signs in with their name, or joins a farm with the code the admin gives them.
+From there they can:
+
+- record a voice note about the job, or write one
+- review the log before saving it: field, activity, date, start and end time, notes, and any
+  product, amount and unit that was applied
+- keep drafts on the phone when there's no signal and sync them later
+- look back through their own logs
+- message the farm admin
+- edit their profile photo and their default field and activity
+
+When a recording is processed, the server sends the audio to OpenAI for transcription, then
+asks a second model to pull the log fields out of the transcript. Anything the worker didn't
+say stays empty. The worker checks the suggestions before saving, so nothing turns into a
+log without them confirming it.
+
+## The dashboard
+
+An admin creates a farm by signing up on the web. The first step is setting up the farm's
+fields. They upload an aerial image, a segmentation model running in the browser suggests
+field outlines, and the admin picks the ones that are real fields and gives each a letter.
+After that the admin shares a join code with their workers.
+
+The dashboard shows incoming logs with their recording, transcript, tags and a map of the
+field. New logs stay marked until the admin opens them. The sidebar also has pages for
+activity logs, the field map, employees, performance, schedule, reports, messages and
+settings.
+
+An open dashboard checks the API every two seconds, so a log saved on a phone appears
+without a page reload. Messages are checked every five seconds on both sides.
+
+Bays Ranch is a sample farm seeded from the original Figma design. It keeps the design's
+eleven workers, logs and card values, and it can't be edited like a real farm.
+
+## How it fits together
 
 ```text
-src/
-  app/                    Next.js pages, layouts, and API routes
-  components/dashboard/   Live dashboard UI, styles, and display types
-  components/workspace/   Sidebar pages and shared workspace UI
-  contracts/              Shared serializable dashboard, workspace, and mobile API types
-  fixtures/               Development-only Figma comparison data
-  lib/                    Small web utilities
-  server/                 Database access, services, validation, and HTTP helpers
-public/assets/            Web runtime assets
-shared/design/            Design tokens required by the website, also reusable by native apps
-mobile/                   Separate Expo app, native assets, and mobile tests
-certs/                    Public CA bundled with server API functions
-design/reference/         Original design material, retained for visual review
-drizzle/                  Versioned SQL migrations and metadata
-scripts/db/               Database setup utilities
-tests/backend/            Backend unit and PostgreSQL integration tests
-docs/                     Website, API, database, design, and deployment guides
+phone app ──HTTPS──> /api/mobile/v1/*  ─┐
+                                         ├─> server code (src/server) ──> PostgreSQL
+web dashboard ─────> /api/*            ─┘                         └────> OpenAI
 ```
 
-The root package is the Next.js app. The `mobile/` package has independent dependencies
-and is not needed to build the website. Dashboard components are live UI; `/design-check` uses isolated fixtures
-for development-only Figma comparisons.
+The phone never talks to the database or to OpenAI directly. Every request goes through the
+Next.js API, which checks the session and scopes the query to that account's farm. Admins
+use a cookie session and workers use a bearer token. Accounts are name-only by design (no
+passwords), so this is not meant as real identity verification.
 
-Shared colors, typography, spacing, and radii live in `shared/design/tokens.ts`. The website
-converts them to CSS variables, and native screens import them through their recording style
-module. Layouts remain platform-specific. See [design tokens](docs/design-tokens.md) for where
-to edit values and how both apps receive the changes.
+| Path | What's there |
+| --- | --- |
+| `src/app/` | Pages and API routes |
+| `src/components/` | Dashboard and workspace UI |
+| `src/server/` | Database access, accounts, transcription, validation |
+| `src/contracts/` | Types shared by the API, the web app and the phone app |
+| `mobile/` | The Expo app ([its README](mobile/README.md)) |
+| `shared/design/` | Colors, type and spacing used by both apps |
+| `drizzle/` | SQL migrations |
+| `scripts/db/` | Migrate, seed and check the database |
+| `tests/` | Backend and frontend tests |
+| `docs/` | Longer notes on the API, database and deployment |
+| `design/reference/` | The original Figma exports |
 
-## Run locally
+## Running it locally
 
-Follow [database setup](docs/backend/setup.md) to configure `.env.local` and PostgreSQL.
-Install the root dependencies with `npm ci` when needed, then run:
+You need Node 24. There is one database: the hosted Supabase one that production uses.
+Copy `.env.example` to `.env.local`, fill in the Supabase connection strings and the OpenAI
+key, then:
 
 ```sh
-npm run db:up
-npm run db:migrate
-npm run db:seed
-npm run db:check
+npm ci
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000), matching the configured write origin.
-Reuse an existing development server. Normal seeding preserves existing edits and tags.
+The local dev server reads and writes the production data, so be careful with test edits.
+Schema changes go through `npm run db:migrate`.
 
-## Checks and documentation
+The dashboard runs at http://127.0.0.1:3000. Log in as `Ranch Admin` to open the sample
+farm, or create a new farm. For the phone app, see [mobile/README.md](mobile/README.md).
+[Database setup](docs/backend/setup.md) has more detail on the database roles.
+
+If the sample farm gets messed up, `npm run db:reset-sample -- --yes` puts Bays Ranch back to
+its seeded state. It deletes every change made to that farm and signs out its sessions, and
+leaves other farms alone. It runs against production through `DATABASE_MIGRATION_URL`.
+
+## Tests
 
 ```sh
 npm run typecheck
-npm run test:unit         # no database connection
-npm run test:frontend     # date-filter boundaries, no database connection
-npm run build
-npm run test:backend      # requires the separate guarded PostgreSQL test database
-npm run check:mobile-server # read-only check of the Vercel connection after pushing
+npm run test:unit
+npm run test:frontend
+npm run test:db:up     # disposable Docker Postgres, only for the backend tests
+npm run test:backend
 ```
 
-See the [documentation map](docs/README.md), [frontend workspace](docs/frontend-workspace.md),
-[dashboard API](docs/backend/integration.md), and [deployment guide](docs/deployment.md).
+The phone app has its own tests: `cd mobile && npx jest`.
 
-Profiles currently share farm access; switching or signing out is not production authentication.
-Messages and support requests remain in this database and are not delivered externally.
-Reference maps and synthesized recordings are sample media. Live dashboard metrics are now
-computed from stored records; response accuracy stays unset until there is a measured source.
-The development fixture alone retains the original Figma card values.
+More documentation is listed in [docs/README.md](docs/README.md).

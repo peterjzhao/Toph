@@ -24,7 +24,7 @@ The dashboard must closely reproduce the supplied Figma. The backend must repres
 
 Use actual PostgreSQL for persistence verification. Sample fixture fallback, browser storage, and JSON files do not satisfy the backend requirement. Keep sample-only metrics and synthesized media clearly identified in code/docs, preserve the exact Figma fixture text/dates, and never claim an unperformed verification.
 
-The ready-to-paste backend task is in `docs/fable-backend-prompt.md`. Preserve the generated Next.js rules above.
+Preserve the generated Next.js rules above.
 
 ### Current layout and mobile boundary
 

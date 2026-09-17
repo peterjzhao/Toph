@@ -209,9 +209,8 @@ export async function addTag(logId: string, label: string) {
 }
 ```
 
-Local prerequisites for the UI to see data: the Docker database is running (`npm run db:up`),
-`.env.local` exists, and `npm run db:migrate` plus `npm run db:seed` have been run
-(`setup.md`). `GET /api/health` confirms it.
+Local prerequisites for the UI to see data: `.env.local` points at the hosted database and
+its migrations are applied (`setup.md`). `GET /api/health` confirms it.
 
 ## Messaging
 

@@ -1,14 +1,12 @@
-# Optional isolated PostgreSQL for local Toph development and backend tests.
+# Disposable PostgreSQL for the backend tests (npm run test:backend). The app itself uses the
+# hosted Supabase database; nothing here holds real data.
 #
-# - Binds to loopback only (127.0.0.1:54329) so it never takes over the default
-#   PostgreSQL port 5432 or an existing local database.
-# - Uses a named volume so data persists across container restarts.
-# - The credentials below are local-development-only placeholders documented in
-#   docs/backend/setup.md. They are never used for a hosted database.
+# - Binds to loopback only (127.0.0.1:54329).
+# - The credentials below are test-only placeholders, never used for a hosted database.
 #
-# Start:  docker compose -f compose.db.yaml up -d
-# Stop:   docker compose -f compose.db.yaml stop      (keeps data)
-# Reset:  docker compose -f compose.db.yaml down -v   (deletes local data; never run against a shared database)
+# Start:  npm run test:db:up
+# Stop:   npm run test:db:stop
+# Wipe:   docker compose -f compose.db.yaml down -v
 name: toph
 services:
   db:
@@ -18,16 +16,15 @@ services:
     environment:
       POSTGRES_USER: toph_owner
       POSTGRES_PASSWORD: toph_owner_local_dev_password
-      POSTGRES_DB: toph
+      POSTGRES_DB: toph_test
     ports:
       - "127.0.0.1:54329:5432"
     volumes:
       - toph-postgres-data:/var/lib/postgresql/data
-      # Runs only when the data volume is first initialized: creates the restricted
-      # runtime role and the disposable test database.
+      # Runs only when the data volume is first initialized: creates the restricted role.
       - ./scripts/db/docker-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U toph_owner -d toph"]
+      test: ["CMD-SHELL", "pg_isready -U toph_owner -d toph_test"]
       interval: 5s
       timeout: 3s
       retries: 10

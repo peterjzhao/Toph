@@ -15,7 +15,7 @@ export default async function globalSetup(): Promise<void> {
     throw new Error(
       `Cannot prepare the backend test database (${new URL(target.url).host}): ${
         error instanceof Error ? error.message : String(error)
-      }. Start it with "npm run db:up" or fix TEST_DATABASE_URL.`,
+      }. Start it with "npm run test:db:up" or fix TEST_DATABASE_URL.`,
     );
   } finally {
     await sql.end();

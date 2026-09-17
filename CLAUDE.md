@@ -4,8 +4,8 @@ Read `AGENTS.md`, `docs/project-context.md`, and `docs/README.md` first. Preserv
 Next.js instructions and read the installed framework docs before changing framework code.
 
 The dashboard API uses contract v2 in `src/contracts/dashboard.ts`; workspace DTOs are in
-`src/contracts/workspace.ts`. `docs/backend-spec.md` and `docs/fable-backend-prompt.md` are
-historical implementation handoffs, not instructions to replace the current schema with v1.
+`src/contracts/workspace.ts`. `docs/backend-spec.md` is a
+historical implementation handoff, not an instruction to replace the current schema with v1.
 
 Use PostgreSQL and Drizzle inside the existing Next.js application. Database access stays
 server-only. Preserve concurrent edits and running servers; do not deploy. Follow active task

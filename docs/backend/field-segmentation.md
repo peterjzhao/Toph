@@ -8,7 +8,7 @@ new farm creation or deployment was implemented or benchmarked.
 
 ## What was tested
 
-Read SightSense in `/Users/peter/Downloads/LAVIII/SightSense`. Its structure pipeline
+Reviewed the separate SightSense project. Its structure pipeline
 uses FastSAM and SAM3-LiteText, with precomputed `button`, `screen`, `knob`, `label`
 embeddings. The exported Core ML model bundles and original AlphaG3n experiment
 directory referenced by its README are missing on this machine. Its existing

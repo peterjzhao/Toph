@@ -7,47 +7,47 @@
   "files": [
     {
       "file": "default.css",
-      "source": "/Users/peter/.codex/attachments/57251877-6777-4543-8699-5f2bca84d7ad/pasted-text.txt",
+      "source": "Figma export (default frame CSS)",
       "sha256": "35f5a45d155291b81968bd7d5bfaaa597a8b7fea6773725e07de654b9d67b868"
     },
     {
       "file": "default.svg",
-      "source": "/Users/peter/.codex/attachments/9a5a7f3b-c170-4e5a-bd83-bed0d83ddc6e/pasted-text.txt",
+      "source": "Figma export (default frame)",
       "sha256": "59deb5bc24c0b741e5c7425885c36f18a0804f006b971032143bfacdb8643180"
     },
     {
       "file": "expanded.css",
-      "source": "/Users/peter/.codex/attachments/6212d804-ac22-4501-806f-b659949f1c91/pasted-text.txt",
+      "source": "Figma export (expanded frame CSS)",
       "sha256": "b4fc5d479dc56fc190d1d52df5c28c499e6998dbd913e1f504830dcc9f0ac2f8"
     },
     {
       "file": "expanded.svg",
-      "source": "/Users/peter/.codex/attachments/63167945-6a32-40e6-a905-28a955075ead/pasted-text.txt",
+      "source": "Figma export (expanded frame)",
       "sha256": "fb798e81e70e822ff862d76de0e9a0ea50e645f106100eea11dc4d13ed747462"
     },
     {
       "file": "brief-default.png",
-      "source": "/var/folders/2j/dy20zkk10rg_zz_4cpsdyf500000gn/T/TemporaryItems/NSIRD_screencaptureui_V39TbN/Screenshot 2026-09-16 at 9.55.39\u202fAM.png",
+      "source": "Screenshot of the challenge brief",
       "sha256": "4f72b833b96517012eecf49f929260b6c77b1a1cbc70fce232c7ca2699b487c5"
     },
     {
       "file": "brief-expanded.png",
-      "source": "/var/folders/2j/dy20zkk10rg_zz_4cpsdyf500000gn/T/TemporaryItems/NSIRD_screencaptureui_er3LYw/Screenshot 2026-09-16 at 9.55.47\u202fAM.png",
+      "source": "Screenshot of the challenge brief",
       "sha256": "6ca29eeb964eac89be3fd3202a03fb240962e23783605b43c7a6aacf9cbc44ea"
     },
     {
       "file": "brief-context.png",
-      "source": "/var/folders/2j/dy20zkk10rg_zz_4cpsdyf500000gn/T/TemporaryItems/NSIRD_screencaptureui_l0t1x1/Screenshot 2026-09-16 at 9.55.56\u202fAM.png",
+      "source": "Screenshot of the challenge brief",
       "sha256": "345fbcc10811da693e6f482cd48bb55cba1dd6af2f147aba6bc91f1f6be646c9"
     },
     {
       "file": "brief-data-shape.png",
-      "source": "/var/folders/2j/dy20zkk10rg_zz_4cpsdyf500000gn/T/codex-clipboard-1b45a9fe-5d0d-4e5b-85e3-03084e3dcbca.png",
+      "source": "Screenshot of the challenge brief",
       "sha256": "9536da918afc2b63ca9cf8a42345ba7dbea81a10ef2c2f21dc97c32de8cf73f2"
     },
     {
       "file": "scroll.mov",
-      "source": "/var/folders/2j/dy20zkk10rg_zz_4cpsdyf500000gn/T/TemporaryItems/NSIRD_screencaptureui_ZCTjW4/Screen Recording 2026-09-16 at 10.04.22\u202fAM.mov",
+      "source": "Screen recording of the prototype",
       "sha256": "2e9aabf145b352200ce264e17db558d9b68f1257bc21f9f9541b555d9d6398b0"
     },
     {

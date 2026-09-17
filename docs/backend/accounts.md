@@ -103,13 +103,9 @@ through Supabase's public API.
 
 ## Operator rollout and verification
 
-Migration **0008_farm_accounts.sql is applied locally** to Docker `127.0.0.1:54329/toph`, together
-with pending local 0006/0007 and updated restricted runtime/mobile grants. No hosted database
-was modified and no commit, push or deployment was performed for this account implementation.
-
-**Apply 0008 to the hosted database before pushing/serving this new application release.**
-The operator must point `DATABASE_MIGRATION_URL` at the intended hosted owner/session
-connection, verify its destination, then run:
+The hosted database has all migrations through `0010` (applied September 17, 2026). For a
+new migration, run the following with `DATABASE_MIGRATION_URL` set to the hosted owner/session
+connection:
 
 ```sh
 npm run db:migrate

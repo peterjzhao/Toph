@@ -133,9 +133,9 @@ keep their original names. The user performs the commit/push that updates Vercel
 Do not rerun migration or seed commands as a Vercel build step. Future migrations are an
 explicit operator action using credentials kept locally, following [database setup](backend/setup.md).
 
-The hosted database was prepared through `0007` on September 17, 2026. Apply `0009` and
-`0010` (and any other pending migration) with `npm run db:migrate` before deploying code
-that expects them. The `SUPABASE_URL` and
+The hosted database is migrated through `0010` as of September 17, 2026, and Bays Ranch was
+reset to its seeded state the same day. Apply any later migration with `npm run db:migrate`
+before deploying code that expects it. The `SUPABASE_URL` and
 `SUPABASE_PUBLISHABLE_KEY` Vercel values are no longer read and can be removed.
 
 This is an interview submission with shared sample data. Profile selection and Log Out
