@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, AudioLines, CheckCheck, CircleHelp, CloudUpload, FileText, MessageSquare, Mic, Pause, Play, Plus, RefreshCw, Square, WifiOff,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileAccount, MobileAccountEdit, MobileBootstrap, MobileRemoteLog } from "@toph/contracts/mobile";
 import type { AccountSession } from "@toph/contracts/accounts";
 import { assetHeaders, assetUrl, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
@@ -297,7 +297,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
     <View style={styles.appContent} pointerEvents={accountOpen ? "none" : "auto"} accessibilityElementsHidden={accountOpen} importantForAccessibility={accountOpen ? "no-hide-descendants" : "auto"}>
       <View style={[styles.header, { paddingTop: 18 + insets.top, height: 80 + insets.top }]}>
         <Press onPress={newRecording} disabled={busy || saving} accessibilityRole="button" accessibilityLabel="Toph, new recording"><Text style={styles.brand}>toph</Text></Press>
-        <Text style={styles.farmName} numberOfLines={1}>{session.farm.name}{session.farm.isDemo ? " · Demo" : ""}</Text>
+        <Text style={styles.farmName} numberOfLines={1}>{session.farm.name}</Text>
         <Press style={styles.avatarButton} onPress={() => setAccountOpen(true)} disabled={busy || saving} accessibilityRole="button" accessibilityLabel="Open account">
           <ProfileAvatar name={profile.name} uri={profile.avatarUrl} size={38} />
         </Press>
@@ -307,7 +307,10 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
         <ScrollView ref={scrollArea} style={styles.main} contentContainerStyle={[styles.mainContent, screen === "capture" ? styles.captureContent : null]} keyboardShouldPersistTaps="handled">
           {screen !== "capture" && screen !== "review" && <View style={styles.pageHeading}>
             <Text style={shared.heading} accessibilityRole="header">{screen === "saved" && saved?.sync ? "Log saved" : pageTitles[screen]}</Text>
-            {screen === "library" && <Pressable style={shared.roundButton} onPress={newRecording} accessibilityRole="button" accessibilityLabel="New recording"><Plus size={20} color={colors.ink} /></Pressable>}
+            {screen === "library" && <View style={styles.headingActions}>
+              <Press style={shared.roundButton} onPress={() => void refreshLogs()} disabled={loadingRemote} accessibilityRole="button" accessibilityLabel={loadingRemote ? "Loading saved logs" : "Refresh logs"}>{loadingRemote ? <ActivityIndicator color={colors.ink} /> : <RefreshCw size={18} color={colors.ink} />}</Press>
+              <Pressable style={shared.roundButton} onPress={newRecording} accessibilityRole="button" accessibilityLabel="New recording"><Plus size={20} color={colors.ink} /></Pressable>
+            </View>}
           </View>}
           {!online && <View style={shared.notice} accessibilityLiveRegion="polite"><WifiOff size={17} color={colors.muted} /><Text style={shared.noticeText}>Offline</Text></View>}
           {noticeMessage ? <View style={shared.notice} accessibilityRole="alert"><CircleHelp size={18} color={colors.muted} /><Text style={shared.noticeText}>{noticeMessage}</Text></View> : null}
@@ -369,8 +372,6 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
           </View>}
 
           {screen === "library" && <View accessibilityLabel="Saved logs">
-            <Text style={shared.muted}>{profile.name}</Text>
-            <Press style={shared.quietButton} onPress={() => void refreshLogs()} disabled={loadingRemote} accessibilityRole="button"><RefreshCw size={16} color={colors.muted} /><Text style={shared.quietText}>{loadingRemote ? "Loading saved logs…" : "Refresh logs"}</Text></Press>
             {connectionError ? <Text style={shared.muted}>{connectionError}</Text> : null}
             {loadingDrafts ? <Text style={shared.text} accessibilityLiveRegion="polite">Loading…</Text> : accountDrafts.length || visibleRemoteLogs.length ? <View>{accountDrafts.map((draft) => <Pressable style={styles.draftRow} key={draft.id} onPress={() => openDraft(draft)} accessibilityRole="button">
               <View style={styles.draftIcon}>{draft.audio ? <AudioLines size={21} color={colors.muted} /> : <FileText size={21} color={colors.muted} />}</View>
@@ -389,7 +390,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
           </View>}
           {screen === "remote" && remoteLog && <View style={{ gap: spacing.lg }}>
             <Text style={shared.heading}>{remoteLog.activity} · {fieldLabel(remoteLog.field.name)}</Text>
-            <Text style={shared.muted}>{dateLabel(remoteLog.date)} · {remoteLog.employee.name}</Text>
+            <Text style={shared.muted}>{dateLabel(remoteLog.date)}</Text>
             <Text style={shared.text}>{remoteLog.notes}</Text>
             {remoteLog.treatment && <><Text style={shared.label}>Treatment</Text><Text style={shared.text}>{[remoteLog.treatment.product, remoteLog.treatment.amount, remoteLog.treatment.unit].filter(value => value !== null).join(" ")}</Text></>}
             {!remoteLog.treatment && localRemoteDraft && activityDetailSummary(localRemoteDraft) ? <Text style={shared.text}>{activityDetailSummary(localRemoteDraft)}</Text> : null}
@@ -423,6 +424,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
 const styles = StyleSheet.create({
   app: { flex: 1, backgroundColor: colors.white },
   appContent: { flex: 1 },
+  headingActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xl, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.line },
   brand: { fontFamily: fonts.semibold, fontSize: 30, lineHeight: 36, letterSpacing: -1.5, color: colors.ink },
   farmName: { flex: 1, paddingHorizontal: spacing.md, fontFamily: fonts.regular, fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.muted, textAlign: "right" },

@@ -44,7 +44,7 @@ export function createMobileClient({ baseUrl, fetcher = fetch, headers = session
     session: () => request<AccountSession>("/api/auth/session"),
     login: (name: string) => request<AuthResponse["data"]>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), client: "mobile" }) }),
     join: (name: string, code: string) => request<AuthResponse["data"]>("/api/auth/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), code: code.trim(), client: "mobile" }) }),
-    demo: () => request<AuthResponse["data"]>("/api/auth/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client: "mobile" }) }),
+    sample: () => request<AuthResponse["data"]>("/api/auth/sample", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client: "mobile" }) }),
     logout: () => request<unknown>("/api/auth/logout", { method: "POST" }),
     accounts: () => request<MobileBootstrap>("/api/mobile/v1/accounts"),
     messages: () => request<MessageInbox>("/api/mobile/v1/messages", {}, 15_000),

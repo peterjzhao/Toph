@@ -57,9 +57,9 @@ not substitute fixture data if PostgreSQL is unavailable; they show an error wit
 - Employee names and farm settings are display overlays on original reference records. The
   provider applies those edits across pages. Display timezone affects rendered work times;
   original business dates and stored timestamps remain intact.
-- With [live updates](backend/realtime.md) configured, the provider also re-reads both APIs in
-  the background when the database signals a committed change (a phone log, a profile or
-  photo edit, another browser's save) and after every reconnect. These reads never show the
+- The provider re-reads both APIs in the background every two seconds while the tab is
+  visible (a phone log, a profile or photo edit, another browser's save) and immediately on
+  focus or reconnect; reads never overlap. These reads never show the
   loading state, so filters, sort, the open row, scroll position, dialogs, and unsaved form
   drafts stay as they are; a short notice names what arrived. Because the background read
   also advances the known revision, a save made afterwards is accepted instead of answering

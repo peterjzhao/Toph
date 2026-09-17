@@ -103,7 +103,7 @@ describe("mobile persistence", () => {
   });
 
   it("requires the current submission contract", () => {
-    expect(() => parseMobileSubmission({ ...metadata(), contractVersion: "demo-1" })).toThrow();
+    expect(() => parseMobileSubmission({ ...metadata(), contractVersion: "sample-1" })).toThrow();
     expect(() => parseMobileSubmission({ ...metadata(), contractVersion: "2" })).toThrow();
   });
 

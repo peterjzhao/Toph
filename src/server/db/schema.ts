@@ -321,7 +321,7 @@ export const transcriptionUsage = toph.table("transcription_usage", {
 export const farmAccess = toph.table("farm_access", {
   farmId: uuid("farm_id").primaryKey().references(() => farms.id),
   joinCode: text("join_code").notNull().unique(),
-  isDemo: boolean("is_demo").notNull().default(false),
+  isSample: boolean("is_sample").notNull().default(false),
   setupComplete: boolean("setup_complete").notNull().default(false),
 });
 

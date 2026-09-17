@@ -14,11 +14,11 @@ drafts, migrations, design references, and active development processes intact.
 
 The user approved name-only accounts (no email or password), one farm per account, web admin
 signup/login, and worker signup in the native app with a farm join code. These choices
-supersede the earlier single-farm/demo-only boundaries below. HTTP APIs now enforce opaque
+supersede the earlier single-farm/sample-only boundaries below. HTTP APIs now enforce opaque
 server sessions and role/farm scope. Name-only sign-in deliberately does not prove identity;
 see [accounts](backend/accounts.md) for the implementation and limitation.
 
-Bays Ranch is an explicit demo entry, with its original eleven profiles, eleven logs, four
+Bays Ranch is an explicit sample-farm entry, with its original eleven profiles, eleven logs, four
 sample new flags, and Figma card values. New farms start empty with one admin. For new farms,
 opening a log saves a shared reviewed state; New / All selects the review status without a
 four-row cap. The open row stays visible until closed.

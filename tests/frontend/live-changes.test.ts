@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardData, LogDto } from "../../src/contracts/dashboard";
 import type { Employee, WorkspaceState } from "../../src/contracts/workspace";
-import { diffDashboard, diffRoster, employeeAvatars, liveUpdateNotice, parseLiveUpdateSignal } from "../../src/lib/realtime/changes";
+import { diffDashboard, diffRoster, employeeAvatars, liveUpdateNotice } from "../../src/lib/live/changes";
 
 const log = (id: string, employeeId: string, name: string, avatarUrl: string | null = null): LogDto => ({
   id, employee: { id: employeeId, name, avatarUrl }, activity: "Spraying", date: "2026-09-16", field: { id: "f1", name: "FIELD A", mapImageUrl: null },
@@ -14,16 +14,6 @@ const dashboard = (logs: LogDto[]): DashboardData => ({
 });
 const employee = (id: string, name: string, patch: Partial<Employee> = {}): Employee => ({ id, name, role: "Farm worker", email: "", phone: "", status: "Active", joinedAt: "2026-01-01", ...patch });
 const roster = (employees: Employee[]) => ({ employees }) as WorkspaceState;
-
-describe("live-update signals", () => {
-  it("accepts only the documented content-free payload", () => {
-    expect(parseLiveUpdateSignal({ v: 1, kind: "dashboard", id: "added-by-realtime" })).toBe("dashboard");
-    expect(parseLiveUpdateSignal({ v: 1, kind: "workspace" })).toBe("workspace");
-    for (const payload of [null, undefined, "dashboard", {}, { kind: "dashboard" }, { v: 2, kind: "dashboard" }, { v: 1, kind: "recordings" }, { v: 1, kind: ["dashboard"] }]) {
-      expect(parseLiveUpdateSignal(payload)).toBeNull();
-    }
-  });
-});
 
 describe("describing what a live read changed", () => {
   it("finds logs that were not on the page before", () => {

@@ -4,8 +4,8 @@
  * Plain, JSON-serializable TypeScript types only. This module is safe to import from browser
  * code: no database clients, environment reads, or server-only imports belong here.
  *
- * v2 changes from v1: `recording` lost `isDemo` and `waveformSource`; `metrics` lost `source`
- * and is computed from the farm's data; `meta` lost `mode` and `demoReferenceDate`; periods
+ * v2 changes from v1: `recording` lost its sample-media flag and `waveformSource`; `metrics` lost `source`
+ * and is computed from the farm's data; `meta` lost `mode` and its fixed reference date; periods
  * are `all` (default), `this-month`, and `custom`. v2.1 adds `employee.avatarUrl` (additive).
  */
 

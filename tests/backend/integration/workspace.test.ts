@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import type postgres from "postgres";
 import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import * as route from "@/app/api/workspace/route";
-import { enterDemo } from "@/server/accounts/service";
+import { enterSample } from "@/server/accounts/service";
 import { createFarmContext, type FarmContext } from "@/server/farm-context";
 import { FARM_ID, ISAAC_LOG_ID } from "@/server/db/initial-data";
 import { applyRuntimeGrants } from "@/server/db/grants";
@@ -34,7 +34,7 @@ describe("persistent workspace pages", () => {
     await applyRuntimeGrants(owner, process.env.DATABASE_APP_ROLE?.trim() || "toph_app");
     ctx = await createFarmContext({ databaseUrl: target.appUrl ?? target.url, farmId: FARM_ID });
     restoreEnv = useRouteTestEnv({ DATABASE_URL: target.appUrl ?? target.url });
-    cookie = `toph_session=${(await enterDemo("web")).token}`;
+    cookie = `toph_session=${(await enterSample("web")).token}`;
   });
   beforeEach(async () => {
     getTestDatabaseTarget(); // fail closed before clearing ONLY the isolated test workspace.

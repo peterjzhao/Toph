@@ -16,7 +16,7 @@ const timezone = z.string().max(80).default("America/Los_Angeles").refine(value 
 export const signupSchema = z.object({ name, farmName: z.string().trim().min(1).max(120), timezone, client }).strict();
 export const loginSchema = z.object({ name, client }).strict();
 export const joinSchema = z.object({ name, code: z.string().trim().regex(/^[A-Za-z0-9]{12}$/).transform(value => value.toUpperCase()), client }).strict();
-export const demoSchema = z.object({ client }).strict();
+export const sampleSchema = z.object({ client }).strict();
 export function parseInput<T>(schema: z.ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
   if (!parsed.success) throw validationError("Check the entered details.", Object.fromEntries(parsed.error.issues.map(issue => [issue.path.join("."), issue.message])));

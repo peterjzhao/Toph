@@ -22,7 +22,7 @@ The dashboard must closely reproduce the supplied Figma. The backend must repres
 - Preserve concurrent edits. Re-read shared files before changing them. Add only necessary backend dependencies/scripts to `package.json` and `package-lock.json`; preserve existing frontend versions and scripts, and avoid simultaneous package-manager operations.
 - Do not stop another agent's development server, remove its build output, replace the project starter, or rewrite files outside the active task's ownership. Backend-to-frontend wiring should be documented in `docs/backend/integration.md` for the frontend owner.
 
-Use actual PostgreSQL for persistence verification. Sample fixture fallback, browser storage, and JSON files do not satisfy the backend requirement. Keep demo-only metrics and synthesized media clearly identified in code/docs, preserve the exact Figma fixture text/dates, and never claim an unperformed verification.
+Use actual PostgreSQL for persistence verification. Sample fixture fallback, browser storage, and JSON files do not satisfy the backend requirement. Keep sample-only metrics and synthesized media clearly identified in code/docs, preserve the exact Figma fixture text/dates, and never claim an unperformed verification.
 
 The ready-to-paste backend task is in `docs/fable-backend-prompt.md`. Preserve the generated Next.js rules above.
 

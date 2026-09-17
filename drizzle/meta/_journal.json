@@ -64,6 +64,20 @@
       "when": 1789659000000,
       "tag": "0008_farm_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789745400000,
+      "tag": "0009_rename_sample_farm",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789749000000,
+      "tag": "0010_remove_realtime_notifications",
+      "breakpoints": true
     }
   ]
 }

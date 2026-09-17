@@ -19,13 +19,11 @@
     "db:seed": "tsx scripts/db/seed.ts",
     "db:check": "tsx scripts/db/check.ts",
     "db:enable-mobile": "tsx scripts/db/enable-mobile.ts",
-    "db:enable-realtime": "tsx scripts/db/enable-realtime.ts",
     "test:backend": "vitest run --config tests/backend/vitest.config.mts",
     "test:unit": "vitest run --config tests/backend/vitest.unit.config.mts",
     "test:frontend": "vitest run --config tests/frontend/vitest.config.mts"
   },
   "dependencies": {
-    "@supabase/realtime-js": "2.116.0",
     "drizzle-orm": "0.45.2",
     "geist": "1.7.2",
     "lucide-react": "1.46.0",

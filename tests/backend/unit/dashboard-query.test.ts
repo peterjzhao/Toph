@@ -73,7 +73,7 @@ describe("parseDashboardQuery", () => {
     expectValidationError("period=custom&from=04/01/2026&to=2026-04-15", "from");
     expectValidationError("from=2026-04-01", "from");
     expectValidationError("period=this-month&to=2026-04-01", "to");
-    expectValidationError("period=demo-month", "period");
+    expectValidationError("period=sample-month", "period");
     expectValidationError("period=yesterday", "period");
   });
 

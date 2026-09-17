@@ -33,10 +33,8 @@ The phone uses `/api/mobile/v1/accounts`, `/logs`, `/recordings/:id`, and `/tran
 Both read and write the same farm, employees, fields and work logs. A phone log gets one
 stable database ID, used by the collapsed and expanded website row.
 
-An open dashboard also hears when that data changes: database triggers send a content-free
-signal through Supabase Realtime, and the browser answers by re-reading the routes above.
-No data travels over that channel and the phone is not involved; see
-[dashboard live updates](backend/realtime.md).
+An open dashboard re-reads the dashboard and workspace routes above every two seconds while
+its tab is visible, so a phone's new log appears without a reload. The phone is not involved.
 
 A recording is processed into speech plus typed suggestions, reviewed on the phone, and
 then explicitly saved. The transcription step does not silently insert a log. Device

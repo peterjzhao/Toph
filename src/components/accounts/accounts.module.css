@@ -24,8 +24,6 @@
 .textButton { padding:7px 0; border:0; color:#326e4c; background:transparent; }
 .authCard .switchLink { margin-top:23px; text-align:center; font-size:13px; }
 .switchLink a { color:#216944; text-decoration:none; font-weight:500; margin-left:4px; }
-.demo { margin-top:36px; padding-top:27px; border-top:1px solid #edf0ec; display:flex; flex-direction:column; align-items:center; gap:12px; font-size:12px; color:#909991; }
-.demo button { background:none; border:0; color:#5c7764; display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer; }
 .error { background:#fff4f0; border:1px solid #efd6cb; padding:12px 14px; color:#a74f34; border-radius:8px; font-size:13px; line-height:1.6; }
 .workerNotice { margin:24px 0; padding:20px; background:#f3f7f1; border-radius:12px; }
 .workerNotice h3 { font-size:18px; font-weight:500; margin:0 0 10px; }

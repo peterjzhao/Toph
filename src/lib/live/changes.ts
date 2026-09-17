@@ -1,13 +1,5 @@
 import type { DashboardData } from "../../contracts/dashboard";
-import { LIVE_UPDATE_KINDS, type LiveUpdateKind } from "../../contracts/realtime";
 import type { WorkspaceState } from "../../contracts/workspace";
-
-/** Validates a broadcast payload. Anything but the documented signal is ignored. */
-export function parseLiveUpdateSignal(payload: unknown): LiveUpdateKind | null {
-  if (typeof payload !== "object" || payload === null) return null;
-  const { v, kind } = payload as { v?: unknown; kind?: unknown };
-  return v === 1 && typeof kind === "string" && (LIVE_UPDATE_KINDS as readonly string[]).includes(kind) ? (kind as LiveUpdateKind) : null;
-}
 
 export type NewLog = { id: string; employeeId: string; employeeName: string };
 export type DashboardChange = { newLogs: NewLog[]; photoEmployeeIds: string[] };

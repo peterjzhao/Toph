@@ -2,7 +2,7 @@
 
 This release adds persisted accounts and farms without changing the supplied Bays Ranch
 employees, April logs, map, stable record IDs, or four sample `is_new` flags. The sample is
-opened deliberately with **Explore demo**. Missing authentication never selects it.
+opened deliberately through the sample-farm entry. Missing authentication never selects it.
 
 The user chose **name-only access** for this project: no email, password, or verification.
 A name is normalized with Unicode NFKC, trimmed, repeated whitespace collapsed, and lowercased
@@ -13,7 +13,7 @@ This should not be described as production identity verification.
 ## Accounts and sessions
 
 Each account has one farm and one role. Web signup atomically creates a farm, its sole admin,
-a random 12-character join code, and an empty workspace. No demo employees, fields, messages,
+a random 12-character join code, and an empty workspace. No sample employees, fields, messages,
 assignments, logs, or metrics are copied. The active-worker count starts at one for the admin.
 Mobile signup creates a worker only after validating that farm's code; a worker may join
 before fields are configured, but must wait for a field before submitting/processing a log.
@@ -47,11 +47,11 @@ sessions return 401; the wrong role returns 403. All responses use no-store cach
 
 | Endpoint | Body / result |
 | --- | --- |
-| `GET /api/auth/session` | `{data:{account:{id,name,role,employeeId},farm:{id,name,timezone,isDemo,setupComplete},joinCode?}}`; only admins receive the join code |
+| `GET /api/auth/session` | `{data:{account:{id,name,role,employeeId},farm:{id,name,timezone,isSample,setupComplete},joinCode?}}`; only admins receive the join code |
 | `POST /api/auth/signup` | `{name,farmName,timezone?,client?:"web"}` creates an empty farm and admin; returns session plus cookie |
 | `POST /api/auth/join` | `{name,code,client:"mobile"}` creates a worker; returns session plus `data.token` |
 | `POST /api/auth/login` | `{name,client?:"web"|"mobile"}`; cookie for web, `data.token` for native |
-| `POST /api/auth/demo` | `{client?:"web"|"mobile"}` selects the sample admin on web or Isaac on mobile |
+| `POST /api/auth/sample` | `{client?:"web"|"mobile"}` selects the sample admin on web or Isaac on mobile |
 | `POST /api/auth/logout` | Revokes the presented session and expires the web cookie |
 | `GET /api/farm/members` | Admin list of `{id,name,employeeId,role,active}` |
 | `DELETE /api/farm/members/:accountId` | Deactivate a worker in the admin's farm; preserve their work |
@@ -61,7 +61,7 @@ sessions return 401; the wrong role returns 403. All responses use no-store cach
 | `GET /api/farm/image` | Current farm's authenticated raster bytes, available to its admin/workers |
 | `POST /api/logs/:logId/review` | Admin marks a real farm log reviewed; returns `{data:{logId,isNew}}` |
 
-Existing dashboard, log, tag, workspace and realtime routes require an admin session.
+Existing dashboard, log, tag and workspace routes require an admin session.
 Existing `/api/mobile/v1` routes require a worker session except recording download, which
 also allows the same farm's admin cookie. `GET /api/health` remains a connection health check.
 
@@ -92,14 +92,14 @@ keep their original asset paths and DTO values.
 
 For real farms, `is_new` means the admin has not opened the log for review. The first review
 stores `reviewed_by` and `reviewed_at`; subsequent reviews preserve that attribution. The
-review operation is farm-scoped and idempotent. The explicit demo preserves its original
+review operation is farm-scoped and idempotent. The sample farm preserves its original
 sample flags rather than changing the reference on each presentation.
 
-The earlier anonymous Supabase Realtime policy is narrowed by migration 0008 and the operator
-helper to **only the explicit sample farm topic**. New farms return `{enabled:false}` from
-`/api/realtime`; the authenticated web client refreshes those farms by polling. Private farm
-data is never published to Supabase's public API. Secure per-session realtime authorization
-can be implemented later without exposing new farm topics under the sample policy.
+Every farm's open dashboard refreshes by polling its authenticated dashboard and workspace
+routes every two seconds (`src/lib/live/poller.ts`). Reads never overlap, pause while the tab
+is hidden, and run at once on focus or reconnect. Migration 0010 removed the earlier Supabase
+Realtime signals and their anonymous receive policy, so no farm data or change signal goes
+through Supabase's public API.
 
 ## Operator rollout and verification
 

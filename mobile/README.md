@@ -54,7 +54,7 @@ override. Never put database credentials or server API keys in an `EXPO_PUBLIC_*
 After pushing the server changes and waiting for Vercel to show Ready, run
 `npm run check:mobile-server` from the repository root. Reopen the updated phone app and
 log in with your unique name, or choose Join a farm and enter a name plus the admin's farm
-code. Try Bays Ranch demo is an explicit separate entry into the seeded Isaac account.
+code. The Bays Ranch sample farm is an explicit separate entry into the seeded Isaac account.
 The avatar opens your own profile, photo, defaults, and Sign out. Save log keeps a
 device copy and syncs to the same PostgreSQL database the dashboard reads. A failed upload
 stays in the library with a Sync log action. The combined audio limit is 3.8 MB per log.
@@ -82,7 +82,7 @@ every request; a worker cannot switch identities or access the admin dashboard. 
 are bound to the configured API origin and never stored with draft JSON. The Expo web
 preview keeps its token in memory only. Signing out revokes the server session when online
 and removes the device token; drafts and saved activity choices remain scoped to their
-original farm/account. A fresh farm uses only its confirmed fields, with no demo fallback.
+original farm/account. A fresh farm uses only its confirmed fields, with no sample-farm fallback.
 Workers can keep device drafts while the admin finishes field setup.
 
 ## App icon and launch screen

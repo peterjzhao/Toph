@@ -107,8 +107,6 @@ In **Settings → Environment Variables**, select **Production** for these serve
 | `DATABASE_SSL_CA_PATH` | `certs/supabase-prod-ca-2021.crt` |
 | `TOPH_MOBILE_ENABLED` | `true` (shared farm profiles and log sync) |
 | `OPENAI_API_KEY` | Server-only project key for speech and structured extraction; store as a Vercel secret |
-| `SUPABASE_URL` | Optional, for [dashboard live updates](backend/realtime.md): `https://<project-ref>.supabase.co` |
-| `SUPABASE_PUBLISHABLE_KEY` | Optional, with the URL above: the project's publishable key (`sb_publishable_…`) or legacy `anon` key. Public by design; the server refuses to pass on a secret or `service_role` key |
 
 The certificate is public, not a credential. `next.config.ts` explicitly includes it in
 `/api/**` output traces, so that relative path exists in the deployed server function.
@@ -127,20 +125,18 @@ writable preview. If a preview is needed later, give it an isolated database and
 
 ## Database and access boundary
 
-Apply migrations through `0007_realtime_notifications` locally using the owner connection,
-then run `npm run db:enable-mobile` for the runtime role. Migration `0005` corrects the
-employee roster; `0006` adds shared transcription usage counters; `0007` signals committed
-changes to open dashboards. Applied migration files
+Apply all migrations locally using the owner connection, then run `npm run db:enable-mobile`
+for the runtime role. Migration `0005` corrects the employee roster; `0006` adds shared
+transcription usage counters; `0009` renames the sample-farm flag; `0010` removes the
+Supabase Realtime signals, since open dashboards now poll every two seconds. Applied migration files
 keep their original names. The user performs the commit/push that updates Vercel.
 Do not rerun migration or seed commands as a Vercel build step. Future migrations are an
 explicit operator action using credentials kept locally, following [database setup](backend/setup.md).
 
-For a new database, run `npm run db:enable-realtime` after migrating to let the public `anon`
-role receive those signals. **The existing hosted database is already prepared as of
-September 17, 2026:** migrations through `0007`, mobile grants, and the realtime receive
-policy are applied. Vercel Production has both `SUPABASE_*` values, and their read-back
-matches the project tested locally. The values take effect in the next deployment. See
-[dashboard live updates](backend/realtime.md) for the hosted verification.
+The hosted database was prepared through `0007` on September 17, 2026. Apply `0009` and
+`0010` (and any other pending migration) with `npm run db:migrate` before deploying code
+that expects them. The `SUPABASE_URL` and
+`SUPABASE_PUBLISHABLE_KEY` Vercel values are no longer read and can be removed.
 
 This is an interview submission with shared sample data. Profile selection and Log Out
 change browser state; they do **not** authenticate a user. All visitors can read the farm,
@@ -206,8 +202,8 @@ After the user commits and pushes, check:
   short log. Confirm the saved details survive reopening and the log appears on the website.
 - With the OpenAI key configured, `npm run check:recording -- public/assets/sample-recording.mp3`
   returns speech and structured fields. This uses the live provider without saving a log.
-- With live updates configured, `/api/realtime` reports `enabled: true`, and a phone log or
-  profile change appears on an already-open dashboard without reloading it.
+- A phone log or profile change appears on an already-open dashboard within a few seconds,
+  without reloading it.
 - Design comparison URLs return 404 in production.
 
 Sources: the installed Next.js `output` and environment-variable docs under

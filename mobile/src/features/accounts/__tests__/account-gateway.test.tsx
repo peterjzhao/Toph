@@ -10,13 +10,13 @@ jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({
 jest.mock("@/lib/api/session-token", () => ({ restoreSessionToken: jest.fn(), saveSessionToken: jest.fn(), clearSessionToken: jest.fn() }));
 jest.mock("@/lib/api/mobile-client", () => ({
   apiOrigin: () => "https://toph.example", MobileApiError: class extends Error {},
-  createMobileClient: () => Object.fromEntries(["session", "accounts", "login", "join", "demo", "logout"].map(key => [key, (...args: unknown[]) => mockApi[key](...args)])),
+  createMobileClient: () => Object.fromEntries(["session", "accounts", "login", "join", "sample", "logout"].map(key => [key, (...args: unknown[]) => mockApi[key](...args)])),
 }));
 jest.mock("@/features/recording/RecordingWorkspace", () => {
   const { Text, Pressable, View } = require("react-native");
   return { __esModule: true, default: ({ session, onSignOut }: { session: AccountSession; onSignOut: () => Promise<void> }) => <View><Text>{session.account.name} recording at {session.farm.name}</Text><Pressable onPress={onSignOut} accessibilityRole="button"><Text>Sign out</Text></Pressable></View> };
 });
-const mockApi: Record<string, jest.Mock> = Object.fromEntries(["session", "accounts", "login", "join", "demo", "logout"].map(key => [key, jest.fn()]));
+const mockApi: Record<string, jest.Mock> = Object.fromEntries(["session", "accounts", "login", "join", "sample", "logout"].map(key => [key, jest.fn()]));
 const session = workspaceProps().session;
 
 beforeEach(() => {
@@ -27,7 +27,7 @@ beforeEach(() => {
   mockApi.accounts.mockResolvedValue(workerBootstrap);
   mockApi.login.mockResolvedValue({ ...session, token: "session-token" });
   mockApi.join.mockResolvedValue({ ...session, token: "session-token" });
-  mockApi.demo.mockResolvedValue({ ...session, token: "demo-token" });
+  mockApi.sample.mockResolvedValue({ ...session, token: "sample-token" });
   mockApi.session.mockResolvedValue(session);
   mockApi.logout.mockResolvedValue({ ok: true });
 });
@@ -36,7 +36,7 @@ test("requires explicit login and saves a verified native session before opening
   await render(<AccountGateway />);
   await screen.findByText("Welcome back");
   expect(mockApi.accounts).not.toHaveBeenCalled();
-  expect(mockApi.demo).not.toHaveBeenCalled();
+  expect(mockApi.sample).not.toHaveBeenCalled();
   await fireEvent.changeText(screen.getByLabelText("Your name"), "Isaac Wang");
   await fireEvent.press(screen.getByRole("button", { name: "Log in" }));
   await screen.findByText("Isaac Wang recording at Bays Ranch");
@@ -73,12 +73,12 @@ test("restores a token but refuses a bootstrap containing other workers", async 
   expect(mockApi.login).not.toHaveBeenCalled();
 });
 
-test("sign-in omits demo and explanatory copy", async () => {
+test("sign-in omits the sample farm and explanatory copy", async () => {
   await render(<AccountGateway />);
   await screen.findByText("Welcome back");
-  expect(screen.queryByText("Try Bays Ranch demo")).toBeNull();
+  expect(screen.queryByText("Try Bays Ranch sample")).toBeNull();
   expect(screen.queryByText("Sign in to record your field work and see your logs.")).toBeNull();
-  expect(mockApi.demo).not.toHaveBeenCalled();
+  expect(mockApi.sample).not.toHaveBeenCalled();
 });
 
 test("an admin identity never mounts the recording workspace", async () => {

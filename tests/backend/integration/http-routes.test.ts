@@ -8,7 +8,7 @@ import * as logRoute from "@/app/api/logs/[logId]/route";
 import * as logTagsRoute from "@/app/api/logs/[logId]/tags/route";
 import * as logTagRoute from "@/app/api/logs/[logId]/tags/[tagId]/route";
 import * as tagsRoute from "@/app/api/tags/route";
-import { enterDemo } from "@/server/accounts/service";
+import { enterSample } from "@/server/accounts/service";
 import { ISAAC_LOG_ID, recordId } from "@/server/db/initial-data";
 import { openTestSql } from "../helpers/test-db";
 import { OTHER_FARM, prepareTestDatabase, resetTags } from "../helpers/prepare-db";
@@ -52,7 +52,7 @@ describe("HTTP route handlers", () => {
     await prepareTestDatabase(sql);
     await resetTags(sql);
     restoreEnv = useRouteTestEnv();
-    cookie = `toph_session=${(await enterDemo("web")).token}`;
+    cookie = `toph_session=${(await enterSample("web")).token}`;
   });
 
   afterEach(() => {

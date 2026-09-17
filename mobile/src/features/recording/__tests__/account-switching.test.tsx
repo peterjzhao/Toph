@@ -47,7 +47,7 @@ test("sign out saves incomplete work, and a different account or farm cannot see
   await waitFor(() => expect(screen.getByText(/On this device/)).toBeTruthy());
 });
 
-test("a new farm has no demo fields and can keep a note until its admin finishes field setup", async () => {
+test("a new farm has no sample fields and can keep a note until its admin finishes field setup", async () => {
   const emptyFarm = { ...mockBootstrap, farm: { ...mockBootstrap.farm, id: "new-farm", name: "New Farm" }, fields: [], accounts: [{ ...mockBootstrap.accounts[0], defaultField: "", defaultActivity: "Monitoring" }] };
   await render(<RecordingWorkspace {...workspaceProps(emptyFarm)} />);
   expect(screen.getByText("New Farm")).toBeTruthy();

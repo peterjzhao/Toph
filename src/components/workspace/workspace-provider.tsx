@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation";
 import type { AccountSession } from "@/contracts/accounts";
 import { currentAccount, accountRequest, AccountRequestError } from "@/lib/account-client";
 import type { DashboardData, DashboardResponse, TagDto } from "@/contracts/dashboard";
-import type { RealtimeConfigResponse } from "@/contracts/realtime";
 import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import { MESSAGE_POLL_MS, type MessageInbox, type MessagesResponse, type SendMessageRequest, type ReadMessagesRequest } from "@/contracts/messages";
-import { diffDashboard, diffRoster, employeeAvatars, liveUpdateNotice, type DashboardChange, type RosterChange } from "@/lib/realtime/changes";
-import { startLiveUpdates } from "@/lib/realtime/live-updates";
-import { connectSupabaseChannel } from "@/lib/realtime/supabase-channel";
+import { diffDashboard, diffRoster, employeeAvatars, liveUpdateNotice, type DashboardChange, type RosterChange } from "@/lib/live/changes";
+import { LIVE_POLL_MS, startPoller } from "@/lib/live/poller";
 
 type WorkspaceContextValue = {
   data: DashboardData; workspace: WorkspaceState; saving: boolean; saveError: string; notice: string;
@@ -91,8 +89,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const reloadDashboard = useCallback(async () => { await readDashboard(); }, [readDashboard]);
 
   const readWorkspace = useCallback((options?: RequestInit): Promise<RosterChange | null> => {
-    // Reads share the save queue: this tab's own save is always applied before the read that
-    // its signal triggers, and an older response can never replace a newer revision.
+    // Reads share the save queue: this tab's own save is always applied before a later read,
+    // and an older response can never replace a newer revision.
     const operation = queue.current.then(async () => {
       const latest = await requestJson<WorkspaceResponse>("/api/workspace", options);
       const current = stateRef.current;
@@ -123,11 +121,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { dataRef.current = data; }, [data]);
 
-  // Live updates: a content-free signal (or a rejoin after a dropped connection) asks for the
-  // same reads as above. One subscription per tab, for as long as the workspace is mounted.
   const ready = data !== null && state !== null;
-  // Authenticated polling works on localhost and for private farms without public topics.
-  // Pause in hidden tabs, catch up on focus/reconnect, and never overlap background reads.
+  // Messages poll on their own interval; a newer inbox revision also refreshes the workspace.
   useEffect(() => {
     if (!ready) return;
     let stopped = false;
@@ -161,16 +156,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [acceptInbox, readWorkspace]);
   const sendMessage = useCallback((body: SendMessageRequest) => mutateMessages("", body), [mutateMessages]);
   const markMessagesRead = useCallback((body: ReadMessagesRequest) => mutateMessages("/read", body), [mutateMessages]);
+  // Live updates: every open dashboard reads its logs and team again every two seconds.
+  // Reads never overlap, pause in hidden tabs, and run at once on focus or reconnect.
   useEffect(() => {
     if (!ready) return;
-    const live = startLiveUpdates({
-      loadConfig: async () => (await requestJson<RealtimeConfigResponse>("/api/realtime")).data,
-      connect: connectSupabaseChannel,
-      refresh: async kinds => {
-        const [dashboard, roster] = await Promise.allSettled([
-          kinds.has("dashboard") ? readDashboard(liveRead()) : null,
-          kinds.has("workspace") ? readWorkspace(liveRead()) : null,
-        ]);
+    const poller = startPoller({
+      intervalMs: LIVE_POLL_MS,
+      isVisible: () => document.visibilityState === "visible",
+      read: async () => {
+        const [dashboard, roster] = await Promise.allSettled([readDashboard(liveRead()), readWorkspace(liveRead())]);
         const logs = dashboard.status === "fulfilled" ? dashboard.value : null;
         const team = roster.status === "fulfilled" ? roster.value : null;
         const message = liveUpdateNotice({
@@ -179,32 +173,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           nameOf: id => stateRef.current?.data.employees.find(person => person.id === id)?.name,
         });
         if (message) setNotice(message);
-        if (dashboard.status === "rejected" || roster.status === "rejected") throw new Error("A live read failed and will be retried.");
       },
     });
-    return () => live.stop();
+    const poke = () => poller.poke();
+    window.addEventListener("focus", poke);
+    window.addEventListener("online", poke);
+    document.addEventListener("visibilitychange", poke);
+    return () => { poller.stop(); window.removeEventListener("focus", poke); window.removeEventListener("online", poke); document.removeEventListener("visibilitychange", poke); };
   }, [ready, readDashboard, readWorkspace]);
 
-  // Account changes in another tab must discard this farm's cached view. New farms use
-  // bounded polling until authenticated per-farm broadcast channels are available.
+  // Account changes in another tab must discard this farm's cached view.
   useEffect(() => {
     if (!account || !ready) return;
     let stopped = false;
-    async function refresh() {
+    async function check() {
       if (document.visibilityState !== "visible") return;
       try {
         const latest = await currentAccount();
         if (stopped) return;
-        if (latest.account.id !== account!.account.id || latest.farm.id !== account!.farm.id) { window.location.reload(); return; }
-        if (!account!.farm.isDemo) await Promise.all([readDashboard(liveRead()), readWorkspace(liveRead())]);
+        if (latest.account.id !== account!.account.id || latest.farm.id !== account!.farm.id) window.location.reload();
       } catch (cause) {
         if (cause instanceof AccountRequestError && cause.status === 401) window.location.replace("/login");
       }
     }
-    const timer = setInterval(() => void refresh(), 30_000);
-    window.addEventListener("focus", refresh);
-    return () => { stopped = true; clearInterval(timer); window.removeEventListener("focus", refresh); };
-  }, [account, ready, readDashboard, readWorkspace]);
+    const timer = setInterval(() => void check(), 30_000);
+    window.addEventListener("focus", check);
+    return () => { stopped = true; clearInterval(timer); window.removeEventListener("focus", check); };
+  }, [account, ready]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4200); return () => clearTimeout(timer); }, [notice]);
@@ -242,7 +237,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Could not sign out. Please try again."); }
   }
   async function markReviewed(id: string) {
-    if (account?.farm.isDemo) return;
+    if (account?.farm.isSample) return;
     await requestJson(`/api/logs/${id}/review`, { method: "POST", body: "{}" });
     await reloadDashboard();
   }

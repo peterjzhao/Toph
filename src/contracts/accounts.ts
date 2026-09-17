@@ -1,7 +1,7 @@
 /** Serializable account and farm-onboarding contract, shared by web and mobile. */
 export type AccountRole = "admin" | "worker";
 export type AccountDto = { id: string; name: string; role: AccountRole; employeeId: string | null };
-export type AccountFarmDto = { id: string; name: string; timezone: string; isDemo: boolean; setupComplete: boolean };
+export type AccountFarmDto = { id: string; name: string; timezone: string; isSample: boolean; setupComplete: boolean };
 export type AccountSession = { account: AccountDto; farm: AccountFarmDto; joinCode?: string };
 export type AuthResponse = { data: AccountSession & { token?: string } };
 export type AuthClient = "web" | "mobile";

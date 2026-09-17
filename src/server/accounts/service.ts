@@ -9,8 +9,8 @@ import { ApiError, forbidden, notFound, validationError } from "@/server/errors"
 import { assertWriteOrigin, normalizeOrigin } from "@/server/http/origin";
 import { normalizeAccountName } from "./validation";
 
-export const DEMO_FARM_ID = "00000000-0000-4000-8000-000000000001";
-export const DEMO_ADMIN_ID = "90000000-0000-4000-8000-000000000001";
+export const SAMPLE_FARM_ID = "00000000-0000-4000-8000-000000000001";
+export const SAMPLE_ADMIN_ID = "90000000-0000-4000-8000-000000000001";
 export const SESSION_COOKIE = "toph_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 type Queryable = postgres.Sql | postgres.TransactionSql;
@@ -52,11 +52,11 @@ export function sessionCookie(token: string, request: Request, clear = false): s
 }
 
 async function sessionData(sql: Queryable, account: AccountRow): Promise<AccountSession> {
-  const [farm] = await sql`select f.id, f.name, f.timezone, a.is_demo, a.setup_complete, a.join_code
+  const [farm] = await sql`select f.id, f.name, f.timezone, a.is_sample, a.setup_complete, a.join_code
     from toph.farms f join toph.farm_access a on a.farm_id = f.id where f.id = ${account.farm_id}`;
   if (!farm) throw unauthorized();
   return { account: { id: account.id, name: account.name, role: account.role, employeeId: account.employee_id },
-    farm: { id: farm.id, name: farm.name, timezone: farm.timezone, isDemo: farm.is_demo, setupComplete: farm.setup_complete },
+    farm: { id: farm.id, name: farm.name, timezone: farm.timezone, isSample: farm.is_sample, setupComplete: farm.setup_complete },
     ...(account.role === "admin" ? { joinCode: farm.join_code } : {}) };
 }
 
@@ -116,8 +116,8 @@ export async function joinFarm(input: { name: string; code: string; client: Auth
   const { sql } = getRuntimeDatabase();
   try {
     return await sql.begin(async tx => {
-      const [farm] = await tx`select farm_id, is_demo from toph.farm_access where join_code = ${input.code} for update`;
-      if (!farm || farm.is_demo) throw validationError("That farm code is not available.", { code: "Check the code with your farm administrator." });
+      const [farm] = await tx`select farm_id, is_sample from toph.farm_access where join_code = ${input.code} for update`;
+      if (!farm || farm.is_sample) throw validationError("That farm code is not available.", { code: "Check the code with your farm administrator." });
       const [workspace] = await tx`select payload from toph.workspace_state where farm_id = ${farm.farm_id} for update`;
       if (!workspace) throw notFound("Farm not found.");
       const state: WorkspaceState = typeof workspace.payload === "string" ? JSON.parse(workspace.payload) : workspace.payload;
@@ -144,11 +144,11 @@ export async function loginAccount(input: { name: string; client: AuthClient }) 
   });
 }
 
-export async function enterDemo(client: AuthClient) {
+export async function enterSample(client: AuthClient) {
   const { sql } = getRuntimeDatabase();
   return sql.begin(async tx => {
-    const id = client === "mobile" ? "10000000-0000-4000-8000-000000000001" : DEMO_ADMIN_ID;
-    const [account] = await tx<AccountRow[]>`select * from toph.accounts where id = ${id} and farm_id = ${DEMO_FARM_ID} and is_active`;
+    const id = client === "mobile" ? "10000000-0000-4000-8000-000000000001" : SAMPLE_ADMIN_ID;
+    const [account] = await tx<AccountRow[]>`select * from toph.accounts where id = ${id} and farm_id = ${SAMPLE_FARM_ID} and is_active`;
     if (!account) throw notFound("The sample farm is not installed. Ask the operator to seed it.");
     return createSession(tx, account, client);
   });
@@ -167,14 +167,14 @@ export async function listFarmMembers(ctx: AccountContext): Promise<FarmMemberDt
 }
 
 export async function rotateJoinCode(ctx: AccountContext): Promise<string> {
-  if (ctx.session.farm.isDemo) throw forbidden("The sample farm's membership is fixed.");
+  if (ctx.session.farm.isSample) throw forbidden("The sample farm's membership is fixed.");
   const code = joinCode();
   await ctx.sql`update toph.farm_access set join_code = ${code} where farm_id = ${ctx.farmId}`;
   return code;
 }
 
 export async function deactivateMember(ctx: AccountContext, accountId: string): Promise<void> {
-  if (ctx.session.farm.isDemo) throw forbidden("The sample farm's membership is fixed.");
+  if (ctx.session.farm.isSample) throw forbidden("The sample farm's membership is fixed.");
   await ctx.sql.begin(async tx => {
     // Lock the workspace before changing membership; log saving uses the same lock.
     const [workspace] = await tx`select payload from toph.workspace_state where farm_id = ${ctx.farmId} for update`;

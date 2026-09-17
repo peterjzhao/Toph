@@ -129,8 +129,8 @@ and [Structured Outputs](https://developers.openai.com/api/docs/guides/structure
 The hosted database is now migrated through `0007`, and live dashboard updates are enabled.
 A clean production build passed alongside 148 backend, 34 frontend, and 51 mobile tests.
 Real hosted tests verified the reviewed-form save, durable transcript/treatment/tags/audio,
-idempotent retries, matching dashboard record ID, and live browser updates. See
-[the realtime test results](realtime.md#hosted-verification-recorded-september-17-2026).
+idempotent retries, matching dashboard record ID, and live browser updates. That
+Supabase Realtime path was later replaced by two-second polling.
 
 The initial run supplied reviewed form values directly. After the user added the OpenAI key
 to ignored root `.env.local`, the complete live-provider flow passed against the same tested

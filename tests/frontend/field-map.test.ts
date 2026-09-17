@@ -36,7 +36,7 @@ describe("field map assets and image segmentation", () => {
       expect(fieldMapRegions.some(region => contains(region.polygon, point))).toBe(false);
     }
   });
-  it("uses a field's generated asset without applying demo regions to custom imagery", () => {
+  it("uses a field's generated asset without applying sample regions to custom imagery", () => {
     const field = fieldMapRegions[1];
     expect(fieldMapImage(field.fieldId, "/assets/field-map.svg")).toBe(field.imageUrl);
     expect(fieldMapImage(field.fieldId, "/custom-map.png")).toBe("/custom-map.png");

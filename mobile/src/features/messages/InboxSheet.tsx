@@ -47,8 +47,7 @@ export default function InboxSheet({ visible, onClose, employeeId, farmName, onl
           }} /> : <View style={styles.empty}><MessageSquare size={32} color={colors.soft} /><Text style={shared.heading}>Your farm inbox</Text><Text style={[shared.muted, styles.centered]}>Ask your farm admin a question or share an update.</Text></View>}
         <View style={styles.composer}>
           {!!sendError && <Text style={styles.error} accessibilityRole="alert">{sendError}</Text>}
-          <View style={styles.composeRow}><TextInput accessibilityLabel="Message to farm admin" placeholder="Message your farm admin…" placeholderTextColor={colors.soft} multiline maxLength={4000} value={draft} style={[shared.inputBox, shared.inputText, styles.input]} onChangeText={value => { draftVersion.current++; setDraft(value); setSendError(""); }} /><Pressable accessibilityRole="button" accessibilityLabel={saving ? "Sending message" : "Send message"} disabled={!draft.trim() || saving || !online} onPress={() => void send()} style={[styles.send, (!draft.trim() || saving || !online) && shared.disabled]}>{saving ? <ActivityIndicator color={colors.white} /> : <Send size={20} color={colors.white} />}</Pressable></View>
-          <Text style={styles.hint}>Messages refresh while Toph is open.</Text>
+          <View style={styles.composeRow}><TextInput accessibilityLabel="Message to farm admin" placeholder="Message admin…" placeholderTextColor={colors.soft} multiline maxLength={4000} value={draft} style={[shared.inputBox, shared.inputText, styles.input]} onChangeText={value => { draftVersion.current++; setDraft(value); setSendError(""); }} /><Pressable accessibilityRole="button" accessibilityLabel={saving ? "Sending message" : "Send message"} disabled={!draft.trim() || saving || !online} onPress={() => void send()} style={[styles.send, (!draft.trim() || saving || !online) && shared.disabled]}>{saving ? <ActivityIndicator color={colors.white} /> : <Send size={20} color={colors.white} />}</Pressable></View>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -69,11 +68,10 @@ const styles = StyleSheet.create({
   meta: { fontFamily: fonts.regular, fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.muted },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.md, padding: spacing.xl },
   centered: { textAlign: "center" },
-  composer: { padding: spacing.lg, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.line },
-  composeRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
-  input: { flex: 1, maxHeight: 140, paddingTop: 12 },
+  composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.line },
+  composeRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  input: { flex: 1, maxHeight: 140 },
   send: { width: 46, height: 46, borderRadius: radius.control, backgroundColor: colors.ink, alignItems: "center", justifyContent: "center" },
-  hint: { fontFamily: fonts.regular, fontSize: fontSize.caption, color: colors.muted },
   notice: { ...shared.muted, padding: spacing.md, backgroundColor: colors.panel },
   error: { ...shared.muted, color: colors.warning },
 });

@@ -34,7 +34,7 @@ export function FarmSetupPage() {
     let alive = true;
     void currentAccount().then(async account => {
       if (account.account.role !== "admin") { window.location.replace("/login?worker=1"); return; }
-      if (account.farm.isDemo) { window.location.replace("/"); return; }
+      if (account.farm.isSample) { window.location.replace("/"); return; }
       const setup = await accountRequest<FarmSetupResponse>("/api/farm/setup");
       if (!alive) return;
       setSession(account); setImage(setup.data.image); setFields(setup.data.fields); setSelected(setup.data.fields[0]?.label ?? "");

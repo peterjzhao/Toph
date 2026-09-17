@@ -6,7 +6,7 @@ How the UI connects to the backend. The sidebar pages use `GET` / `PATCH /api/wo
 ## Accounts and farm scope (September 17)
 
 HTTP reads and writes now require a server session. Admins obtain an HttpOnly cookie via
-`/api/auth/login`, `/api/auth/signup`, or the explicit `/api/auth/demo` entry. The session
+`/api/auth/login`, `/api/auth/signup`, or the explicit `/api/auth/sample` entry. The session
 selects the farm; unauthenticated requests no longer default to Bays Ranch. Native worker
 sessions use bearer tokens and cannot call admin dashboard/workspace APIs. See
 [accounts](accounts.md) for signup, invites, setup, and deployment details.
@@ -14,7 +14,7 @@ sessions use bearer tokens and cannot call admin dashboard/workspace APIs. See
 `DashboardFieldDto` optionally includes normalized `boundary` points and `mapImageUrl`,
 including fields with no logs. New-farm clients use these saved field shapes, not the sample
 farm's illustrated regions. Opening a new-farm log calls `POST /api/logs/:logId/review`;
-its `isNew` state then remains false across sessions. The demo keeps its sample flags and
+its `isNew` state then remains false across sessions. The sample farm keeps its flags and
 uses explicitly identified reference card values in the web adapter. New farms use computed
 metrics and count their admin once.
 

@@ -96,7 +96,7 @@ export async function seedInitialData(client: postgres.Sql): Promise<SeedReport>
       .returning({ id: schema.workLogs.id });
 
     // Explicit sample identities; this does not change any original employee or log.
-    await tx.insert(schema.farmAccess).values({ farmId: FARM.id, joinCode: randomBytes(6).toString("hex").toUpperCase(), isDemo: true, setupComplete: true }).onConflictDoNothing({ target: schema.farmAccess.farmId });
+    await tx.insert(schema.farmAccess).values({ farmId: FARM.id, joinCode: randomBytes(6).toString("hex").toUpperCase(), isSample: true, setupComplete: true }).onConflictDoNothing({ target: schema.farmAccess.farmId });
     await tx.insert(schema.accounts).values([
       { id: "90000000-0000-4000-8000-000000000001", farmId: FARM.id, employeeId: null, name: "Ranch Admin", normalizedName: "ranch admin", role: "admin" as const },
       ...INITIAL_EMPLOYEES.map(row => ({ id: recordId("employee", row.n), farmId: FARM.id, employeeId: recordId("employee", row.n), name: row.name, normalizedName: row.name.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase(), role: "worker" as const })),

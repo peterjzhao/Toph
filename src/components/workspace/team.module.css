@@ -142,13 +142,13 @@
 .messageMeta > span { display: flex; color: #86a28c; }
 .composerWrapper { min-width: 0; max-width: 100%; padding: var(--toph-spacing-sm) var(--toph-spacing-xl) var(--toph-spacing-md); flex-shrink: 0; border-top: 1px solid #f1f1f1; }
 .workspaceNote { max-width: 100%; overflow-wrap: anywhere; white-space: normal; font-size: var(--toph-font-size-tiny); color: #a6a6a6; line-height: var(--toph-line-height-caption); margin: 0 0 var(--toph-spacing-sm); }
-.composer { min-width: 0; max-width: 100%; border: 1px solid #e5e5e5; border-radius: 10px; display: flex; gap: var(--toph-spacing-sm); align-items: flex-end; padding: var(--toph-spacing-sm); }
+.composer { min-width: 0; max-width: 100%; border: 1px solid #e5e5e5; border-radius: 10px; display: flex; gap: var(--toph-spacing-sm); align-items: center; padding: var(--toph-spacing-sm) var(--toph-spacing-sm) var(--toph-spacing-sm) var(--toph-spacing-md); }
 .composer:focus-within { border-color: #a9c4b1; }
-.composer textarea { flex: 1 1 0%; min-width: 0; width: 100%; resize: vertical; min-height: 44px; max-height: 140px; background: transparent; color: #555; font-size: var(--toph-font-size-compact); line-height: 20px; border: 0; padding: 0; outline: none; }
+.composer textarea { flex: 1 1 0%; min-width: 0; width: 100%; resize: none; field-sizing: content; min-height: 20px; max-height: 140px; background: transparent; color: #555; font-size: var(--toph-font-size-compact); line-height: 20px; border: 0; padding: 0; outline: none; }
 .composer textarea::placeholder { color: #b4b4b4; }
 .sendButton { flex-shrink: 0; border-radius: 7px; min-height: 32px; padding: 7px 11px; background: var(--toph-color-brand); border-color: var(--toph-color-brand); font-size: var(--toph-font-size-caption); }
 .sendButton:hover { background: #1a7b4f; }
-.composerHint { font-size: 9px; color: #b4b4b4; display: flex; flex-wrap: wrap; gap: 6px var(--toph-spacing-sm); justify-content: space-between; margin-top: var(--toph-spacing-xs); }
+.composerHint { font-size: 9px; color: #b4b4b4; display: flex; flex-wrap: wrap; gap: 6px var(--toph-spacing-sm); justify-content: flex-end; margin-top: var(--toph-spacing-xs); }
 .composerWrapper .error { margin-top: var(--toph-spacing-sm); }
 .modalSearch { margin: var(--toph-spacing-md) 0; }
 .modalSearch input { width: 100%; }

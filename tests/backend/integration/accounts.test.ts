@@ -7,7 +7,7 @@ import type { AccountSession } from "@/contracts/accounts";
 import * as signup from "@/app/api/auth/signup/route";
 import * as login from "@/app/api/auth/login/route";
 import * as join from "@/app/api/auth/join/route";
-import * as demo from "@/app/api/auth/demo/route";
+import * as sample from "@/app/api/auth/sample/route";
 import * as session from "@/app/api/auth/session/route";
 import * as logout from "@/app/api/auth/logout/route";
 import * as dashboard from "@/app/api/dashboard/route";
@@ -23,7 +23,6 @@ import * as mobileLogs from "@/app/api/mobile/v1/logs/route";
 import * as log from "@/app/api/logs/[logId]/route";
 import * as review from "@/app/api/logs/[logId]/review/route";
 import * as recording from "@/app/api/mobile/v1/recordings/[recordingId]/route";
-import * as realtime from "@/app/api/realtime/route";
 import { applyRuntimeGrants } from "@/server/db/grants";
 import { applyMobileGrants } from "@/server/mobile/grants";
 import { openTestSql } from "../helpers/test-db";
@@ -92,12 +91,11 @@ describe("account-scoped signup, farm setup and review", () => {
     const body = await response.json(); admin = body.data; farms.push(admin.farm.id);
     cookie = response.headers.get("set-cookie")!.split(";")[0];
     expect(response.headers.get("set-cookie")).toMatch(/HttpOnly; SameSite=Lax/);
-    expect(body.data.token).toBeUndefined(); expect(admin.account.name).toBe(`New Farmer ${suffix}`); expect(admin.farm).toMatchObject({ isDemo: false, setupComplete: false });
+    expect(body.data.token).toBeUndefined(); expect(admin.account.name).toBe(`New Farmer ${suffix}`); expect(admin.farm).toMatchObject({ isSample: false, setupComplete: false });
     const result = await (await dashboard.GET(req("/api/dashboard", "GET", undefined, cookie))).json();
     expect(result.data.metrics.activeWorkers).toBe(1); expect(result.data.logs).toEqual([]); expect(result.data.filterOptions.fields).toEqual([]);
     const state = await (await workspace.GET(req("/api/workspace", "GET", undefined, cookie))).json();
     expect(state.data.employees).toEqual([]); expect(state.data.schedule).toEqual([]); expect(state.data.messages).toEqual([]);
-    expect((await (await realtime.GET(req("/api/realtime", "GET", undefined, cookie))).json()).data).toEqual({ enabled: false });
   });
 
   it("resolves normalized names and rolls back duplicate signup atomically", async () => {
@@ -160,8 +158,8 @@ describe("account-scoped signup, farm setup and review", () => {
     expect(first.is_new).toBe(false); expect(first.reviewed_by).toBe(admin.account.id); expect(first.reviewed_at).toBeTruthy();
     await review.POST(req(`/api/logs/${logId}/review`, "POST", {}, cookie), params({ logId }));
     expect((await sql`select reviewed_at from toph.work_logs where id = ${logId}`)[0].reviewed_at).toEqual(first.reviewed_at);
-    const responseDemo = await demo.POST(req("/api/auth/demo", "POST", {})); expect(responseDemo.status).toBe(200);
-    const sampleCookie = responseDemo.headers.get("set-cookie")!.split(";")[0];
+    const responseSample = await sample.POST(req("/api/auth/sample", "POST", {})); expect(responseSample.status).toBe(200);
+    const sampleCookie = responseSample.headers.get("set-cookie")!.split(";")[0];
     const sampleId = "30000000-0000-4000-8000-000000000001";
     const [before] = await sql`select is_new, updated_at from toph.work_logs where id = ${sampleId}`;
     await review.POST(req(`/api/logs/${sampleId}/review`, "POST", {}, sampleCookie), params({ logId: sampleId }));
