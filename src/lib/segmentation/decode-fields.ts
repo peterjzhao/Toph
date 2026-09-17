@@ -67,7 +67,8 @@ export function maskToPolygon(mask: Uint8Array, width: number, height: number, t
   // Split a closed ring into two open paths before RDP; using identical endpoints
   // alone loses a closed shape. Return open rings, with the closing edge implicit.
   const split = Math.floor(largest.length / 2);
-  let tolerance = 0.8;
+  // Field edges are mostly straight, so wobble up to ~4% of the field's size is treated as mask noise.
+  let tolerance = Math.max(2.5, Math.min(9, Math.sqrt(largestArea) * .04));
   let reduced: FieldPoint[];
   do {
     reduced = [...simplify(largest.slice(0, split + 1), tolerance).slice(0, -1), ...simplify([...largest.slice(split), largest[0]], tolerance).slice(0, -1)];

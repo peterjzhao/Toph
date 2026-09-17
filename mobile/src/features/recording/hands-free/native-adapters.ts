@@ -1,6 +1,5 @@
 /** The native side of hands-free mode. Loaded on the first session so the screens import no audio module up front. */
 import { requestRecordingPermissionsAsync, setAudioModeAsync } from "expo-audio";
-import * as Haptics from "expo-haptics";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { extractRecordingDetails } from "../transcribe";
 import type { HandsFreePhase } from "./machine";
@@ -10,7 +9,15 @@ import { createVoiceApi } from "./voice-api";
 import { createRealtimeConnector, loadWebRTC } from "./webrtc-adapter";
 
 const keepAwakeTag = "toph-hands-free";
-const haptics: Partial<Record<HandsFreePhase, () => Promise<void>>> = {
+type HapticsModule = typeof import("expo-haptics");
+/** Null when the native module is not part of this build; sessions then run without taps. */
+function loadHaptics(): HapticsModule | null {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  try { return require("expo-haptics") as HapticsModule; }
+  catch { return null; }
+}
+const Haptics = loadHaptics();
+const haptics: Partial<Record<HandsFreePhase, () => Promise<void>>> = !Haptics ? {} : {
   // The strongest tap means "your turn to speak".
   listening: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy),
   thinking: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),

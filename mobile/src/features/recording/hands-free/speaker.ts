@@ -1,7 +1,14 @@
 /** Speaks one prompt: the server's MP3 through expo-audio, or the device's own voice when that fails. */
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import { File, Paths } from "expo-file-system";
-import * as Speech from "expo-speech";
+
+type SpeechModule = typeof import("expo-speech");
+/** Null when the native module is not part of this build; the prompt is then skipped rather than crashing. */
+function loadSpeech(): SpeechModule | null {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  try { return require("expo-speech") as SpeechModule; }
+  catch { return null; }
+}
 
 export type Speaker = { speak(text: string): Promise<void>; stop(): Promise<void> };
 type Options = { fetchSpeech(text: string): Promise<Uint8Array>; maxPlaybackMs?: number };
@@ -12,12 +19,13 @@ export function createSpeaker({ fetchSpeech, maxPlaybackMs = 45_000 }: Options):
   let player: AudioPlayer | null = null;
   let finish: (() => void) | null = null;
   let utterance = 0;
+  const Speech = loadSpeech();
 
   async function stop() {
     utterance += 1;
     const playing = player; player = null;
     try { playing?.pause(); playing?.remove(); } catch { /* already released */ }
-    await Speech.stop().catch(() => undefined);
+    await Speech?.stop().catch(() => undefined);
     finish?.(); finish = null;
   }
 
@@ -35,6 +43,7 @@ export function createSpeaker({ fetchSpeech, maxPlaybackMs = 45_000 }: Options):
   }
 
   const onDevice = (text: string) => new Promise<void>(resolve => {
+    if (!Speech) { resolve(); return; }
     finish = resolve;
     Speech.speak(text, { language: "en-US", onDone: resolve, onStopped: resolve, onError: () => resolve() });
   });

@@ -48,7 +48,6 @@
 .editor polygon { fill:rgb(31 140 83 / 20%); stroke:#fff; stroke-width:2px; vector-effect:non-scaling-stroke; cursor:pointer; }
 .editor .selectedPolygon { fill:rgb(31 140 83 / 40%); stroke:#d3ffac; stroke-width:3px; }
 .editor polyline { fill:rgb(255 220 65 / 15%); stroke:#ffe278; stroke-width:2px; vector-effect:non-scaling-stroke; }
-.editor text { fill:#fff; stroke:#173f2a; stroke-width:.003; paint-order:stroke; font-size:.024px; font-weight:600; pointer-events:none; }
 .editor circle { fill:#ffe278; stroke:#333; stroke-width:.001; }
 .fieldCard { padding:23px; }
 .fieldCard h2 { margin:0 0 8px; font-size:18px; font-weight:500; }
