@@ -13,7 +13,7 @@ these adjustments:
   The dashboard adapter and display types have been updated to omit those removed fields.
 - `metrics` no longer has `source`. Values are computed from the data as of today in the farm
   timezone: `recordingsToday` and `newRecordings` count today's logs, `activeWorkers` counts
-  active employees, and `responseAccuracy` is `null` until a measured source exists (the card
+  active employees plus the farm's separate administrator account, and `responseAccuracy` is `null` until a measured source exists (the card
   already renders a dash for null).
 - `meta` no longer has `mode` or `demoReferenceDate`; `meta.contractVersion` is `"2"`.
 - Additive: `LogDto.employee` now carries `avatarUrl: string | null` (the employee's image, from
@@ -126,7 +126,8 @@ curl -s "http://127.0.0.1:3000/api/dashboard?q=isaac&sort=date-desc"
 ```
 
 With no query, all eleven logs arrive in one response (`total: 11`) and `newLogCount` is `4`.
-The compact four-row view is a presentation choice; do not pass `limit=4`.
+Filtered and unfiltered result lists use the available screen space; do not pass `limit=4`
+or constrain the table to four visible rows. `newLogCount` is separate from the total matching count.
 
 ### GET /api/logs/:logId
 

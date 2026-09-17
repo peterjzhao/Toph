@@ -66,7 +66,7 @@ describe("initial dataset", () => {
     await sql.end();
   });
 
-  it("inserts Bays Ranch with twelve employees, eleven fields and logs, and no tags", async () => {
+  it("inserts Bays Ranch with eleven employees, eleven fields and logs, and no tags", async () => {
     const report = await seedInitialData(sql);
     expect(report.farm).toBe("inserted");
     expect(report.workLogs.inserted).toBe(11);
@@ -81,7 +81,8 @@ describe("initial dataset", () => {
              (select count(*)::int from toph.work_logs where farm_id = ${FARM_ID}) as logs,
              (select count(*)::int from toph.tags where farm_id = ${FARM_ID}) as tags,
              (select count(*)::int from toph.work_log_tags where farm_id = ${FARM_ID}) as links`;
-    expect(counts[0]).toEqual({ employees: 12, fields: 11, logs: 11, tags: 0, links: 0 });
+    expect(counts[0]).toEqual({ employees: 11, fields: 11, logs: 11, tags: 0, links: 0 });
+    expect(await sql`select id from toph.employees where farm_id = ${FARM_ID} and display_name = 'Peter'`).toHaveLength(0);
   });
 
   it("matches every row: names, activities, dates, fields, farm-local times, and new flags", async () => {
@@ -157,7 +158,7 @@ describe("initial dataset", () => {
              (select count(*)::int from toph.tags where farm_id = ${FARM_ID}) as tags,
              (select count(*)::int from toph.work_log_tags where work_log_id = ${ISAAC_LOG_ID} and tag_id = ${tagId}) as links,
              (select summary from toph.work_logs where id = ${ISAAC_LOG_ID}) as summary`;
-    expect(counts[0]).toEqual({ logs: 11, employees: 12, fields: 11, tags: 1, links: 1, summary: "edited locally" });
+    expect(counts[0]).toEqual({ logs: 11, employees: 11, fields: 11, tags: 1, links: 1, summary: "edited locally" });
 
     const [after] = await sql<{ updated_at: string }[]>`select updated_at::text as updated_at from toph.work_logs where id = ${ISAAC_LOG_ID}`;
     expect(after.updated_at).toBe(before.updated_at);

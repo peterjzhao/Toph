@@ -4,7 +4,7 @@ import AudioReview from "./AudioReview";
 import { DateField, Press, SelectField, TextField, TimeField } from "./fields";
 import type { RecordingClip } from "./local-drafts";
 import { activities, fields } from "./recording-profile";
-import { audioFileName, isTreatment, suggestedTags, unitOptions, type WorkDetails } from "./recording-utils";
+import { isTreatment, suggestedTags, unitOptions, type WorkDetails } from "./recording-utils";
 import { ReviewLoading, ReviewSkeleton } from "./ReviewSkeleton";
 import { colors, fonts, shared, fontSize, lineHeight, radius, spacing } from "./styles";
 import type { Transcript } from "./use-transcription";
@@ -14,32 +14,34 @@ type Props = {
   loading: boolean; stopping: boolean; saving: boolean; editing: boolean;
   fieldOptions?: string[];
   onChange: <K extends keyof WorkDetails>(key: K, value: WorkDetails[K]) => void;
-  onError: (message: string) => void; onRetry: () => void; onCancel: () => void;
+  onRetry: () => void; onCancel: () => void;
   onAppend: () => void; onBack: () => void; onSave: () => void;
 };
 
 export default function ReviewLog({ details, clips, isDemo, transcript, loading, stopping, saving, editing, fieldOptions = fields,
-  onChange, onError, onRetry, onCancel, onAppend, onBack, onSave }: Props) {
+  onChange, onRetry, onCancel, onAppend, onBack, onSave }: Props) {
   return <ReviewLoading.Provider value={loading}>
     <View style={styles.reviewCard} accessibilityState={{ busy: loading }}>
-      {loading && <View style={styles.loadingActions}>
-        <Text style={shared.muted} accessibilityLiveRegion="polite">{stopping ? "Finishing recording…" : "Transcribing recording…"}</Text>
-        <View style={styles.reviewActions}>
-          <Press style={shared.quietButton} onPress={onCancel} disabled={stopping} accessibilityRole="button"><Text style={shared.quietText}>Cancel</Text></Press>
-          <Press style={shared.primaryButton} onPress={onAppend} disabled={stopping} accessibilityRole="button"><Plus size={16} color={colors.white} /><Text style={shared.primaryText}>Append recording</Text></Press>
-        </View>
+      {(clips.length > 0 || loading) && <View style={styles.recordingSection}>
+        {clips.map((clip, index) => <ReviewSkeleton key={clip.audio.uri}>
+          <AudioReview audio={clip.audio} seconds={clip.durationSeconds} isDemo={isDemo}
+            title={clips.length > 1 ? `Recording ${index + 1}` : undefined} />
+        </ReviewSkeleton>)}
+        {loading && <View style={styles.loadingActions}>
+          <Text style={shared.muted} accessibilityLiveRegion="polite">{stopping ? "Finishing recording…" : "Transcribing recording…"}</Text>
+          <View style={styles.reviewActions}>
+            <Press style={shared.quietButton} onPress={onCancel} disabled={stopping} accessibilityRole="button"><Text style={shared.quietText}>Cancel</Text></Press>
+            <Press style={shared.primaryButton} onPress={onAppend} disabled={stopping} accessibilityRole="button"><Plus size={16} color={colors.white} /><Text style={shared.primaryText}>Append recording</Text></Press>
+          </View>
+        </View>}
+        {!loading && clips.length > 0 && <Press style={shared.quietButton} onPress={onAppend} disabled={saving} accessibilityRole="button"><Plus size={16} color={colors.muted} /><Text style={shared.quietText}>Append recording</Text></Press>}
+        {(clips.length > 0 || loading) && <ReviewSkeleton>
+          <View style={styles.transcriptBlock}>
+            <Text style={shared.label}>Transcript</Text>
+            <Text selectable style={shared.text}>{transcript.text || (loading ? "Your transcript will appear here." : "No transcript yet.")}</Text>
+          </View>
+        </ReviewSkeleton>}
       </View>}
-      {clips.map((clip, index) => <ReviewSkeleton key={clip.audio.uri}>
-        <AudioReview audio={clip.audio} seconds={clip.durationSeconds} isDemo={isDemo}
-          title={clips.length > 1 ? `Recording ${index + 1}` : undefined}
-          fileName={audioFileName(details.workDate + (index ? `-part-${index + 1}` : ""), clip.audio.extension)} onError={onError} />
-      </ReviewSkeleton>)}
-      {(clips.length > 0 || loading) && <ReviewSkeleton>
-        <View style={styles.transcriptBlock}>
-          <Text style={shared.label}>Transcript</Text>
-          <Text selectable style={shared.text}>{transcript.text || (loading ? "Your transcript will appear here." : "No transcript yet.")}</Text>
-        </View>
-      </ReviewSkeleton>}
       {!loading && clips.length > 0 && transcript.status !== "done" && <View style={styles.transcriptError}>
         {transcript.message ? <View style={[shared.notice, styles.transcriptNotice]} accessibilityRole={transcript.status === "error" ? "alert" : undefined}>
           <CircleHelp size={18} color={colors.muted} /><Text style={shared.noticeText}>{transcript.message}</Text>
@@ -79,7 +81,6 @@ export default function ReviewLog({ details, clips, isDemo, transcript, loading,
         </View></ReviewSkeleton>
       </View>
       {!loading && <>
-        {clips.length > 0 && <Press style={shared.quietButton} onPress={onAppend} disabled={saving} accessibilityRole="button"><Plus size={16} color={colors.muted} /><Text style={shared.quietText}>Append recording</Text></Press>}
         <View style={styles.reviewActions}>
           <Press style={shared.quietButton} onPress={onBack} disabled={saving} accessibilityRole="button"><ArrowLeft size={16} color={colors.muted} /><Text style={shared.quietText}>Back</Text></Press>
           <Press style={shared.primaryButton} onPress={onSave} disabled={saving} accessibilityRole="button"><Text style={shared.primaryText}>{saving ? "Saving…" : "Save log"}</Text></Press>
@@ -92,6 +93,7 @@ const styles = StyleSheet.create({
   half: { flex: 1 },
   loadingActions: { gap: spacing.sm },
   reviewCard: { gap: spacing.xl },
+  recordingSection: { gap: spacing.md },
   transcriptStatus: { flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 18 },
   transcriptError: { gap: 0 },
   transcriptNotice: { marginBottom: 0 },

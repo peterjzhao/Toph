@@ -45,7 +45,7 @@ export type DashboardData = {
   metrics: {
     recordingsToday: number; // logs dated today in the farm timezone
     newRecordings: number; // of those, logs still flagged new
-    activeWorkers: number; // employees with is_active
+    activeWorkers: number; // employees with is_active plus the farm's administrator account
     responseAccuracy: number | null; // null until a source for this measure exists
     asOf: string; // YYYY-MM-DD, today in the farm timezone
   };

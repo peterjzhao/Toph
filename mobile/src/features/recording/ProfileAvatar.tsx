@@ -1,5 +1,5 @@
 import { Image, StyleSheet, Text, View } from "react-native";
-import { assetUrl } from "@/lib/api/demo-client";
+import { assetUrl } from "@/lib/api/mobile-client";
 import { colors, fonts } from "./styles";
 export default function ProfileAvatar({ name, uri, size = 40 }: { name: string; uri?: string | null; size?: number }) {
   const shape = { width: size, height: size, borderRadius: size / 2 };

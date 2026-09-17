@@ -48,7 +48,9 @@ spec are listed at the end.
 
 The dashboard cards are computed on each request rather than stored: recordings today and new
 recordings count the farm's logs dated today in the farm timezone, and active workers counts
-employees with `is_active`. Response accuracy has no measured source in the data, so it is
+employees with `is_active` plus the farm's separate administrator account. The initial roster
+has eleven employees; including the administrator gives the Figma total of twelve workers.
+Response accuracy has no measured source in the data, so it is
 returned as `null` and the UI shows a placeholder. There is no metrics table.
 
 ## Tags

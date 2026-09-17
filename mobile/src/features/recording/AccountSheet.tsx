@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, AudioLines, Check, Camera, RefreshCw, Users, X } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import type { MobileAccount, MobileAccountEdit } from "@toph/contracts/mobile-demo";
+import type { MobileAccount, MobileAccountEdit } from "@toph/contracts/mobile";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Animated, BackHandler, Easing, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -136,7 +136,7 @@ export default function AccountSheet({ profile, accounts, fields, farmName, conn
         </View>
         <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
           {switching ? <>
-            <Text style={shared.muted}>Choose a demo account at {farmName}. Each person keeps their own drafts.</Text>
+            <Text style={shared.muted}>Choose an account at {farmName}. Each person keeps their own drafts.</Text>
             <TextField label="Find an account" value={search} onChangeText={setSearch} placeholder="Name or role" />
             {accounts.filter(account => `${account.name} ${account.role}`.toLowerCase().includes(search.toLowerCase())).map(account => <Press key={account.id} style={styles.accountRow} disabled={working} onPress={() => selectAccount(account)} accessibilityRole="button" accessibilityLabel={`Switch to ${account.name}`} accessibilityState={{ selected: account.id === profile.id }}>
               <ProfileAvatar name={account.name} uri={account.avatarUrl} />

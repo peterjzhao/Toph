@@ -1,123 +1,62 @@
-import type { MobileLogReceipt, MobileLogResponse, MobileLogSubmission } from "@toph/contracts/mobile";
+import { File } from "expo-file-system";
+import type { MobileAccountEdit, MobileBootstrap, MobileLogReceipt, MobileLogSubmission, MobileRemoteLog } from "@toph/contracts/mobile";
+import { draftClips, type RecordingDraft } from "@/features/recording/local-drafts";
+import { isTreatment, validateDetails } from "@/features/recording/recording-utils";
 
-export type UploadAudio = { uri: string; mimeType: string; extension: string };
-export type PreparedSubmission = { metadata: MobileLogSubmission; audio: UploadAudio | null };
-
-export class MobileApiError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly status: number | null = null,
-  ) {
-    super(message);
-    this.name = "MobileApiError";
-  }
-}
-
-type Options = {
-  /** No default URL and no environment-variable activation. Construction makes no requests. */
-  baseUrl?: string;
-  /** Supply a fresh user access token from the future sign-in provider on every request. */
-  getAccessToken?: () => Promise<string | null>;
-  fetcher?: typeof fetch;
-  timeoutMs?: number;
-  /** Explicit local development opt-in; production requests require HTTPS. */
-  allowInsecureHttp?: boolean;
-};
-
-function apiOrigin(options: Options): string {
-  if (!options.baseUrl?.trim()) {
-    throw new MobileApiError("NOT_CONFIGURED", "Mobile sync is not connected. Your draft is still on this device.");
-  }
+export const defaultApiOrigin = "https://toph-rho.vercel.app";
+export function apiOrigin(value = process.env.EXPO_PUBLIC_TOPH_API_URL || defaultApiOrigin) {
   let url: URL;
-  try { url = new URL(options.baseUrl); }
-  catch { throw new MobileApiError("INVALID_URL", "Use an absolute API origin."); }
-  if ((url.protocol !== "https:" && !(options.allowInsecureHttp && url.protocol === "http:")) ||
-      url.username || url.password || url.search || url.hash || url.pathname !== "/") {
-    throw new MobileApiError("INVALID_URL", "Use an HTTPS API origin without credentials, paths, or query parameters.");
-  }
+  try { url = new URL(value.trim()); } catch { throw new Error("The Toph server address is invalid."); }
+  const local = ["localhost", "127.0.0.1", "10.0.2.2"].includes(url.hostname);
+  if ((url.protocol !== "https:" && !(url.protocol === "http:" && local && __DEV__)) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Use the secure Toph server address.");
   return url.origin;
 }
+export const assetUrl = (url: string | null) => url?.startsWith("/") ? `${apiOrigin()}${url}` : url;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export class MobileApiError extends Error {
+  constructor(message: string, public code: string, public status: number) { super(message); }
 }
-
-function readReceipt(value: unknown, draftId: string): MobileLogReceipt {
-  const data = isRecord(value) ? value.data : null;
-  if (!isRecord(data) || data.clientDraftId !== draftId ||
-      typeof data.logId !== "string" || !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(data.logId) ||
-      typeof data.savedAt !== "string" || !Number.isFinite(Date.parse(data.savedAt))) {
-    throw new MobileApiError("INVALID_RESPONSE", "The server did not confirm this draft was saved.");
+export function createMobileClient({ baseUrl, fetcher = fetch }: { baseUrl?: string; fetcher?: typeof fetch } = {}) {
+  async function request<T>(path: string, init: RequestInit = {}, timeout = 30_000): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetcher(`${apiOrigin(baseUrl)}${path}`, { ...init, headers: { Accept: "application/json", "X-Toph-Client": "toph-mobile", ...init.headers }, signal: controller.signal, credentials: "omit", redirect: "error", cache: "no-store" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new MobileApiError(body?.error?.message || (response.status === 404 ? "The mobile connection is waiting for the updated server deployment." : "The server could not save your changes. Please try again."), body?.error?.code || "HTTP_ERROR", response.status);
+      if (!body || !("data" in body)) throw new Error("The server returned an unreadable response.");
+      return body.data as T;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error("The server took too long. Your draft is still on this device. Retry to check the save.");
+      if (error instanceof TypeError) throw new Error("Cannot reach Toph. Check your connection and try again.");
+      throw error;
+    } finally { clearTimeout(timer); }
   }
-  return (value as MobileLogResponse).data;
-}
-
-/**
- * Inert until submitLog is explicitly called with a URL and a user token provider.
- * Not imported by any screen. No automatic retries, background sync, or draft deletion.
- */
-export function createMobileApiClient(options: Options = {}) {
   return {
-    async submitLog(submission: PreparedSubmission, signal?: AbortSignal): Promise<MobileLogReceipt> {
-      const origin = apiOrigin(options);
-      if (signal?.aborted) throw new MobileApiError("CANCELLED", "Submission cancelled. Your draft is still on this device.");
-      const token = await options.getAccessToken?.();
-      if (!token?.trim()) throw new MobileApiError("UNAUTHENTICATED", "Sign in before sending a work log.");
-      if (Boolean(submission.metadata.recording) !== Boolean(submission.audio)) {
-        throw new MobileApiError("INVALID_SUBMISSION", "Recording metadata and audio must be supplied together.");
-      }
+    accounts: () => request<MobileBootstrap>("/api/mobile/v1/accounts"),
+    updateAccount: (id: string, profile: MobileAccountEdit, expectedRevision: number) => request<MobileBootstrap>(`/api/mobile/v1/accounts/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, expectedRevision }) }),
+    logs: (accountId: string) => request<MobileRemoteLog[]>(`/api/mobile/v1/logs?accountId=${encodeURIComponent(accountId)}`),
+    async submit(draft: RecordingDraft, bootstrap: MobileBootstrap): Promise<MobileLogReceipt> {
+      if (draft.isDemo) throw new Error("Sample recordings stay on this device.");
+      const clips = draftClips(draft);
+      const problem = validateDetails(draft, clips.length > 0);
+      if (problem) throw new Error(problem);
+      const field = bootstrap.fields.find(item => item.name === draft.field);
+      if (!field || draft.farmId !== bootstrap.farm.id || !bootstrap.accounts.some(item => item.id === draft.employee.id)) throw new Error("Reload accounts and choose this log’s original account and field.");
+      if (clips.length > 8) throw new Error("A synced log can contain up to eight recording clips.");
+      if (clips.some(clip => !new File(clip.audio.uri).exists)) throw new Error("A recording file is missing. Your log has not been uploaded.");
+      if (clips.reduce((sum, clip) => sum + new File(clip.audio.uri).size, 0) > bootstrap.maxAudioBytes) throw new Error("This recording is too large to sync (3.8 MB limit). Keep the draft or share its audio.");
+      const treatment = isTreatment(draft.activity);
+      const metadata: MobileLogSubmission = { contractVersion: "1", accountId: draft.employee.id, clientDraftId: draft.id, fieldId: field.id,
+        activity: draft.activity, workDate: draft.workDate, startTime: draft.startTime, endTime: draft.endTime, notes: draft.notes.trim(), transcript: draft.transcript.trim() || null,
+        treatment: treatment && (draft.product.trim() || draft.amount) ? { product: draft.product.trim() || null, amount: draft.amount ? Number(draft.amount) : null, unit: draft.amount ? draft.unit : null } : null,
+        tags: draft.tags, recordings: clips.map(clip => ({ mimeType: clip.audio.mimeType, durationSeconds: clip.durationSeconds })) };
       const body = new FormData();
-      body.append("metadata", JSON.stringify(submission.metadata));
-      if (submission.audio) {
-        // Native FormData reads the local file URI. Never serialize a device URI into metadata.
-        body.append("audio", {
-          uri: submission.audio.uri,
-          name: `recording.${submission.audio.extension}`,
-          type: submission.audio.mimeType,
-        } as unknown as Blob);
-      }
-      const controller = new AbortController();
-      const cancel = () => controller.abort();
-      signal?.addEventListener("abort", cancel);
-      if (signal?.aborted) controller.abort();
-      let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; controller.abort(); }, options.timeoutMs ?? 30_000);
-      try {
-        if (controller.signal.aborted) throw new Error("Aborted");
-        const response = await (options.fetcher ?? fetch)(`${origin}/api/mobile/v1/logs`, {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-            "Idempotency-Key": submission.metadata.clientDraftId,
-          },
-          // The native transport supplies the multipart boundary; do not set Content-Type.
-          body,
-          signal: controller.signal,
-          credentials: "omit",
-          redirect: "error",
-        });
-        const payload: unknown = await response.json().catch(() => null);
-        if (!response.ok) {
-          const error = isRecord(payload) && isRecord(payload.error) ? payload.error : null;
-          const code = typeof error?.code === "string" ? error.code : "HTTP_ERROR";
-          const message = typeof error?.message === "string" ? error.message : `The server rejected the work log (${response.status}).`;
-          throw new MobileApiError(code, message, response.status);
-        }
-        return readReceipt(payload, submission.metadata.clientDraftId);
-      } catch (error) {
-        if (controller.signal.aborted) {
-          throw new MobileApiError(timedOut ? "TIMEOUT" : "CANCELLED", timedOut
-            ? "The request timed out. Keep this draft and retry with the same ID."
-            : "Submission cancelled. Your draft is still on this device.");
-        }
-        if (error instanceof MobileApiError) throw error;
-        throw new MobileApiError("NETWORK_ERROR", "The server could not be reached. Your draft is still on this device.");
-      } finally {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", cancel);
-      }
+      body.append("metadata", JSON.stringify(metadata));
+      clips.forEach((clip, index) => body.append(`audio${index}`, { uri: clip.audio.uri, name: `clip-${index}.${clip.audio.extension}`, type: clip.audio.mimeType } as unknown as Blob));
+      const receipt = await request<MobileLogReceipt>("/api/mobile/v1/logs", { method: "POST", headers: { "Idempotency-Key": draft.id }, body }, 60_000);
+      if (receipt.clientDraftId !== draft.id || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(receipt.logId) || !Number.isFinite(Date.parse(receipt.savedAt))) throw new Error("The server receipt could not be verified. Keep this draft and retry.");
+      return receipt;
     },
   };
 }

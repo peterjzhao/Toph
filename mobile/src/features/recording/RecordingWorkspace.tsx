@@ -5,8 +5,8 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { MobileAccount, MobileAccountEdit, MobileBootstrap, MobileRemoteLog } from "@toph/contracts/mobile-demo";
-import { assetUrl, createDemoClient, DemoApiError } from "@/lib/api/demo-client";
+import type { MobileAccount, MobileAccountEdit, MobileBootstrap, MobileRemoteLog } from "@toph/contracts/mobile";
+import { assetUrl, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AccountSheet from "./AccountSheet";
 import ReviewLog from "./ReviewLog";
@@ -24,9 +24,9 @@ import { useTranscription } from "./use-transcription";
 import { useRecorder } from "./use-recorder";
 
 type Screen = "capture" | "review" | "saved" | "library" | "remote";
-const pageTitles: Record<Screen, string> = { capture: "Record", review: "Review log", saved: "Draft saved", library: "Logs", remote: "Saved log" };
+const pageTitles: Record<Exclude<Screen, "review">, string> = { capture: "Record", saved: "Draft saved", library: "Logs", remote: "Saved log" };
 const initialAccount: MobileAccount = { ...defaultProfile, id: "10000000-0000-4000-8000-000000000001", role: "Farm worker", email: "", phone: "", avatarUrl: null };
-const api = createDemoClient();
+const api = createMobileClient();
 
 export default function RecordingWorkspace() {
   const recorder = useRecorder();
@@ -157,7 +157,7 @@ export default function RecordingWorkspace() {
     let data: MobileBootstrap;
     try { data = await api.updateAccount(profile.id, changes, bootstrap.revision); }
     catch (cause) {
-      if (cause instanceof DemoApiError && cause.status === 409) await refreshAccounts().catch(() => undefined);
+      if (cause instanceof MobileApiError && cause.status === 409) await refreshAccounts().catch(() => undefined);
       throw cause;
     }
     saveAccounts(data, profile.id);
@@ -293,7 +293,7 @@ export default function RecordingWorkspace() {
 
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView ref={scrollArea} style={styles.main} contentContainerStyle={[styles.mainContent, screen === "capture" ? styles.captureContent : null]} keyboardShouldPersistTaps="handled">
-          {screen !== "capture" && <View style={styles.pageHeading}>
+          {screen !== "capture" && screen !== "review" && <View style={styles.pageHeading}>
             <Text style={shared.heading} accessibilityRole="header">{screen === "saved" && saved?.sync ? "Log saved" : pageTitles[screen]}</Text>
             {screen === "library" && <Pressable style={shared.roundButton} onPress={newRecording} accessibilityRole="button" accessibilityLabel="New recording"><Plus size={20} color={colors.ink} /></Pressable>}
           </View>}
@@ -336,7 +336,7 @@ export default function RecordingWorkspace() {
           {screen === "review" && <ReviewLog details={details} clips={clips} isDemo={recorder.isDemo} transcript={transcript}
             fieldOptions={bootstrap?.fields.map(field => field.name)}
             loading={recorder.status === "stopping" || transcript.status === "working"} stopping={recorder.status === "stopping"}
-            saving={saving} editing={Boolean(editing)} onChange={change} onError={setError}
+            saving={saving} editing={Boolean(editing)} onChange={change}
             onRetry={() => void transcription.run()} onCancel={transcription.cancel} onAppend={appendRecording}
             onBack={newRecording} onSave={() => void submit()} />}
 
@@ -377,7 +377,7 @@ export default function RecordingWorkspace() {
             <Text style={shared.text}>{remoteLog.notes}</Text>
             {remoteLog.treatment && <><Text style={shared.label}>Treatment</Text><Text style={shared.text}>{[remoteLog.treatment.product, remoteLog.treatment.amount, remoteLog.treatment.unit].filter(value => value !== null).join(" ")}</Text></>}
             {remoteLog.transcript && <><Text style={shared.label}>Transcript</Text><Text style={shared.text}>{remoteLog.transcript}</Text></>}
-            {(remoteLog.clips.length ? remoteLog.clips : remoteLog.recording ? [{ url: remoteLog.recording.url, durationSeconds: remoteLog.recording.durationSeconds ?? 0, mimeType: "audio/mpeg" }] : []).map((clip, index) => <AudioReview key={clip.url} title={`Recording ${index + 1}`} audio={{ uri: assetUrl(clip.url)!, mimeType: clip.mimeType, extension: clip.mimeType === "audio/mpeg" ? "mp3" : "m4a" }} seconds={clip.durationSeconds} isDemo={false} fileName={`toph-${remoteLog.id}-${index}.m4a`} onError={setError} />)}
+            {(remoteLog.clips.length ? remoteLog.clips : remoteLog.recording ? [{ url: remoteLog.recording.url, durationSeconds: remoteLog.recording.durationSeconds ?? 0, mimeType: "audio/mpeg" }] : []).map((clip, index) => <AudioReview key={clip.url} title={`Recording ${index + 1}`} audio={{ uri: assetUrl(clip.url)!, mimeType: clip.mimeType, extension: clip.mimeType === "audio/mpeg" ? "mp3" : "m4a" }} seconds={clip.durationSeconds} isDemo={false} />)}
             <Press style={shared.quietButton} onPress={openLibrary} accessibilityRole="button"><ArrowLeft size={16} color={colors.muted} /><Text style={shared.quietText}>Back to logs</Text></Press>
           </View>}
         </ScrollView>

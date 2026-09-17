@@ -1,5 +1,5 @@
 /**
- * Bays Ranch initial dataset: the farm, its twelve employees, eleven fields, and eleven work
+ * Bays Ranch initial dataset: the farm, its eleven employees, eleven fields, and eleven work
  * logs loaded by `npm run db:seed`. IDs are deterministic so the same records exist after every
  * run; the seed only inserts what is missing.
  */
@@ -53,11 +53,8 @@ export const INITIAL_ROWS: readonly InitialRow[] = [
   { n: 11, employee: "Benjamin Moore", activity: "Pest Control", workDate: "2026-04-29", field: "FIELD K", start: "06:30", end: "10:30", isNew: false, summary: "Pest control pass on FIELD K from 6:30 to 10:30. Treated the perimeter rows first and finished the interior before the heat." },
 ];
 
-/** Peter is the user-requested twelfth worker and has no initial recording. */
-export const INITIAL_EMPLOYEES = [
-  ...INITIAL_ROWS.map((row) => ({ n: row.n, name: row.employee })),
-  { n: 12, name: "Peter" },
-] as const;
+/** The farm administrator is a separate account, not an extra employee profile. */
+export const INITIAL_EMPLOYEES = INITIAL_ROWS.map((row) => ({ n: row.n, name: row.employee }));
 
 export type RecordKind = "employee" | "field" | "workLog";
 

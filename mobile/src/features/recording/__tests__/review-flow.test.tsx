@@ -15,9 +15,9 @@ jest.mock("../AudioReview", () => {
 });
 jest.mock("../transcribe", () => ({ transcribeRecording: jest.fn() }));
 jest.mock("../use-recorder", () => ({ useRecorder: () => mockRecorder }));
-jest.mock("@/lib/api/demo-client", () => ({
+jest.mock("@/lib/api/mobile-client", () => ({
   apiOrigin: () => "https://toph.example", assetUrl: (value: string) => value,
-  createDemoClient: () => ({ accounts: async () => { throw new Error("Test offline"); } }),
+  createMobileClient: () => ({ accounts: async () => { throw new Error("Test offline"); } }),
 }));
 
 const audio = { uri: "file:///cache/one.m4a", extension: "m4a", mimeType: "audio/mp4" };
@@ -54,7 +54,7 @@ test("paused recording offers Finish on the main button", async () => {
   expect(screen.getByRole("button", { name: "Resume recording" })).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Finish recording" }));
   expect(mockRecorder.finish).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Review log")).toBeTruthy();
+  expect(screen.queryByText("Review log")).toBeNull();
 });
 
 test("Back discards all clips, transcript and notes and resets the clock", async () => {
@@ -81,7 +81,7 @@ test("finish immediately shows the shared review skeleton, then the transcript w
   const view = await render(<RecordingWorkspace />);
   expect(screen.queryByText("Finish")).toBeNull();
   await fireEvent.press(screen.getByRole("button", { name: "Finish recording" }));
-  expect(screen.getByText("Review log")).toBeTruthy();
+  expect(screen.queryByText("Review log")).toBeNull();
   expect(screen.getByText("Finishing recording…")).toBeTruthy();
   expect(screen.getAllByTestId("review-skeleton").length).toBeGreaterThan(5);
   mockRecorder.status = "ready"; mockRecorder.audio = audio;

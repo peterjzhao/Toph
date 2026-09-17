@@ -2,20 +2,20 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type postgres from "postgres";
-import type { MobileDemoSubmission } from "@/contracts/mobile-demo";
+import type { MobileLogSubmission } from "@/contracts/mobile";
 import { createFarmContext, type FarmContext } from "@/server/farm-context";
 import { FARM_ID } from "@/server/db/initial-data";
 import { applyRuntimeGrants } from "@/server/db/grants";
-import { applyMobileDemoGrants } from "@/server/mobile-demo/grants";
-import { getMobileBootstrap, updateMobileAccount } from "@/server/mobile-demo/accounts";
-import { listMobileLogs, parseDemoSubmission, readDemoSubmission, saveMobileLog } from "@/server/mobile-demo/logs";
+import { applyMobileGrants } from "@/server/mobile/grants";
+import { getMobileBootstrap, updateMobileAccount } from "@/server/mobile/accounts";
+import { listMobileLogs, parseMobileSubmission, readMobileSubmission, saveMobileLog } from "@/server/mobile/logs";
 import { getWorkspace, patchWorkspace } from "@/server/workspace/service";
 import { getLog } from "@/server/services/dashboard";
 import { openTestSql } from "../helpers/test-db";
 import { OTHER_FARM, prepareTestDatabase } from "../helpers/prepare-db";
 import { getTestDatabaseTarget } from "../helpers/test-env";
 
-describe("mobile demo persistence", () => {
+describe("mobile persistence", () => {
   let owner: postgres.Sql;
   let ctx: FarmContext;
   let employeeId: string;
@@ -26,7 +26,7 @@ describe("mobile demo persistence", () => {
     owner = openTestSql();
     await prepareTestDatabase(owner);
     await applyRuntimeGrants(owner, "toph_app");
-    await applyMobileDemoGrants(owner, "toph_app");
+    await applyMobileGrants(owner, "toph_app");
     ctx = await createFarmContext({ databaseUrl: target.appUrl ?? target.url, farmId: FARM_ID });
     const bootstrap = await getMobileBootstrap(ctx);
     employeeId = bootstrap.accounts[0].id;
@@ -43,7 +43,7 @@ describe("mobile demo persistence", () => {
     await owner`revoke update (display_name, avatar_path, updated_at) on toph.employees from toph_app`;
     await ctx?.close(); await owner?.end();
   });
-  const metadata = (): MobileDemoSubmission => ({ contractVersion: "demo-1", accountId: employeeId, clientDraftId: randomUUID(), fieldId,
+  const metadata = (): MobileLogSubmission => ({ contractVersion: "1", accountId: employeeId, clientDraftId: randomUUID(), fieldId,
     activity: "Spraying", workDate: "2026-09-16", startTime: "06:00", endTime: "08:00", notes: "Checked irrigation.", transcript: "The water is flowing.",
     treatment: { product: "Test treatment", amount: 2, unit: "L" }, tags: ["Needs review"], recordings: [] });
 
@@ -91,7 +91,7 @@ describe("mobile demo persistence", () => {
     input.recordings = [{ mimeType: "audio/mpeg", durationSeconds: 13.3 }, { mimeType: "audio/mpeg", durationSeconds: 13.3 }];
     const form = new FormData(); form.append("metadata", JSON.stringify(input));
     input.recordings.forEach((_, index) => form.append(`audio${index}`, new Blob([bytes], { type: "audio/mpeg" }), `${index}.mp3`));
-    const upload = await readDemoSubmission(new Request("https://toph.example/api/mobile/demo/v1/logs", { method: "POST", headers: { "idempotency-key": input.clientDraftId }, body: form }));
+    const upload = await readMobileSubmission(new Request("https://toph.example/api/mobile/v1/logs", { method: "POST", headers: { "idempotency-key": input.clientDraftId }, body: form }));
     const receipt = await saveMobileLog(ctx, upload.metadata, upload.clips); ids.push(receipt.logId);
     const log = (await listMobileLogs(ctx, employeeId)).find(item => item.id === receipt.logId)!;
     expect(log.clips).toHaveLength(2);
@@ -99,14 +99,14 @@ describe("mobile demo persistence", () => {
     const stored = await owner`select bytes from toph.mobile_recordings where log_id = ${receipt.logId} order by position`;
     expect(stored.every(row => bytes.equals(row.bytes))).toBe(true);
     form.set("audio0", new Blob(["not audio"], { type: "audio/mpeg" }), "fake.mp3");
-    await expect(readDemoSubmission(new Request("https://toph.example", { method: "POST", headers: { "idempotency-key": input.clientDraftId }, body: form }))).rejects.toMatchObject({ status: 400 });
+    await expect(readMobileSubmission(new Request("https://toph.example", { method: "POST", headers: { "idempotency-key": input.clientDraftId }, body: form }))).rejects.toMatchObject({ status: 400 });
   });
 
   it("keeps account queries scoped and rejects invalid and ambiguous farm times", async () => {
     await expect(listMobileLogs(ctx, OTHER_FARM.employeeId)).rejects.toMatchObject({ status: 404 });
     await expect(saveMobileLog(ctx, { ...metadata(), fieldId: OTHER_FARM.fieldId }, [])).rejects.toMatchObject({ status: 400 });
     await expect(saveMobileLog(ctx, { ...metadata(), accountId: OTHER_FARM.employeeId }, [])).rejects.toMatchObject({ status: 404 });
-    expect(() => parseDemoSubmission({ ...metadata(), workDate: "2026-02-30" })).toThrow();
+    expect(() => parseMobileSubmission({ ...metadata(), workDate: "2026-02-30" })).toThrow();
     for (const [workDate, startTime] of [["2026-03-08", "02:30"], ["2026-11-01", "01:30"]]) await expect(saveMobileLog(ctx, { ...metadata(), workDate, startTime }, [])).rejects.toMatchObject({ status: 400 });
   });
 

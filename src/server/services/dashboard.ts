@@ -22,11 +22,11 @@ type DateRange = { from: string; to: string } | null;
 type ViewRow = typeof dashboardLogs.$inferSelect;
 
 async function attachMobileClips(ctx: FarmContext, logs: LogDto[]): Promise<LogDto[]> {
-  const ids = logs.filter(log => log.recording?.url.startsWith("/api/mobile/demo/v1/recordings/")).map(log => log.id);
+  const ids = logs.filter(log => log.recording?.url.startsWith("/api/mobile/v1/recordings/")).map(log => log.id);
   if (!ids.length) return logs;
   const clips = await ctx.sql`select id, log_id, duration_seconds from toph.mobile_recordings where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[]) order by position`;
   return logs.map(log => {
-    const recordings = clips.filter(clip => clip.log_id === log.id).map(clip => ({ url: `/api/mobile/demo/v1/recordings/${clip.id}`, durationSeconds: Number(clip.duration_seconds) }));
+    const recordings = clips.filter(clip => clip.log_id === log.id).map(clip => ({ url: `/api/mobile/v1/recordings/${clip.id}`, durationSeconds: Number(clip.duration_seconds) }));
     return log.recording && recordings.length ? { ...log, recording: { ...log.recording, clips: recordings } } : log;
   });
 }
@@ -45,7 +45,7 @@ export function toLogDto(row: ViewRow): LogDto {
     isNew: row.isNew,
     recording: row.recordingPath
       ? {
-          url: row.recordingPath,
+          url: row.recordingPath.replace("/api/mobile/demo/v1/", "/api/mobile/v1/"),
           durationSeconds: row.recordingDurationSeconds === null ? null : Number(row.recordingDurationSeconds),
           waveformAssetUrl: row.waveformAssetPath,
           waveformPeaks: Array.isArray(row.waveformPeaks) ? row.waveformPeaks.map(Number) : null,
@@ -124,7 +124,8 @@ async function loadMetrics(ctx: FarmContext, today: string): Promise<DashboardDa
   return {
     recordingsToday: logCounts?.recordingsToday ?? 0,
     newRecordings: logCounts?.newRecordings ?? 0,
-    activeWorkers: workerCounts?.activeWorkers ?? 0,
+    // Every configured farm has one administrator account, separate from its employee roster.
+    activeWorkers: (workerCounts?.activeWorkers ?? 0) + 1,
     responseAccuracy: null,
     asOf: today,
   };

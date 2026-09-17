@@ -1,7 +1,7 @@
 /** Explicit operator opt-in. The existing web deployment's grants remain unchanged. */
 import type postgres from "postgres";
 import { RUNTIME_ROLE_PATTERN } from "@/server/db/grants";
-export async function applyMobileDemoGrants(sql: postgres.Sql, role: string) {
+export async function applyMobileGrants(sql: postgres.Sql, role: string) {
   if (!RUNTIME_ROLE_PATTERN.test(role)) throw new Error("Invalid runtime role.");
   await sql.begin(async tx => {
     await tx`grant select, insert on toph.mobile_profiles, toph.mobile_recordings, toph.mobile_submissions to ${tx(role)}`;

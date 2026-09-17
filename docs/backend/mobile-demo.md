@@ -69,6 +69,12 @@ separately; hosted transcription remains unavailable until a separately authoriz
 
 ## Prepared release — September 16, 2026
 
+Roster correction: migration `0005_remove_extra_worker.sql` removes the extra seeded Peter
+account. The current seed has eleven mobile employee accounts; the web administrator is a
+separate account and contributes to the dashboard's twelve active workers. Apply the pending
+migration to existing environments before verifying this corrected roster. The counts below
+record the earlier release checks, before this correction.
+
 Supabase migration `0004` and the additional restricted runtime grants are applied. The
 original 11 logs and 12 normalized employees remain intact. Both owner and runtime
 connections pass the read-only database check with verified TLS, five recorded migrations,

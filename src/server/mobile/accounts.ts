@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import type { MobileAccount, MobileAccountEdit, MobileBootstrap } from "@/contracts/mobile-demo";
+import type { MobileAccount, MobileAccountEdit, MobileBootstrap } from "@/contracts/mobile";
 import type { FarmContext } from "@/server/farm-context";
 import { ApiError, notFound, validationError } from "@/server/errors";
 import { getWorkspace } from "@/server/workspace/service";
@@ -46,7 +46,7 @@ export async function getMobileBootstrap(ctx: FarmContext): Promise<MobileBootst
       defaultField: fields.some(field => field.name === profile?.default_field) ? profile!.default_field : fields[0]?.name ?? "",
       defaultActivity: profile?.default_activity ?? "Spraying" };
   });
-  return { mode: "demo", farm: { id: ctx.farmId, name: workspace.data.settings.farmName, timezone: ctx.farm.timezone }, accounts, fields, revision: workspace.revision, maxAudioBytes: MAX_MOBILE_AUDIO_BYTES };
+  return { mode: "shared", farm: { id: ctx.farmId, name: workspace.data.settings.farmName, timezone: ctx.farm.timezone }, accounts, fields, revision: workspace.revision, maxAudioBytes: MAX_MOBILE_AUDIO_BYTES };
 }
 
 export async function updateMobileAccount(ctx: FarmContext, accountId: string, body: unknown): Promise<MobileBootstrap> {

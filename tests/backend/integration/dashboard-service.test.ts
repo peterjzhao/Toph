@@ -37,7 +37,7 @@ describe("dashboard read services", () => {
       avatarUrl: "/assets/avatar.jpg",
       timezone: "America/Los_Angeles",
     });
-    // Metrics are computed from the data: no April 2026 log is dated today, twelve employees are active.
+    // Eleven active employees plus the separate administrator account make twelve workers.
     const today = instantToLocalDate(new Date(), "America/Los_Angeles");
     expect(data.metrics).toEqual({
       recordingsToday: 0,
@@ -90,6 +90,18 @@ describe("dashboard read services", () => {
       },
       pagination: { total: 11, limit: 50, offset: 0, hasMore: false },
     });
+  });
+
+  it("counts the administrator once and excludes inactive employees and other farms", async () => {
+    await sql`update toph.employees set is_active = false where id = ${recordId("employee", 1)}`;
+    try {
+      expect((await getDashboard(ctx)).data.metrics.activeWorkers).toBe(11);
+      const other = await createFarmContext({ databaseUrl: getTestDatabaseTarget().url, farmId: OTHER_FARM.id });
+      try { expect((await getDashboard(other)).data.metrics.activeWorkers).toBe(2); }
+      finally { await other.close(); }
+    } finally {
+      await sql`update toph.employees set is_active = true where id = ${recordId("employee", 1)}`;
+    }
   });
 
   it("shapes Isaac's log exactly like the page, including recording metadata", async () => {

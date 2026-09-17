@@ -142,7 +142,6 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const [notice, setNotice] = useState("");
   const [section, setSection] = useState<string | null>(null);
   const main = useRef<HTMLDivElement>(null);
-  const tableBody = useRef<HTMLTableSectionElement>(null);
   const controls = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const filterDateTrigger = useRef<HTMLButtonElement>(null);
@@ -216,14 +215,9 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const newCount = logs.filter(log => log.isNew).length;
   const selectedCount = logs.filter(log => selected.has(log.id)).length;
   const filterCount = Number(Boolean(activity)) + Number(Boolean(field));
-  // Preserve the compact Figma view for filtered results; all logs use the page height.
-  const hasFilters = Boolean(range || activity || field || search.trim());
-
-  useEffect(() => { if (tableBody.current) tableBody.current.scrollTop = 0; }, [search, activity, field, range, sort]);
 
   function toggleLog(id: string) {
     setExpandedId(current => current === id ? null : id);
-    if (tableBody.current) tableBody.current.scrollTop = 0;
   }
   function toggleSelected(id: string) { setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
   function selectAll() { setSelected(current => { const next = new Set(current); const all = logs.every(log => next.has(log.id)); logs.forEach(log => all ? next.delete(log.id) : next.add(log.id)); return next; }); }
@@ -305,7 +299,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
         <div className={styles.tableViewport}>
           <table className={styles.table} aria-label="Employee logs">
             <thead><tr className={styles.tableHeader}><th className={styles.checkCell}><SelectionBox label="Select all logs" checked={logs.length > 0 && selectedCount === logs.length} mixed={selectedCount > 0 && selectedCount < logs.length} onChange={selectAll} /></th><th>EMPLOYEE</th><th>ACTIVITY</th><th>DATE</th><th>FIELD</th><th>TIME</th><th aria-label="Actions" /></tr></thead>
-            <tbody ref={tableBody} className={`${styles.tableBody} ${!isExpanded && !activityPage && hasFilters ? styles.compactBody : ""}`}>
+            <tbody>
               {logs.map(log => <Fragment key={log.id}>
                 <tr className={`${styles.logRow} ${log.id === data.logs[0]?.id || log.id === expandedId ? styles.highlightedRow : ""} ${selected.has(log.id) ? styles.selectedRow : ""}`} onClick={() => toggleLog(log.id)}>
                   <td className={styles.checkCell}><SelectionBox label={`Select ${log.employee.name}'s log`} checked={selected.has(log.id)} onChange={() => toggleSelected(log.id)} /></td>

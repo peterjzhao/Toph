@@ -41,7 +41,7 @@ describe("persistent workspace pages", () => {
   it("initializes one seeded row transactionally even with concurrent first reads", async () => {
     const copies = await Promise.all(Array.from({ length: 6 }, () => getWorkspace(ctx)));
     expect(copies.every((copy) => copy.revision === 0)).toBe(true);
-    expect(copies[0].data.employees).toHaveLength(12);
+    expect(copies[0].data.employees).toHaveLength(11);
     expect(copies[0].data.schedule).toHaveLength(3);
     expect(copies[0].data.messages).toHaveLength(2);
     expect((await owner`select count(*)::int as n from toph.workspace_state where farm_id = ${FARM_ID}`)[0].n).toBe(1);
@@ -78,9 +78,9 @@ describe("persistent workspace pages", () => {
       schedule: [...initial.data.schedule, { ...initial.data.schedule[0], id: randomUUID(), employeeId: employee.id }],
       messages: [{ id: randomUUID(), employeeId: employee.id, body: "Sample assignment", from: "admin", read: true, createdAt: new Date().toISOString() }],
     } });
-    expect(result.data.employees).toHaveLength(13);
+    expect(result.data.employees).toHaveLength(12);
     expect(result.data.messages[0].employeeId).toBe(employee.id);
-    expect((await owner`select count(*)::int as n from toph.employees where farm_id = ${FARM_ID}`)[0].n).toBe(12);
+    expect((await owner`select count(*)::int as n from toph.employees where farm_id = ${FARM_ID}`)[0].n).toBe(11);
   });
 
   it("rejects cross-farm references, orphan messages and removal of historical employees", async () => {

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { requireMobileDemo } from "@/server/mobile-demo/access";
+import { requireMobileAccess } from "@/server/mobile/access";
 import { GET } from "@/app/api/mobile/demo/v1/accounts/route";
 afterEach(() => vi.unstubAllEnvs());
 test("demo API fails closed until explicitly enabled", async () => {
@@ -10,7 +10,7 @@ test("demo API fails closed until explicitly enabled", async () => {
 });
 test("demo writes require deliberate client header and reject a foreign browser origin", () => {
   vi.stubEnv("TOPH_MOBILE_DEMO_ENABLED", "true"); vi.stubEnv("APP_ORIGIN", "https://toph.example");
-  expect(() => requireMobileDemo(new Request("https://toph.example"), true)).toThrow();
-  expect(() => requireMobileDemo(new Request("https://toph.example", { headers: { "x-toph-client": "mobile-demo", origin: "https://elsewhere.example" } }), true)).toThrow();
-  expect(() => requireMobileDemo(new Request("https://toph.example", { headers: { "x-toph-client": "mobile-demo" } }), true)).not.toThrow();
+  expect(() => requireMobileAccess(new Request("https://toph.example"), true)).toThrow();
+  expect(() => requireMobileAccess(new Request("https://toph.example", { headers: { "x-toph-client": "mobile-demo", origin: "https://elsewhere.example" } }), true)).toThrow();
+  expect(() => requireMobileAccess(new Request("https://toph.example", { headers: { "x-toph-client": "mobile-demo" } }), true)).not.toThrow();
 });

@@ -82,9 +82,10 @@ If Docker commands fail with a socket error, the OrbStack runtime is not running
 
 ## Option B: Supabase
 
-The existing `toph-dev` database has migrations `0000`–`0003`, twelve employees, eleven
-fields, and eleven logs. These steps document provisioning; do not repeat them just to deploy
-the website. Keep owner credentials in local configuration only.
+Existing installations may still have the older twelve-employee seed. Migration `0005`
+removes the extra seeded Peter profile; the eleven employees plus the separate administrator
+account give twelve active workers. These steps document provisioning; do not repeat them
+just to deploy the website. Keep owner credentials in local configuration only.
 
 1. In the SQL editor, create the restricted runtime role:
 
@@ -143,6 +144,8 @@ Schema source: `src/server/db/schema.ts`. Reviewed SQL under `drizzle/`:
 | `0001_workspace_state.sql` | `workspace_state` (sidebar pages) |
 | `0002_remove_demo_scaffolding.sql` | Drops the metric snapshot table and the farm/recording provenance columns; recreates the view |
 | `0003_employee_avatar.sql` | Adds `employees.avatar_path` and exposes it in the view |
+| `0004_mobile_demo.sql` | Adds shared mobile profile, submission, and recording storage |
+| `0005_remove_extra_worker.sql` | Removes the extra seeded Peter profile and its workspace references; refuses to delete recorded work |
 
 Applied migrations are recorded in `drizzle.__drizzle_migrations`, outside the application
 schema. After changing the schema run `npm run db:generate`, review the SQL (hand-written
@@ -150,10 +153,18 @@ objects such as the function are not managed by drizzle-kit), then `npm run db:m
 
 ## Initial data
 
-`npm run db:seed` loads Bays Ranch: the farm, twelve employees (including Peter), eleven fields, and eleven work
+`npm run db:seed` loads Bays Ranch: the farm, eleven employees, eleven fields, and eleven work
 logs with deterministic IDs (`src/server/db/initial-data.ts`). Every log references the
 recording and waveform assets under `public/assets`. The tag catalog starts empty. Re-running
 inserts nothing and changes nothing; nothing is loaded at application startup.
+
+The administrator is the existing separate account shown in Switch User, not a twelfth
+employee profile. `activeWorkers` includes this account once. Run `npm run db:migrate` on
+an existing database to remove the obsolete seeded Peter ID from normalized employees,
+mobile profile preferences, and workspace employee/schedule/message entries. This preserves
+the other eleven employees, logs, settings, and edits. A changed workspace gets a new revision
+so an older browser cannot restore the removed profile through a stale update. If Peter has
+recorded work, the migration stops instead of deleting that history.
 
 ## Tests
 

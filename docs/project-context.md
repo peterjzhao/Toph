@@ -11,6 +11,10 @@ drafts, migrations, design references, and active development processes intact.
 
 ## Product and submission
 
+Roster clarification from the user: Figma's twelve workers are the eleven employee profiles
+plus the separate administrator account. Do not add Peter or another employee to manufacture
+the twelfth worker. Migration `0005` removes the previous extra seeded Peter profile.
+
 Toph helps farmers review work performed on their fields. Workers' activity logs are shown in a dashboard. Clicking a row expands its recording, summary, map, and tags.
 
 This first version is an **interview submission using persistent sample farm data**. The user explicitly chose that scope. The interface is being implemented concurrently by the frontend agent, and the user has asked for a backend specification and prompt for Claude Fable.
@@ -69,7 +73,7 @@ Keep integration changes in a short handoff document, `docs/backend/integration.
 - Extracted assets currently available: `/assets/avatar.jpg`, `/assets/field-map.svg`, `/assets/waveform.svg`.
 - `/assets/sample-recording.mp3` is a synthesized demo clip created during frontend preparation, not an original farm recording. The screen recording has no audio stream.
 
-The default export shows four logs; the expanded export includes eleven. Use a stable eleven-log dataset. The compact four-row view is presentation, not a database limit or a reason to create records when a row opens. Four seeded logs are marked new as an explicit demo convention.
+The default export shows four logs; the expanded export includes eleven. Use a stable eleven-log dataset. The user clarified that every result list must use the available screen space, whether filtered or unfiltered. Do not impose a four-row height or record limit; additional matching rows use the right pane's normal page scrolling. Four seeded logs are marked new as an explicit demo convention, separate from the total matching log count.
 
 The reference card values are 5 recordings, 1 new recording, 12 active workers, and response accuracy 90. Their underlying definitions are not supplied. Persist them as a dated, explicitly attributed Figma demo snapshot. Do not present them as measured AI accuracy or invent a calculation to manufacture the desired values.
 

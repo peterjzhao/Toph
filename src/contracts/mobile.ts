@@ -1,15 +1,32 @@
-/**
- * Prepared mobile submission contract. The route is deliberately disabled for now.
- * Type-only imports are safe in Expo; never import src/server from the mobile app.
- */
+/** Shared mobile API data. No database, React, or native imports. */
+import type { LogDto } from "./dashboard";
+
+export type MobileAccount = {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+  phone: string;
+  avatarUrl: string | null;
+  defaultField: string;
+  defaultActivity: string;
+};
+export type MobileAccountEdit = Omit<MobileAccount, "id">;
+export type MobileBootstrap = {
+  mode: "shared";
+  farm: { id: string; name: string; timezone: string };
+  accounts: MobileAccount[];
+  fields: { id: string; name: string }[];
+  revision: number;
+  maxAudioBytes: number;
+};
 export type MobileLogSubmission = {
   contractVersion: "1";
-  /** Stable device draft UUID. The server must deduplicate within the authenticated account. */
   clientDraftId: string;
-  /** Field selected from the authenticated farm's future field catalog. */
+  accountId: string;
   fieldId: string;
   activity: string;
-  /** Farm-local date and wall-clock times, NOT converted using the phone's timezone. */
+  /** Farm-local date and wall times; never converted using the phone timezone. */
   workDate: string;
   startTime: string;
   endTime: string;
@@ -17,15 +34,14 @@ export type MobileLogSubmission = {
   transcript: string | null;
   treatment: { product: string | null; amount: number | null; unit: string | null } | null;
   tags: string[];
-  recording: { mimeType: string; durationSeconds: number } | null;
+  recordings: { mimeType: string; durationSeconds: number }[];
 };
-
-/** Returned only after a real commit; a disabled server must never return a fake receipt. */
-export type MobileLogReceipt = {
-  clientDraftId: string;
-  /** The same work-log UUID used by the dashboard's collapsed and expanded row. */
-  logId: string;
-  savedAt: string;
-};
-
+export type MobileLogReceipt = { clientDraftId: string; logId: string; savedAt: string };
 export type MobileLogResponse = { data: MobileLogReceipt };
+export type MobileRemoteLog = LogDto & {
+  clientDraftId: string | null;
+  notes: string;
+  transcript: string | null;
+  treatment: MobileLogSubmission["treatment"];
+  clips: { url: string; durationSeconds: number; mimeType: string }[];
+};

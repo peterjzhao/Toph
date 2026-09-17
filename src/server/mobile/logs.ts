@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { MobileDemoReceipt, MobileDemoSubmission, MobileRemoteLog } from "@/contracts/mobile-demo";
+import type { MobileLogReceipt, MobileLogSubmission, MobileRemoteLog } from "@/contracts/mobile";
 import type { FarmContext } from "@/server/farm-context";
 import { ApiError, notFound, payloadTooLarge, validationError } from "@/server/errors";
 import { getWorkspace } from "@/server/workspace/service";
@@ -17,14 +17,14 @@ import { MAX_MOBILE_AUDIO_BYTES } from "./accounts";
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const text = (max: number) => z.string().trim().max(max);
 const metadataSchema = z.object({
-  contractVersion: z.literal("demo-1"), clientDraftId: z.string().uuid(), accountId: z.string().uuid(), fieldId: z.string().uuid(),
+  contractVersion: z.enum(["1", "demo-1"]).transform(() => "1" as const), clientDraftId: z.string().uuid(), accountId: z.string().uuid(), fieldId: z.string().uuid(),
   activity: text(80).min(1), workDate: z.string().refine(isValidCalendarDate), startTime: time, endTime: time,
   notes: text(16_000), transcript: text(40_000).nullable(),
   treatment: z.object({ product: text(200).nullable(), amount: z.number().positive().max(1e9).nullable(), unit: text(40).nullable() }).strict().nullable(),
   tags: z.array(text(40).min(1)).max(10),
   recordings: z.array(z.object({ mimeType: z.enum(["audio/mp4", "audio/m4a", "audio/x-m4a", "audio/mpeg", "audio/wav", "audio/webm"]), durationSeconds: z.number().positive().max(1800) }).strict()).max(8),
 }).strict();
-export function parseDemoSubmission(value: unknown): MobileDemoSubmission {
+export function parseMobileSubmission(value: unknown): MobileLogSubmission {
   const result = metadataSchema.safeParse(value);
   if (!result.success) throw validationError("Check the log details.");
   const data = result.data;
@@ -34,7 +34,7 @@ export function parseDemoSubmission(value: unknown): MobileDemoSubmission {
 }
 
 export type UploadedClip = { bytes: Buffer; mimeType: string; durationSeconds: number };
-export async function readDemoSubmission(request: Request): Promise<{ metadata: MobileDemoSubmission; clips: UploadedClip[] }> {
+export async function readMobileSubmission(request: Request): Promise<{ metadata: MobileLogSubmission; clips: UploadedClip[] }> {
   const limit = MAX_MOBILE_AUDIO_BYTES + 120_000;
   if (!/^multipart\/form-data\s*;/i.test(request.headers.get("content-type") ?? "")) throw new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "Send log metadata and recording files as multipart form data.");
   const declared = request.headers.get("content-length");
@@ -55,10 +55,10 @@ export async function readDemoSubmission(request: Request): Promise<{ metadata: 
   let form: FormData;
   try { form = await new Response(new Blob(chunks), { headers: { "Content-Type": request.headers.get("content-type")! } }).formData(); }
   catch { throw validationError("The upload could not be read."); }
-  let metadata: MobileDemoSubmission;
+  let metadata: MobileLogSubmission;
   try {
     if (typeof form.get("metadata") !== "string" || form.getAll("metadata").length !== 1) throw new Error();
-    metadata = parseDemoSubmission(JSON.parse(form.get("metadata") as string));
+    metadata = parseMobileSubmission(JSON.parse(form.get("metadata") as string));
   } catch (error) { if (error instanceof ApiError) throw error; throw validationError("Log metadata is invalid."); }
   if (request.headers.get("idempotency-key") !== metadata.clientDraftId) throw validationError("The submission key must match this draft.");
   if ([...form.keys()].some(key => key !== "metadata" && !/^audio[0-7]$/.test(key)) || [...form.keys()].length !== metadata.recordings.length + 1) throw validationError("Include exactly the recording clips in the log.");
@@ -92,12 +92,15 @@ function workInstant(date: string, time: string, zone: string): Date {
   } catch { throw validationError("Choose work times that exist unambiguously in the farm timezone."); }
 }
 
-export async function saveMobileLog(ctx: FarmContext, metadata: MobileDemoSubmission, clips: UploadedClip[]): Promise<MobileDemoReceipt> {
+export async function saveMobileLog(ctx: FarmContext, metadata: MobileLogSubmission, clips: UploadedClip[]): Promise<MobileLogReceipt> {
   const start = workInstant(metadata.workDate, metadata.startTime, ctx.farm.timezone);
   const end = workInstant(metadata.workDate, metadata.endTime, ctx.farm.timezone);
-  const hash = createHash("sha256").update(JSON.stringify(metadata));
-  for (const clip of clips) hash.update(clip.bytes);
-  const contentHash = hash.digest("hex");
+  const hashFor = (contractVersion: string) => {
+    const hash = createHash("sha256").update(JSON.stringify({ ...metadata, contractVersion }));
+    for (const clip of clips) hash.update(clip.bytes);
+    return hash.digest("hex");
+  };
+  const contentHash = hashFor("1");
   await getWorkspace(ctx);
   return ctx.sql.begin(async tx => {
     // The farm lock serializes quota checks, profile archiving, and duplicate submissions.
@@ -107,21 +110,21 @@ export async function saveMobileLog(ctx: FarmContext, metadata: MobileDemoSubmis
     if (!employee) throw notFound("Choose an active account from this farm.");
     const [existing] = await tx`select log_id, content_hash, saved_at from toph.mobile_submissions where farm_id = ${ctx.farmId} and employee_id = ${employee.id} and client_draft_id = ${metadata.clientDraftId}`;
     if (existing) {
-      if (existing.content_hash !== contentHash) throw new ApiError(409, "REVISION_CONFLICT", "This draft is already on the server with different details. Keep this copy and create a new log for changes.");
+      if (existing.content_hash !== contentHash && existing.content_hash !== hashFor("demo-1")) throw new ApiError(409, "REVISION_CONFLICT", "This draft is already on the server with different details. Keep this copy and create a new log for changes.");
       return { clientDraftId: metadata.clientDraftId, logId: existing.log_id as string, savedAt: new Date(existing.saved_at).toISOString() };
     }
     const fields = await tx`select id from toph.fields where farm_id = ${ctx.farmId} and id = ${metadata.fieldId}`;
     if (!fields.length) throw validationError("Choose a field from this farm.");
     const [usage] = await tx`select coalesce(sum(octet_length(bytes)),0)::int as bytes from toph.mobile_recordings where farm_id = ${ctx.farmId}`;
-    if (usage.bytes + clips.reduce((sum, clip) => sum + clip.bytes.length, 0) > 100_000_000) throw new ApiError(413, "PAYLOAD_TOO_LARGE", "The demo recording storage is full. Your draft is safe on this device.");
+    if (usage.bytes + clips.reduce((sum, clip) => sum + clip.bytes.length, 0) > 100_000_000) throw new ApiError(413, "PAYLOAD_TOO_LARGE", "Recording storage is full. Your draft is safe on this device.");
     const [count] = await tx`select count(*)::int as count from toph.mobile_submissions where farm_id = ${ctx.farmId}`;
-    if (count.count >= 1000) throw new ApiError(413, "PAYLOAD_TOO_LARGE", "The demo log limit has been reached. Your draft is safe on this device.");
+    if (count.count >= 1000) throw new ApiError(413, "PAYLOAD_TOO_LARGE", "The recording log limit has been reached. Your draft is safe on this device.");
     // Workspace-created employees become normalized records before the log FK is written.
     const [profile] = await tx`select avatar_url from toph.mobile_profiles where farm_id = ${ctx.farmId} and employee_id = ${employee.id}`;
     await tx`insert into toph.employees (id, farm_id, display_name, avatar_path) values (${employee.id}, ${ctx.farmId}, ${employee.name}, ${profile?.avatar_url ?? null}) on conflict (id) do nothing`;
     const logId = randomUUID();
     const clipIds = clips.map(() => randomUUID());
-    const recordingPath = clipIds.length ? `/api/mobile/demo/v1/recordings/${clipIds[0]}` : null;
+    const recordingPath = clipIds.length ? `/api/mobile/v1/recordings/${clipIds[0]}` : null;
     const treatmentSummary = metadata.treatment ? [metadata.treatment.product, metadata.treatment.amount, metadata.treatment.unit].filter(value => value !== null && value !== "").join(" ") : "";
     const summary = [metadata.notes || metadata.transcript || "Voice recording", treatmentSummary ? `Treatment: ${treatmentSummary}` : ""].filter(Boolean).join("\n\n");
     await tx`insert into toph.work_logs (id, farm_id, employee_id, field_id, activity, work_date, start_at, end_at, summary, transcript, is_new, recording_path, recording_duration_seconds)
@@ -161,6 +164,6 @@ export async function listMobileLogs(ctx: FarmContext, accountId: string): Promi
     return { ...toLogDto(row), clientDraftId: submission?.client_draft_id ?? null, notes: submission?.notes ?? row.summary,
       treatment: typeof submission?.treatment === "string" ? JSON.parse(submission.treatment) : submission?.treatment ?? null,
       transcript: transcripts.find(item => item.id === row.id)?.transcript ?? null,
-      clips: clips.filter(item => item.log_id === row.id).map(item => ({ url: `/api/mobile/demo/v1/recordings/${item.id}`, durationSeconds: Number(item.duration_seconds), mimeType: item.mime_type })) };
+      clips: clips.filter(item => item.log_id === row.id).map(item => ({ url: `/api/mobile/v1/recordings/${item.id}`, durationSeconds: Number(item.duration_seconds), mimeType: item.mime_type })) };
   });
 }

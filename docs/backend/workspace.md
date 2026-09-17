@@ -69,6 +69,9 @@ tables and expose narrower, authorized mutation operations.
 ## Initial workspace state
 
 - The eleven employee IDs/names come from the farm's employee records.
+- The administrator is a separate Switch User account, represented by the workspace's
+  administrator settings. It counts toward Active Workers without adding another employee
+  profile. Migration `0005` removes the obsolete extra Peter account from existing databases.
 - Roles default to `Farm worker`, join dates to `2026-04-01`, and three assignments dated
   April 29/30 plus notification preferences are created on first read. Contact fields begin blank.
 - Two incoming messages are created on first read.

@@ -36,6 +36,13 @@
       "when": 1789608400000,
       "tag": "0004_mobile_demo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789619000000,
+      "tag": "0005_remove_extra_worker",
+      "breakpoints": true
     }
   ]
 }

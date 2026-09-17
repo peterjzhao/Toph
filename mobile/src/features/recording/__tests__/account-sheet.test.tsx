@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import * as ImagePicker from "expo-image-picker";
 import AccountSheet from "../AccountSheet";
-import type { MobileAccount } from "@toph/contracts/mobile-demo";
+import type { MobileAccount } from "@toph/contracts/mobile";
 
 jest.mock("lucide-react-native", () => new Proxy({}, { get: () => () => null }));
 jest.mock("expo-file-system", () => require("./fake-file-system").createFakeFileSystem());

@@ -58,6 +58,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => { void load();
     try { const stored = localStorage.getItem(SESSION_KEY); if (stored) setSession(JSON.parse(stored)); } catch { /* A fresh browser starts with the demo administrator. */ }
   }, [load]);
+  useEffect(() => {
+    if (!state || !session || session.id === "admin") return;
+    if (state.data.employees.some(person => person.id === session.id && person.status === "Active")) return;
+    // A removed or archived profile cannot remain selected through a saved browser session.
+    const admin = { id: "admin", name: state.data.settings.contactName || "Ranch Admin", role: "Admin" };
+    setSession(admin);
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(admin)); } catch { /* Keep the in-memory session usable. */ }
+  }, [state, session]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4200); return () => clearTimeout(timer); }, [notice]);
 
   const update = useCallback(<K extends keyof WorkspaceState,>(key: K, value: WorkspaceState[K] | ((previous: WorkspaceState[K]) => WorkspaceState[K])): Promise<boolean> => {

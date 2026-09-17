@@ -8,7 +8,7 @@ The dashboard uses Next.js App Router, React, TypeScript, CSS Modules, and local
 
 The reference geometry is retained: 280 px sidebar, 10 px outer padding and gap, 30 px content inset, 115 px metric cards, 58 px table rows, and the original map crop and overlays. The avatar, map composition, waveform geometry, and sidebar/metric icons come from the supplied exports. Small font rasterization differences remain between live browser text and the outlined SVG reference; this is not a claim of zero differing pixels.
 
-The sidebar stays in place while the right pane scrolls. The compact table shows four rows at a time with the remaining records available by scrolling inside it. Expanding a row reveals its details and lets the right pane scroll as shown in the supplied movie. The dataset stays at eleven stable records in both views.
+The sidebar stays in place while the right pane scrolls. Filtered and unfiltered tables display as many matching rows as the screen allows, with further rows available through the right pane's normal scrolling. There is no four-row cap or separate vertical scroll area inside the table. Expanding a row reveals its details in the same scroll flow. The dataset stays at eleven stable records in both views.
 
 Working controls include:
 
