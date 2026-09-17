@@ -7,6 +7,7 @@
  */
 import { sql } from "drizzle-orm";
 import type { WorkspaceState } from "@/contracts/workspace";
+import type { FieldPoint } from "@/contracts/accounts";
 import {
   boolean,
   check,
@@ -95,6 +96,8 @@ export const fields = toph.table(
     name: text("name").notNull(),
     /** Application-relative asset path, e.g. /assets/field-map.svg. Null when no map exists. */
     mapImagePath: text("map_image_path"),
+    label: text("label"),
+    boundary: jsonb("boundary").$type<FieldPoint[]>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -121,6 +124,8 @@ export const workLogs = toph.table(
     summary: text("summary").notNull(),
     transcript: text("transcript"),
     isNew: boolean("is_new").notNull().default(false),
+    reviewedBy: uuid("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: "date" }),
     /** Application-relative recording path; null means no recording exists (never a broken URL). */
     recordingPath: text("recording_path"),
     recordingDurationSeconds: doublePrecision("recording_duration_seconds"),
@@ -312,3 +317,40 @@ export const transcriptionUsage = toph.table("transcription_usage", {
   dayCount: integer("day_count").notNull(),
 }, t => [check("transcription_usage_minute_count_check", sql`${t.minuteCount} > 0`),
   check("transcription_usage_day_count_check", sql`${t.dayCount} > 0`)]);
+
+export const farmAccess = toph.table("farm_access", {
+  farmId: uuid("farm_id").primaryKey().references(() => farms.id),
+  joinCode: text("join_code").notNull().unique(),
+  isDemo: boolean("is_demo").notNull().default(false),
+  setupComplete: boolean("setup_complete").notNull().default(false),
+});
+
+export const accounts = toph.table("accounts", {
+  id: uuid("id").primaryKey(),
+  farmId: uuid("farm_id").notNull().references(() => farms.id),
+  employeeId: uuid("employee_id").unique(),
+  name: text("name").notNull(),
+  normalizedName: text("normalized_name").notNull().unique(),
+  role: text("role").$type<"admin" | "worker">().notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: createdAt(),
+}, t => [unique("accounts_farm_id_id_unique").on(t.farmId, t.id),
+  foreignKey({ columns: [t.farmId, t.employeeId], foreignColumns: [employees.farmId, employees.id] })]);
+
+export const accountSessions = toph.table("account_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  client: text("client").$type<"web" | "mobile">().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export const farmImages = toph.table("farm_images", {
+  farmId: uuid("farm_id").primaryKey().references(() => farms.id),
+  mimeType: text("mime_type").notNull(),
+  bytes: binary("bytes").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  updatedAt: updatedAt(),
+});

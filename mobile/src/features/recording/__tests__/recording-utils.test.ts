@@ -62,7 +62,7 @@ describe("formatting", () => {
 });
 
 describe("validateDetails", () => {
-  const valid = { ...emptyDetails, workDate: "2026-04-19", startTime: "06:00", endTime: "10:40", notes: "Sprayed field A." };
+  const valid = { ...emptyDetails, workDate: "2026-04-19", startTime: "06:00", endTime: "10:40", notes: "Sprayed field A.", product: "Water", amount: "2" };
 
   test("accepts a complete log", () => {
     expect(validateDetails(valid, false)).toBe("");
@@ -84,11 +84,27 @@ describe("validateDetails", () => {
     expect(validateDetails({ ...valid, notes: "   " }, false)).toBe("Add a short note or a recording before saving.");
   });
 
-  test("rejects a non-positive or non-numeric amount but allows blank", () => {
-    expect(validateDetails({ ...valid, amount: "0" }, false)).toBe("Enter an amount greater than zero, or leave it blank.");
-    expect(validateDetails({ ...valid, amount: "abc" }, false)).toBe("Enter an amount greater than zero, or leave it blank.");
-    expect(validateDetails({ ...valid, amount: "-2" }, false)).toBe("Enter an amount greater than zero, or leave it blank.");
+  test("requires a positive numeric amount for spraying", () => {
+    expect(validateDetails({ ...valid, amount: "0" }, false)).toBe("Enter amount applied greater than zero.");
+    expect(validateDetails({ ...valid, amount: "abc" }, false)).toBe("Enter amount applied greater than zero.");
+    expect(validateDetails({ ...valid, amount: "-2" }, false)).toBe("Enter amount applied greater than zero.");
     expect(validateDetails({ ...valid, amount: "2.5" }, false)).toBe("");
-    expect(validateDetails({ ...valid, amount: "" }, false)).toBe("");
+    expect(validateDetails({ ...valid, amount: "" }, false)).toBe("Enter amount applied greater than zero.");
+  });
+
+  test.each([
+    ["Spraying", "Product", "L"], ["Fertilizing", "Fertilizer", "kg"],
+    ["Planting", "Crop / variety", "plants"], ["Seeding", "Seed / variety", "g"],
+    ["Harvesting", "Crop / variety", "crates"],
+  ])("%s requires its item, quantity and compatible unit", (activity, label, unit) => {
+    const details = { ...valid, activity, unit };
+    expect(validateDetails(details, true)).toBe("");
+    expect(validateDetails({ ...details, product: "" }, true)).toBe(`Choose ${label.toLowerCase()}.`);
+    expect(validateDetails({ ...details, amount: "" }, true)).not.toBe("");
+    expect(validateDetails({ ...details, unit: "wrong" }, true)).toBe("Choose a valid unit.");
+  });
+
+  test("monitoring has no product or amount requirement", () => {
+    expect(validateDetails({ ...valid, activity: "Monitoring", product: "", amount: "", unit: "" }, true)).toBe("");
   });
 });

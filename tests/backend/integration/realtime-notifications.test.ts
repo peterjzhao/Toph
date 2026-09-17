@@ -170,7 +170,7 @@ describe("live-update notifications", () => {
       expect(await sent()).toEqual([]);
     });
 
-    it("lets the receiving role read only farm live-update topics and never send", async () => {
+    it("lets the anonymous receiving role read only the sample farm topic and never send", async () => {
       expect(await applyRealtimeAccess(owner, RECEIVER_ROLE)).toEqual({ applied: true });
       expect(await applyRealtimeAccess(owner, RECEIVER_ROLE)).toEqual({ applied: true }); // idempotent
       const state = await describeRealtimeAccess(owner, RECEIVER_ROLE);
@@ -178,6 +178,7 @@ describe("live-update notifications", () => {
       expect(state.triggers).toEqual(["employees", "fields", "work_log_tags", "work_logs", "workspace_state"]);
 
       await owner`update toph.work_logs set updated_at = now() where id = ${ISAAC_LOG_ID}`;
+      await owner`update toph.work_logs set updated_at = now() where farm_id = ${OTHER_FARM.id}`;
       await owner`select realtime.send('{"v":1}'::jsonb, 'change', 'someone-elses-topic', true)`;
       const visible = async (topic: string) => owner.begin(async (tx) => {
         await tx`select set_config('realtime.topic', ${topic}, true)`;
@@ -185,6 +186,7 @@ describe("live-update notifications", () => {
         return (await tx`select count(*)::int as n from realtime.messages`)[0].n as number;
       });
       expect(await visible(liveUpdatesTopic(FARM_ID))).toBeGreaterThan(0);
+      expect(await visible(liveUpdatesTopic(OTHER_FARM.id))).toBe(0);
       expect(await visible("someone-elses-topic")).toBe(0);
       expect(await visible(`toph:farm:${FARM_ID}:extra`)).toBe(0);
       expect(await visible("toph:farm:not-a-uuid")).toBe(0);

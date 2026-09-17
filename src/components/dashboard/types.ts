@@ -3,7 +3,7 @@ export type EmployeeLog = {
   employee: { id: string; name: string };
   activity: string;
   date: string;
-  field: { id: string; name: string; mapImageUrl: string };
+  field: { id: string; name: string; mapImageUrl: string; boundary?: Array<{ x: number; y: number }> };
   startAt: string;
   endAt: string;
   summary: string;
@@ -16,4 +16,5 @@ export type DashboardData = {
   farm: { id: string; name: string; role: string; avatarUrl: string; timezone?: string };
   metrics: { recordingsToday: number; newRecordings: number; activeWorkers: number; responseAccuracy: number | null; asOf: string };
   logs: EmployeeLog[];
+  fields?: EmployeeLog["field"][];
 };

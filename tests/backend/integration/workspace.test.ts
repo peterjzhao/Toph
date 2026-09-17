@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import type postgres from "postgres";
 import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import * as route from "@/app/api/workspace/route";
+import { enterDemo } from "@/server/accounts/service";
 import { createFarmContext, type FarmContext } from "@/server/farm-context";
 import { FARM_ID, ISAAC_LOG_ID } from "@/server/db/initial-data";
 import { applyRuntimeGrants } from "@/server/db/grants";
@@ -17,8 +19,9 @@ import { TEST_APP_ORIGIN, useRouteTestEnv } from "../helpers/route-env";
 const target = getTestDatabaseTarget();
 const origin = TEST_APP_ORIGIN;
 const headers = { origin, "content-type": "application/json" };
+let cookie = "";
 const request = (body: unknown, extras: Record<string, string> = {}) => new NextRequest(`${origin}/api/workspace`, {
-  method: "PATCH", headers: { ...headers, ...extras }, body: JSON.stringify(body),
+  method: "PATCH", headers: { ...headers, cookie, ...extras }, body: JSON.stringify(body),
 });
 
 describe("persistent workspace pages", () => {
@@ -31,12 +34,23 @@ describe("persistent workspace pages", () => {
     await applyRuntimeGrants(owner, process.env.DATABASE_APP_ROLE?.trim() || "toph_app");
     ctx = await createFarmContext({ databaseUrl: target.appUrl ?? target.url, farmId: FARM_ID });
     restoreEnv = useRouteTestEnv({ DATABASE_URL: target.appUrl ?? target.url });
+    cookie = `toph_session=${(await enterDemo("web")).token}`;
   });
   beforeEach(async () => {
     getTestDatabaseTarget(); // fail closed before clearing ONLY the isolated test workspace.
     await owner`delete from toph.workspace_state`;
   });
   afterAll(async () => { restoreEnv(); await ctx.close(); await owner.end(); });
+
+  it("persists and removes an administrator photo and rejects non-image URLs", async () => {
+    const initial = await getWorkspace(ctx);
+    const adminAvatar = `data:image/jpeg;base64,${readFileSync("public/assets/avatar.jpg").toString("base64")}`;
+    const saved = await patchWorkspace(ctx, { expectedRevision: initial.revision, patch: { settings: { ...initial.data.settings, adminAvatar } } });
+    expect((await getWorkspace(ctx)).data.settings.adminAvatar).toBe(adminAvatar);
+    await expect(patchWorkspace(ctx, { expectedRevision: saved.revision, patch: { settings: { ...saved.data.settings, adminAvatar: "javascript:alert(1)" } } })).rejects.toThrow();
+    await patchWorkspace(ctx, { expectedRevision: saved.revision, patch: { settings: { ...saved.data.settings, adminAvatar: null } } });
+    expect((await getWorkspace(ctx)).data.settings.adminAvatar).toBeNull();
+  });
 
   it("initializes one seeded row transactionally even with concurrent first reads", async () => {
     const copies = await Promise.all(Array.from({ length: 6 }, () => getWorkspace(ctx)));
@@ -131,7 +145,7 @@ describe("persistent workspace pages", () => {
   });
 
   it("returns no-store HTTP envelopes, persists PATCH and returns 409 on retries", async () => {
-    const read = await route.GET(new NextRequest(`${origin}/api/workspace`));
+    const read = await route.GET(new NextRequest(`${origin}/api/workspace`, { headers: { cookie } }));
     expect(read.status).toBe(200);
     expect(read.headers.get("cache-control")).toBe("no-store");
     const initial = await read.json() as WorkspaceResponse;

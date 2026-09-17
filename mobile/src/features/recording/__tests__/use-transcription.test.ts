@@ -37,6 +37,7 @@ test("cancellation retains audio and late results cannot replace a newer recordi
   expect(result.current.clips).toHaveLength(1);
   await act(async () => { result.current.load([clip("new", "New transcript.")]); finishOld(transcriptResult("Stale transcript.")); await pending; });
   expect(result.current.transcript.text).toBe("New transcript.");
+  expect(result.current.extractedFields).toBeNull();
   expect(callbacks.onFields).not.toHaveBeenCalled();
 });
 test("retry skips completed clips after a later clip fails", async () => {
@@ -61,4 +62,20 @@ test("an extraction failure retains speech and retries without uploading audio a
   expect(transcribe).toHaveBeenCalledTimes(1);
   expect(extract).toHaveBeenCalledTimes(1);
   expect(result.current.transcript.status).toBe("done");
+  expect(result.current.extractedFields).toEqual(transcriptResult("Good speech.").fields);
+});
+
+test("failed append preserves the last successful parse; loading another draft clears it", async () => {
+  const first = transcriptResult("First.");
+  first.fields!.notes = "Checked irrigation";
+  transcribe.mockResolvedValueOnce(first).mockResolvedValueOnce({
+    ...transcriptResult("Second.", "First.\n\nSecond."), fields: null, extractionError: "Try again",
+  });
+  const { result } = await renderHook(() => useTranscription(options()));
+  await act(async () => { await result.current.append(clip("one")); });
+  await act(async () => { await result.current.append(clip("two")); });
+  expect(result.current.transcript.status).toBe("error");
+  expect(result.current.extractedFields).toEqual(first.fields);
+  await act(async () => { result.current.load([clip("other", "Another draft.")]); });
+  expect(result.current.extractedFields).toBeNull();
 });

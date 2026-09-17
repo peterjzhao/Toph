@@ -1,6 +1,7 @@
 "use client";
+import { AccountPage } from "../accounts/account-page";
 import { DashboardPage } from "./dashboard-page";
-import { MapPage, SettingsPage, SupportPage, AccountsPage } from "./general-pages";
+import { MapPage, SettingsPage, SupportPage } from "./general-pages";
 import { AuditPage, ReportsPage, SchedulePage } from "./operations-pages";
 import { EmployeesPage, PerformancePage, MessagesPage } from "./team-pages";
 export function SectionPage({ section }: { section: string }) {
@@ -15,8 +16,8 @@ export function SectionPage({ section }: { section: string }) {
     case "messages": return <MessagesPage/>;
     case "settings": return <SettingsPage/>;
     case "support": return <SupportPage/>;
-    case "switch-user": return <AccountsPage/>;
-    case "login": return <AccountsPage login/>;
+    case "switch-user":
+    case "account": return <AccountPage/>;
     default: return null;
   }
 }

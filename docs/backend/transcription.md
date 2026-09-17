@@ -5,6 +5,10 @@
 1. OpenAI `gpt-4o-transcribe` returns the speech as text.
 2. OpenAI `gpt-4.1-mini` uses strict Structured Outputs to extract the work-log fields.
 
+Transcription requests set `language: "en"` and an English-only transcription prompt.
+This configures recognition for English recordings; the language hint and prompt are not
+a strict rejection filter for non-English audio or a guaranteed translation service.
+
 The shared Zod schema is `extractedLogSchema` in `src/contracts/transcription.ts`.
 `ExtractedLogFields` is inferred from that schema, the TypeScript equivalent of a validated
 Python dataclass/Pydantic model. It contains field ID, activity, work date, start/end times,
@@ -55,6 +59,32 @@ The app applies suggestions only to untouched fields. Appending audio re-extract
 log from the entire transcript. Cancel aborts the request and retains audio/completed text;
 stale responses cannot change another draft or account. Raw audio is saved to PostgreSQL
 only by the separate log-save endpoint. Extraction uses `store: false` with OpenAI Responses.
+
+During append/retry, completed recordings, existing speech, and green fields remain
+visible. Missing orange fields and clips without completed speech show blank skeletons. Initial processing
+still uses the full review skeleton. After successful extraction, every field (including
+the tags group) uses brand green when the parser found a value and shared warning orange
+when it did not. Defaults and manual edits do not count as model extraction. Accessibility
+hints explain the colors; the visible legend and success instruction have been removed.
+The native form now selects required inputs by activity, independently of extraction status;
+see [native activity forms](../../mobile/README.md#activity-forms-and-device-choices).
+The latest successful parse remains visible during processing or failure, refreshes after
+each successful extraction, and resets when starting or loading another draft/account.
+These indicators are session state and are not persisted with saved drafts.
+
+Extraction uses shared activity definitions from `src/contracts/recording.ts`. The product
+field represents the activity's item (including crops, trees and seeds), not only chemicals.
+New names do not require an existing device dropdown choice. Quantities use the shared work
+units, including plants, trays, rows, seeds, bins, crates and bunches. Validation no longer
+clears planting/harvest items or deletes a known amount just because its unit is missing.
+Unspecified quantities remain null. The native client remembers extracted item names locally.
+
+The summary covers all clips and final corrected facts, with an “Online voice log created.”
+introduction and a detailed factual narrative. No creation timestamp is fabricated. Existing
+Figma fixtures are unchanged. A local live-provider check verified an oak-tree amendment
+with no stated count, then a correction to 25 trees, retaining Field A and September 16,
+06:00–08:00. These checks used synthetic text and made no database writes; they verified
+extraction, not physical microphone input or a newly deployed server.
 
 ## Testing
 
@@ -131,3 +161,32 @@ none was performed during this follow-up. After Vercel is Ready, run
 `npm run check:recording -- <audio-file>` or make a phone recording with the dashboard open.
 The key remains server-only and ignored locally; it is not present in mobile environment
 files or staged source.
+
+## Phone upload fix verified September 17, 2026
+
+After the user's deployment, the live Vercel production endpoint passed both
+`check:mobile-server` and `check:recording`. The phone's exact error,
+`Unsupported FormDataPart implementation`, was a client serialization failure: Expo 57's
+fetch rejects the legacy React Native `{ uri, name, type }` upload object. The earlier
+Node multipart smoke checks and permissive native fetch mocks did not exercise that path.
+
+The app now appends `expo-file-system` `File` objects for both transcription and log saving.
+Submission metadata uses each file's actual MIME type, including iOS `audio/x-m4a`, which
+the deployed backend already accepts. Regression tests reproduce the original rejection
+and verify both fixed clients through the installed Expo multipart serializer. Recorder
+checks also cover permission preflight, denial, cancellation, and distinct appended files.
+All 59 mobile tests and the mobile TypeScript check pass; the production iOS JavaScript
+bundle export succeeds.
+
+A second live processing request used Expo's installed FormData patch and multipart
+serializer, with a Node adapter supplying bytes from the same synthesized M4A sample.
+Vercel returned HTTP 200 in approximately 6 seconds, the speech transcript, all ten fields,
+`missingFields: []`, and `extractionError: null`. This was a live OpenAI request through the
+deployed server; it did not create a work log. The local receipt is ignored under
+`.local/mobile-release/expo-upload-receipt.json`.
+
+The fix is mobile code, so the user must rebuild and reinstall the Release app to receive
+it. No commit, push, server deployment, native binary build, or phone installation was
+performed for this fix. A physical microphone-to-review/save check remains to be performed
+on that new app. “Connecting…” was local microphone setup, not a server connection; it is
+now labeled “Starting microphone…” and existing permission is checked before the tap.

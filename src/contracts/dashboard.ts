@@ -12,13 +12,14 @@
 export const DASHBOARD_CONTRACT_VERSION = "2" as const;
 
 export type TagDto = { id: string; label: string };
+export type DashboardFieldDto = { id: string; name: string; mapImageUrl?: string | null; boundary?: Array<{ x: number; y: number }> };
 
 export type LogDto = {
   id: string;
   employee: { id: string; name: string; avatarUrl: string | null };
   activity: string;
   date: string; // YYYY-MM-DD, business date; UI formats it as April 19, 2026
-  field: { id: string; name: string; mapImageUrl: string | null };
+  field: DashboardFieldDto & { mapImageUrl: string | null };
   startAt: string; // ISO-8601 timestamp including offset or Z
   endAt: string;
   summary: string;
@@ -53,7 +54,7 @@ export type DashboardData = {
   logs: LogDto[];
   filterOptions: {
     activities: string[];
-    fields: Array<{ id: string; name: string }>;
+    fields: DashboardFieldDto[];
   };
 };
 

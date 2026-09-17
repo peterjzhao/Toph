@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { readRuntimeConfig, resolveFarmContext } from "@/server/farm-context";
+import { readRuntimeConfig } from "@/server/farm-context";
+import { resolveAccountContext } from "@/server/accounts/service";
 import { assertWriteOrigin } from "@/server/http/origin";
 import { handleRoute, jsonResponse } from "@/server/http/responses";
 import { removeLogTag } from "@/server/services/tags";
@@ -13,7 +14,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext): Pr
   return handleRoute(async () => {
     const { logId, tagId } = await params;
     assertWriteOrigin(request, readRuntimeConfig().appOrigin);
-    const ctx = await resolveFarmContext();
+    const ctx = await resolveAccountContext(request, "admin");
     return jsonResponse({ data: await removeLogTag(ctx, logId, tagId) });
   });
 }

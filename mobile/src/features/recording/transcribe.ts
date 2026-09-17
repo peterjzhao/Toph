@@ -1,6 +1,8 @@
 /** OpenAI credentials and extraction instructions live only on the server. */
+import { File } from "expo-file-system";
 import type { TranscriptionContext, TranscriptionResult } from "@toph/contracts/transcription";
 import { apiOrigin } from "@/lib/api/mobile-client";
+import { sessionHeaders } from "@/lib/api/session-token";
 import type { RecordingAudio } from "./local-drafts";
 
 export type TranscribeOptions = {
@@ -21,7 +23,7 @@ async function request(body: BodyInit, options: TranscribeOptions, json = false)
   try {
     if (controller.signal.aborted) throw new Error("Cancelled");
     const response = await (options.fetcher ?? fetch)(`${origin}/api/mobile/v1/transcriptions`, {
-      method: "POST", headers: { "X-Toph-Client": "toph-mobile", Accept: "application/json", ...(json ? { "Content-Type": "application/json" } : {}) }, body,
+      method: "POST", headers: { "X-Toph-Client": "toph-mobile", Accept: "application/json", ...sessionHeaders(origin), ...(json ? { "Content-Type": "application/json" } : {}) }, body,
       signal: controller.signal, credentials: "omit", redirect: "error",
     });
     const payload = await response.json().catch(() => null);
@@ -43,7 +45,8 @@ async function request(body: BodyInit, options: TranscribeOptions, json = false)
 
 export async function transcribeRecording(audio: RecordingAudio, options: TranscribeOptions): Promise<TranscriptionResult> {
   const body = new FormData();
-  body.append("file", { uri: audio.uri, name: `recording.${audio.extension}`, type: audio.mimeType } as unknown as Blob);
+  // Expo 57 fetch serializes File bytes; the older React Native URI object is unsupported.
+  body.append("file", new File(audio.uri));
   body.append("context", JSON.stringify(options.context));
   return request(body, options);
 }

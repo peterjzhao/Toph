@@ -12,16 +12,14 @@ jest.mock("expo-image-manipulator", () => ({ SaveFormat: { JPEG: "jpeg" }, Image
 } } }));
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 const profile: MobileAccount = { id: "10000000-0000-4000-8000-000000000001", name: "Isaac Wang", email: "", phone: "", role: "Farm worker", defaultField: "FIELD A", defaultActivity: "Spraying", avatarUrl: null };
-const other: MobileAccount = { ...profile, id: "10000000-0000-4000-8000-000000000002", name: "Maria Lopez" };
-const props = () => ({ profile, accounts: [profile, other], fields: ["FIELD A", "FIELD B"], farmName: "Bays Ranch", connected: true, connectionError: "", logCount: 2, onClose: jest.fn(), onSave: jest.fn(async () => {}), onSwitch: jest.fn(async () => {}), onRefresh: jest.fn(async () => {}), onViewLogs: jest.fn() });
+const props = () => ({ profile, fields: ["FIELD A", "FIELD B"], farmName: "Bays Ranch", connected: true, connectionError: "", logCount: 2, onClose: jest.fn(), onSave: jest.fn(async () => {}), onSignOut: jest.fn(async () => {}), onRefresh: jest.fn(async () => {}), onViewLogs: jest.fn() });
 
-test("switcher searches real accounts and selects the requested account", async () => {
+test("account offers sign out and cannot impersonate another worker", async () => {
   const callbacks = props(); await render(<AccountSheet {...callbacks} />);
-  await fireEvent.press(screen.getByRole("button", { name: "Switch account" }));
-  await fireEvent.changeText(screen.getByLabelText("Find an account"), "Maria");
-  expect(screen.queryByRole("button", { name: "Switch to Isaac Wang" })).toBeNull();
-  await fireEvent.press(screen.getByRole("button", { name: "Switch to Maria Lopez" }));
-  expect(callbacks.onSwitch).toHaveBeenCalledWith(other);
+  expect(screen.queryByRole("button", { name: "Switch account" })).toBeNull();
+  expect(screen.getByLabelText("Role")).toHaveProp("editable", false);
+  await fireEvent.press(screen.getByRole("button", { name: "Sign out" }));
+  expect(callbacks.onSignOut).toHaveBeenCalledTimes(1);
 });
 
 test("profile save waits for the server and retains edits after a failed save", async () => {

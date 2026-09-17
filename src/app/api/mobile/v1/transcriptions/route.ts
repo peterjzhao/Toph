@@ -1,4 +1,4 @@
-import { resolveFarmContext } from "@/server/farm-context";
+import { resolveAccountContext } from "@/server/accounts/service";
 import { toApiError } from "@/server/http/responses";
 import { requireMobileAccess } from "@/server/mobile/access";
 import { TranscriptionError } from "@/server/recordings/audio";
@@ -12,8 +12,9 @@ const headers = { "Cache-Control": "no-store" };
 export async function POST(request: Request): Promise<Response> {
   try {
     requireMobileAccess(request, true);
+    const ctx = await resolveAccountContext(request, "worker");
     const key = transcriptionKey();
-    return Response.json({ data: await processRecording(request, await resolveFarmContext(), key) }, { headers });
+    return Response.json({ data: await processRecording(request, ctx, key) }, { headers });
   } catch (cause) {
     const error = cause instanceof TranscriptionError ? cause : toApiError(cause);
     return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status, headers });

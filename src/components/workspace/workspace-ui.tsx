@@ -2,7 +2,7 @@
 import { useEffect, useRef, type ReactNode, type ButtonHTMLAttributes } from "react";
 import { X } from "lucide-react";
 import s from "./workspace.module.css";
-export function PageHeader({ title, description, children }: { title: string; description: string; children?: ReactNode }) { return <header className={s.pageHeader}><div><h1>{title}</h1><p>{description}</p></div>{children && <div className={s.headerActions}>{children}</div>}</header>; }
+export function PageHeader({ title, description, children }: { title: string; description?: string; children?: ReactNode }) { return <header className={s.pageHeader}><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{children && <div className={s.headerActions}>{children}</div>}</header>; }
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) { return <section className={`${s.panel} ${className}`}>{children}</section>; }
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "green" | "amber" }) { return <span className={`${s.badge} ${tone === "green" ? s.greenBadge : tone === "amber" ? s.amberBadge : ""}`}>{children}</span>; }
 export function Button({ children, secondary = false, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { secondary?: boolean }) { return <button {...props} className={`${secondary ? s.secondaryButton : s.primaryButton} ${props.className ?? ""}`}>{children}</button>; }

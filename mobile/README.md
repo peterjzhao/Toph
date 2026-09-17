@@ -2,7 +2,7 @@
 
 React Native app for Toph, built with [Expo](https://expo.dev) SDK 57, React Native 0.86, Expo Router, and TypeScript. It lives in `mobile/` beside the Next.js dashboard at the repository root and has its own `package.json` and `node_modules`.
 
-The app is the worker-facing recording flow: record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. The app connects to the Vercel server using the shared farm accounts. See [mobile API setup](../docs/backend/mobile.md) for the required server deployment and configuration. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when the server OpenAI key is configured.
+The app is the worker-facing recording flow: sign in, record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. Each account belongs to one farm. See [mobile API setup](../docs/backend/mobile.md) for the required server deployment and configuration. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when the server OpenAI key is configured.
 
 ## Requirements
 
@@ -52,14 +52,27 @@ mobile secrets. `mobile/.env.example` documents the optional `EXPO_PUBLIC_TOPH_A
 override. Never put database credentials or server API keys in an `EXPO_PUBLIC_*` variable.
 
 After pushing the server changes and waiting for Vercel to show Ready, run
-`npm run check:mobile-server` from the repository root. Reopen the updated phone app and tap
-the avatar to switch accounts or edit the profile, photo, and defaults. Save log keeps a
+`npm run check:mobile-server` from the repository root. Reopen the updated phone app and
+log in with your unique name, or choose Join a farm and enter a name plus the admin's farm
+code. Try Bays Ranch demo is an explicit separate entry into the seeded Isaac account.
+The avatar opens your own profile, photo, defaults, and Sign out. Save log keeps a
 device copy and syncs to the same PostgreSQL database the dashboard reads. A failed upload
 stays in the library with a Sync log action. The combined audio limit is 3.8 MB per log.
 
-Adding the photo picker requires rebuilding the phone app once. An already rebuilt Release
+Adding the photo picker or SecureStore requires rebuilding the phone app once. An already rebuilt Release
 app needs only to be reopened after the server deploys; future server changes do not require
 a native rebuild unless the app itself or its bundled configuration changes.
+
+Name-based access intentionally has no password or email verification for this project's
+simplified account model; knowing a name is enough to sign in. The server issues an opaque
+session token, saved with Expo SecureStore on iOS/Android and attached as a bearer token to
+API, transcription, and protected recording requests. It verifies the account and farm on
+every request; a worker cannot switch identities or access the admin dashboard. Tokens
+are bound to the configured API origin and never stored with draft JSON. The Expo web
+preview keeps its token in memory only. Signing out revokes the server session when online
+and removes the device token; drafts and saved activity choices remain scoped to their
+original farm/account. A fresh farm uses only its confirmed fields, with no demo fallback.
+Workers can keep device drafts while the admin finishes field setup.
 
 ## App icon and launch screen
 
@@ -97,6 +110,58 @@ no key or transcription token belongs in the mobile bundle. If extraction fails 
 speech succeeds, the transcript stays available and retry only extracts details. Cancel
 retains the audio and completed text. See [backend setup and live tests](../docs/backend/transcription.md).
 
+Expo 57 uploads must append an `expo-file-system` `File` to `FormData`. The older React
+Native `{ uri, name, type }` object causes `Unsupported FormDataPart implementation`
+before a request reaches the server. Both transcription and Save log use `File`; the
+save metadata takes its MIME type from the same file so it matches the multipart part.
+The regression tests run Expo's installed multipart serializer, including reproducing
+that error with the old format. An installed Release app containing the old format needs
+a rebuild and an in-place reinstall; pushing the server cannot update its bundled code.
+
+Starting a recording does not contact the server. Existing microphone permission is
+checked ahead of the tap and refreshed when the app becomes active. The system permission
+prompt is only requested on Start when needed. “Starting microphone…” describes the
+remaining native audio setup; hardware initialization and a first-use permission prompt
+cannot be promised to take zero time. Each recording prepares a fresh file so appending
+audio cannot overwrite the previous clip.
+
+## Activity forms and device choices
+
+The Activity picker and server extraction share the activity definitions in
+`src/contracts/recording.ts`, accessed natively through `src/features/recording/activity-forms.ts`:
+
+- Spraying and pest control require product, amount applied and a unit.
+- Fertilizing requires fertilizer, amount applied and a unit.
+- Planting requires crop/variety and plants planted; seeding uses seed/variety and seed sown.
+- Harvesting requires crop/variety and yield.
+- Irrigation, pruning, soil work, weeding, maintenance and soil testing show their relevant
+  method/crop/equipment/test input and observations or work performed. Monitoring and scouting
+  show observations without product/quantity inputs.
+
+Summary (formerly Notes) is visible in a taller, muted-text field for treatment/crop logs.
+The model summarizes all recordings, including corrections, starting with “Online voice log
+created.” and then a factual narrative of the stated work, location, date/times, quantities,
+and observations. It must not invent missing facts or a creation timestamp. The summary
+feeds the dashboard's existing summary field. Tags remain under More details. Success
+instructions and the color legend are removed. Parsing borders and actionable failures remain.
+During append/retry, orange fields turn into blank skeletons; completed recordings,
+transcripts and green fields stay visible. Append recording is always black and full width.
+
+Item pickers include Add new. Choices are saved per farm/account and activity in
+`Paths.document/toph-recording-preview/activity-items-<scope>.json`, immediately after a successful
+parse as well as on manual addition or log save. Reads use the file directly, so choices survive app restarts; repeated
+names are deduplicated without regard to case. This is device storage, not a shared farm
+catalog. Clearing app data/uninstalling removes it.
+
+Activity values use the local draft's existing product/amount/unit properties with the
+activity determining their meaning. Switching activities clears those three values and
+selects compatible units. Draft save/reopen and the saved-log views retain the extra details.
+The log-save contract and database are unchanged: the existing treatment fields still sync
+for spraying/fertilizing/pest control; additional crop/operation fields stay on this device.
+The extraction contract also supports plants, trays, rows, seeds, bins, crates and bunches.
+It accepts new crop names without a preexisting choice. Later clips can fill a missing crop
+or correct its count while retaining facts established in the earlier recordings.
+
 ## Checks
 
 ```bash
@@ -111,18 +176,19 @@ npm run typecheck
 npx expo-doctor
 ```
 
-Unit tests cover the pure helpers, draft and profile storage (against an in-memory file-system fake), transcription and mobile clients (against fake network transports), account switching, and photo editing. Screen tests cover loading actions, transcript placement, save errors, and preserving drafts while switching accounts. Native recording and playback still require device/simulator verification; mocked tests do not establish microphone or live OpenAI behavior.
+Unit tests cover the pure helpers, draft and profile storage (against an in-memory file-system fake), transcription and mobile clients (against fake network transports), Expo's actual multipart serializer, microphone permission/cancellation behavior, native token storage, name/code sign-in, and photo editing. Screen tests cover loading actions, transcript placement, save errors, and preserving drafts on sign-out while isolating other farms and accounts. Native recording and playback still require device/simulator verification; mocked tests do not establish microphone or live OpenAI behavior.
 
 ## Project layout
 
 - `app.json` is the Expo app config: name `Toph`, slug `toph-mobile`, URL scheme `toph`, iOS bundle identifier and Android package `com.toph.mobile`, the Apple team for signing, light UI only, microphone permission text, the launch screen (white with the `toph` wordmark from `assets/images/splash-toph.png`), and the config plugins for audio, sharing, and the date picker.
-- `src/app/_layout.tsx` loads the Geist fonts and hosts a single-screen stack; `src/app/index.tsx` renders the recording workspace.
+- `src/app/_layout.tsx` loads the Geist fonts and hosts a single-screen stack; `src/app/index.tsx` renders `src/features/accounts/AccountGateway.tsx`, which verifies the session before opening the recording workspace.
 - `src/features/recording/RecordingWorkspace.tsx` holds the four screens (Record, Review log, Draft saved, Logs), the header, and the bottom navigation.
-- `src/features/recording/AccountSheet.tsx` is the drag-to-dismiss account sheet with searchable account switching, name/role/contact editing, profile photos, and recording defaults.
+- `src/features/recording/AccountSheet.tsx` is the drag-to-dismiss account sheet with own-name/contact editing, profile photos, recording defaults, and Sign out. The role is read-only.
 - `src/features/recording/use-recorder.ts` wraps `expo-audio` recording with a status machine (idle, requesting, recording, paused, stopping, ready), a timer, and a rolling level meter.
 - `src/features/recording/AudioReview.tsx` plays a recording back and shares the file through the system share sheet.
 - `src/features/recording/fields.tsx` provides the labeled inputs, the option picker, and the native date and time pickers.
-- `src/features/recording/local-drafts.ts` stores drafts as `drafts.json` plus copied audio files under the app document directory. `recording-profile.ts` retains compatibility with earlier device-only defaults. `mobile-accounts.ts` caches the last server roster and active account; the server remains authoritative for account edits. Synced drafts retain their verified server receipt and local audio.
+- `src/features/recording/local-drafts.ts` stores drafts as `drafts.json` plus copied audio files under the app document directory. The workspace shows only the signed-in employee's drafts for the current farm. The old unverified roster cache is no longer read. Synced drafts retain their verified server receipt and local audio.
+- `src/lib/api/session-token.ts` stores only the API origin and session token in native secure storage. Account identity and farm membership always come from the server.
 - `src/features/recording/recording-utils.ts` holds formatting and validation helpers shared by the screens.
 - `assets/fonts/` holds the Geist Regular, Medium, and SemiBold files (SIL Open Font License) copied from the web app's `geist` package.
 - `ios/` and `android/` are generated by prebuild and are gitignored. `expo-env.d.ts` is generated by Metro on first start and is gitignored.

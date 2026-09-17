@@ -10,6 +10,27 @@ available when a server-only OpenAI key is configured. Use [docs/README.md](READ
 current guides and [backend/mobile.md](backend/mobile.md) for the current API. Keep local
 drafts, migrations, design references, and active development processes intact.
 
+## September 17 account and farm setup update
+
+The user approved name-only accounts (no email or password), one farm per account, web admin
+signup/login, and worker signup in the native app with a farm join code. These choices
+supersede the earlier single-farm/demo-only boundaries below. HTTP APIs now enforce opaque
+server sessions and role/farm scope. Name-only sign-in deliberately does not prove identity;
+see [accounts](backend/accounts.md) for the implementation and limitation.
+
+Bays Ranch is an explicit demo entry, with its original eleven profiles, eleven logs, four
+sample new flags, and Figma card values. New farms start empty with one admin. For new farms,
+opening a log saves a shared reviewed state; New / All selects the review status without a
+four-row cap. The open row stays visible until closed.
+
+New admins upload an aerial raster, run field detection on their own device, select detected
+regions and explicitly assign letters A–Z (26 fields maximum), then confirm the setup. There
+is also manual outlining/correction. The original image prepared for storage and accepted
+normalized boundaries are persisted to PostgreSQL. Inference never runs on the application
+server. Browser inference results and model delivery requirements are in
+[browser segmentation](backend/browser-segmentation.md). No deployment/commit/push is
+performed by this task; migration 0008 and model asset setup are explicit operator steps.
+
 ## Product and submission
 
 Roster clarification from the user: Figma's twelve workers are the eleven employee profiles

@@ -54,7 +54,8 @@
           "photosPermission": "Choose a photo for your Toph account.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

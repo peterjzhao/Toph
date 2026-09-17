@@ -3,6 +3,21 @@
 How the UI connects to the backend. The sidebar pages use `GET` / `PATCH /api/workspace`; see
 [workspace.md](workspace.md). This file covers the dashboard contract, now **v2**.
 
+## Accounts and farm scope (September 17)
+
+HTTP reads and writes now require a server session. Admins obtain an HttpOnly cookie via
+`/api/auth/login`, `/api/auth/signup`, or the explicit `/api/auth/demo` entry. The session
+selects the farm; unauthenticated requests no longer default to Bays Ranch. Native worker
+sessions use bearer tokens and cannot call admin dashboard/workspace APIs. See
+[accounts](accounts.md) for signup, invites, setup, and deployment details.
+
+`DashboardFieldDto` optionally includes normalized `boundary` points and `mapImageUrl`,
+including fields with no logs. New-farm clients use these saved field shapes, not the sample
+farm's illustrated regions. Opening a new-farm log calls `POST /api/logs/:logId/review`;
+its `isNew` state then remains false across sessions. The demo keeps its sample flags and
+uses explicitly identified reference card values in the web adapter. New farms use computed
+metrics and count their admin once.
+
 ## What changed in contract v2
 
 The demo framing was removed from the data model. Frontend code compiled against v1 needs
@@ -205,3 +220,12 @@ profile edits, recordings, and log sync. These write the same PostgreSQL records
 dashboard reads. [Recording processing](transcription.md) returns speech and typed form
 suggestions; it saves no work log until the worker confirms Save. See the [mobile API](mobile.md)
 and [system map](../system-map.md). The web's existing write-origin check remains in place.
+
+### Administrator photo
+
+`WorkspaceSettings.adminAvatar` is an optional nullable JPEG data URL, saved through
+the existing revision-checked workspace settings API in PostgreSQL. The settings
+page crops and resizes uploads to 256×256 and caps the encoded photo at 150,000
+characters. The server limits size, encoding and JPEG signatures. No migration is
+needed for this optional JSONB field. Missing or removed photos use the gray
+`/assets/avatar-default.svg` in both workspace navigation and dashboard adaptation.

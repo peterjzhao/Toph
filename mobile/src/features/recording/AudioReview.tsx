@@ -6,11 +6,11 @@ import type { RecordingAudio } from "./local-drafts";
 import { clock } from "./recording-utils";
 import { colors, fonts, fontSize, lineHeight, radius, spacing } from "./styles";
 
-type Props = { audio: RecordingAudio; seconds: number; title?: string };
+type Props = { audio: RecordingAudio; seconds: number; title?: string; headers?: Record<string, string> };
 
 /** Recording title and playback controls for mobile review. */
-export default function AudioReview({ audio, seconds, title }: Props) {
-  const player = useAudioPlayer({ uri: audio.uri }, { updateInterval: 100 });
+export default function AudioReview({ audio, seconds, title, headers }: Props) {
+  const player = useAudioPlayer({ uri: audio.uri, headers }, { updateInterval: 100 });
   const status = useAudioPlayerStatus(player);
   const [trackWidth, setTrackWidth] = useState(0);
   const duration = status.duration > 0 ? status.duration : seconds;

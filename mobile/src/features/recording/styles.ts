@@ -8,6 +8,7 @@ export const colors = {
   soft: tokens.colors.textSubtle,
   green: tokens.colors.brand,
   greenTint: tokens.colors.brandTint,
+  warning: tokens.colors.warning,
   line: tokens.colors.divider,
   border: tokens.colors.border,
   bar: tokens.colors.textDisabled,

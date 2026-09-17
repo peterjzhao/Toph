@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 import RecordingWorkspace from "../RecordingWorkspace";
 import { listDrafts } from "../local-drafts";
 import type { MobileBootstrap } from "@toph/contracts/mobile";
+import { workspaceProps } from "./workspace-fixture";
 jest.mock("expo-file-system", () => require("./fake-file-system").createFakeFileSystem());
 jest.mock("expo-crypto", () => ({ randomUUID: () => "30000000-0000-4000-8000-000000000010" }));
 jest.mock("lucide-react-native", () => new Proxy({}, { get: () => () => null }));
@@ -13,28 +14,49 @@ jest.mock("../use-recorder", () => ({ useRecorder: () => ({ status: "idle", seco
 jest.mock("@/lib/api/mobile-client", () => ({ apiOrigin: () => "https://toph.example", assetUrl: (value: string) => value, createMobileClient: () => ({ accounts: async () => mockBootstrap, logs: async () => [] }) }));
 jest.mock("../AccountSheet", () => {
   const { Pressable, Text, View } = require("react-native");
-  return { __esModule: true, default: ({ accounts, onSwitch, onClose }: { accounts: MobileBootstrap["accounts"]; onSwitch: (account: MobileBootstrap["accounts"][0]) => Promise<void>; onClose: () => void }) => <View>{accounts.map(account => <Pressable key={account.id} accessibilityRole="button" onPress={async () => { await onSwitch(account); onClose(); }}><Text>Choose {account.name}</Text></Pressable>)}</View> };
+  return { __esModule: true, default: ({ onSignOut }: { onSignOut: () => Promise<void> }) => <View><Pressable accessibilityRole="button" onPress={onSignOut}><Text>Sign out</Text></Pressable></View> };
 });
 const isaac = "10000000-0000-4000-8000-000000000001";
 const maria = "10000000-0000-4000-8000-000000000002";
 const mockBootstrap: MobileBootstrap = { mode: "shared", revision: 0, maxAudioBytes: 3_800_000, farm: { id: "00000000-0000-4000-8000-000000000001", name: "Bays Ranch", timezone: "America/Los_Angeles" }, fields: [{ id: isaac, name: "FIELD A" }], accounts: [isaac, maria].map((id, index) => ({ id, name: index ? "Maria" : "Isaac", role: "Worker", email: "", phone: "", avatarUrl: null, defaultField: "FIELD A", defaultActivity: "Spraying" })) };
 beforeEach(() => jest.requireMock("expo-file-system").reset());
 
-test("switching saves incomplete work under its original author and isolates each account's library", async () => {
-  await render(<RecordingWorkspace />);
+test("sign out saves incomplete work, and a different account or farm cannot see its library", async () => {
+  const first = { ...mockBootstrap, accounts: [mockBootstrap.accounts[0]] };
+  const props = workspaceProps(first);
+  const view = await render(<RecordingWorkspace {...props} />);
   await fireEvent.press(screen.getByRole("button", { name: "Write a note" }));
-  await fireEvent.changeText(screen.getByLabelText("Notes"), "Unfinished work for Isaac");
+  await fireEvent.changeText(screen.getByLabelText("Summary"), "Unfinished work for Isaac");
   await fireEvent.press(screen.getByRole("button", { name: "Open account" }));
-  await waitFor(() => expect(screen.getByText("Choose Maria")).toBeTruthy());
-  await fireEvent.press(screen.getByText("Choose Maria"));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Open account" })).toBeTruthy());
+  await fireEvent.press(screen.getByText("Sign out"));
+  await waitFor(() => expect(props.onSignOut).toHaveBeenCalledTimes(1));
   const drafts = await listDrafts();
   expect(drafts).toHaveLength(1);
   expect(drafts[0]).toMatchObject({ employee: { id: isaac }, notes: "Unfinished work for Isaac", startTime: "" });
+  await view.unmount();
+  const other = await render(<RecordingWorkspace {...workspaceProps({ ...mockBootstrap, accounts: [mockBootstrap.accounts[1]] })} />);
+  await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
+  await waitFor(() => expect(screen.getByText("No logs yet")).toBeTruthy());
+  await other.unmount();
+  const otherFarm = await render(<RecordingWorkspace {...workspaceProps({ ...first, farm: { ...first.farm, id: "different-farm" } })} />);
   await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
   expect(screen.getByText("No logs yet")).toBeTruthy();
-  await fireEvent.press(screen.getByRole("button", { name: "Open account" }));
-  await fireEvent.press(screen.getByText("Choose Isaac"));
+  await otherFarm.unmount();
+  await render(<RecordingWorkspace {...workspaceProps(first)} />);
   await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
-  expect(screen.getByText(/On this device/)).toBeTruthy();
+  await waitFor(() => expect(screen.getByText(/On this device/)).toBeTruthy());
+});
+
+test("a new farm has no demo fields and can keep a note until its admin finishes field setup", async () => {
+  const emptyFarm = { ...mockBootstrap, farm: { ...mockBootstrap.farm, id: "new-farm", name: "New Farm" }, fields: [], accounts: [{ ...mockBootstrap.accounts[0], defaultField: "", defaultActivity: "Monitoring" }] };
+  await render(<RecordingWorkspace {...workspaceProps(emptyFarm)} />);
+  expect(screen.getByText("New Farm")).toBeTruthy();
+  expect(screen.queryByText(/Bays Ranch/)).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Write a note" }));
+  expect(screen.getByLabelText("Field")).toHaveProp("accessibilityValue", { text: "" });
+  await fireEvent.changeText(screen.getByLabelText("Observations"), "Checked the new farm.");
+  await fireEvent.press(screen.getByRole("button", { name: "Save log" }));
+  await screen.findByText("Saved on device");
+  expect(screen.queryByRole("button", { name: "Sync log" })).toBeNull();
+  expect((await listDrafts())[0]).toMatchObject({ farmId: "new-farm", field: "", employee: { id: isaac }, notes: "Checked the new farm." });
 });

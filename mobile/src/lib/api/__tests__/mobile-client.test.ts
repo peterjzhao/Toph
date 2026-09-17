@@ -29,3 +29,17 @@ test("surfaces server conflicts and deployment errors without fake success", asy
   fetcher.mockResolvedValue({ ok: false, status: 404, json: async () => { throw new Error(); } });
   await expect(api.accounts()).rejects.toThrow("deployment");
 });
+
+test("native auth sends the client type and authenticated requests carry the bearer session", async () => {
+  const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ data: bootstrap }) });
+  const api = createMobileClient({ baseUrl: "https://toph.example", fetcher, headers: (origin): Record<string, string> => origin === "https://toph.example" ? { Authorization: "Bearer native-token" } : {} });
+  await api.login(" New Worker ");
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ name: "New Worker", client: "mobile" });
+  await api.join(" New Worker ", " CODE12 ");
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ name: "New Worker", code: "CODE12", client: "mobile" });
+  await api.accounts();
+  await api.logs(id);
+  for (const [, init] of fetcher.mock.calls) expect(init.headers).toMatchObject({ "X-Toph-Client": "toph-mobile", Authorization: "Bearer native-token" });
+  expect(fetcher.mock.calls[2][0]).toBe("https://toph.example/api/mobile/v1/accounts");
+  expect(fetcher.mock.calls[3][0]).toContain(`/api/mobile/v1/logs?accountId=${id}`);
+});

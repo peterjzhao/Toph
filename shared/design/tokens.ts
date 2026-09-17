@@ -8,6 +8,7 @@ export const tokens = {
     brand: "#146c44",
     brandHover: "#105b39",
     brandTint: "rgba(20,108,68,0.1)",
+    warning: "#b85c00",
     text: "#000",
     textMuted: "#4d4d4d",
     textSubtle: "#808080",

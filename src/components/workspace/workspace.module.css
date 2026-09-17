@@ -50,3 +50,6 @@
 
 /* Keep the image and its hit regions together when resizing and zooming. */
 .fieldMapViewport { overflow: auto; max-height: 520px; background: #f2f5ef; }
+
+.adminPhoto { display:flex; align-items:center; flex-wrap:wrap; gap:14px; }
+.adminPhoto img { width:64px; height:64px; object-fit:cover; border-radius:50%; }

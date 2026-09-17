@@ -14,6 +14,7 @@ export function useTranscription(options: Options) {
   const [clips, setClips] = useState<RecordingClip[]>([]);
   const clipsRef = useRef<RecordingClip[]>([]);
   const [transcript, setTranscript] = useState<Transcript>(initial);
+  const [extractedFields, setExtractedFields] = useState<ExtractedLogFields | null>(null);
   const request = useRef<AbortController | null>(null);
   const generation = useRef(0);
 
@@ -27,6 +28,7 @@ export function useTranscription(options: Options) {
     generation.current += 1;
     request.current?.abort(); request.current = null;
     clipsRef.current = next; setClips(next);
+    setExtractedFields(null);
     setTranscript({ status: next.length && next.every(clip => clip.transcript) ? "done" : "idle", text: transcriptText(next), message: "" });
   }, []);
   const run = useCallback(async (next = clipsRef.current) => {
@@ -51,9 +53,12 @@ export function useTranscription(options: Options) {
         result = await extractRecordingDetails(transcriptText(next), { signal: controller.signal, context });
       }
       if (runId !== generation.current) return;
-      if (result.fields) latest.current.onFields(result.fields);
+      if (result.fields) {
+        setExtractedFields(result.fields);
+        latest.current.onFields(result.fields);
+      }
       setTranscript({ status: result.extractionError ? "error" : "done", text: transcriptText(next),
-        message: result.extractionError || "Suggested details are ready. Check them before saving." });
+        message: result.extractionError || "" });
     } catch (cause) {
       if (runId !== generation.current) return;
       setTranscript({ status: "error", text: transcriptText(clipsRef.current), message: cause instanceof Error ? cause.message : "Transcription failed. Please try again." });
@@ -61,5 +66,5 @@ export function useTranscription(options: Options) {
   }, []);
   const append = useCallback((clip: RecordingClip) => run([...clipsRef.current, clip]), [run]);
   useEffect(() => () => { generation.current += 1; request.current?.abort(); }, []);
-  return { clips, transcript, cancel, load, run, append };
+  return { clips, transcript, extractedFields, cancel, load, run, append };
 }

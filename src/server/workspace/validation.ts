@@ -40,6 +40,10 @@ const ticket = z.object({
   body: requiredText(8000), status: z.enum(["Open", "Closed"]), createdAt: instant,
 }).strict();
 const settings = z.object({
+  adminAvatar: z.string().max(150000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/).refine(value => {
+    const bytes = Buffer.from(value.split(",")[1], "base64");
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9;
+  }, "Choose a JPEG photo.").nullable().optional(),
   farmName: requiredText(120), contactName: requiredText(120), email,
   timezone: requiredText(100).refine((value) => {
     try { new Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; }
@@ -53,7 +57,9 @@ export const workspaceSchema = z.object({
 }).strict();
 const requestSchema = z.object({
   expectedRevision: z.number().int().min(0).max(2147483646),
-  patch: workspaceSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one section."),
+  // Messages are append-only through the authenticated messaging API. A workspace save
+  // must never replace a conversation or forge a worker's reply/read receipt.
+  patch: workspaceSchema.omit({ messages: true }).partial().refine((value) => Object.keys(value).length > 0, "Provide at least one section."),
 }).strict();
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {

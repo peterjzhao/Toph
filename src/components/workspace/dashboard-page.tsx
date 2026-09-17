@@ -6,11 +6,13 @@ import { Dashboard } from "@/components/dashboard/dashboard";
 import { requestJson, useWorkspace } from "./workspace-provider";
 
 export function DashboardPage({ activityPage = false }: { activityPage?: boolean }) {
-  const { data, workspace, setLogTags } = useWorkspace();
+  const { data, workspace, setLogTags, account, markReviewed } = useWorkspace();
   const router = useRouter(); const search = useSearchParams();
   const adapted: DashboardData = {
-    farm: { ...data.farm, role: "Admin", name: workspace.settings.farmName, avatarUrl: data.farm.avatarUrl ?? "/assets/avatar.jpg" },
-    metrics: data.metrics,
+    farm: { ...data.farm, role: "Admin", name: workspace.settings.farmName, avatarUrl: workspace.settings.adminAvatar ?? "/assets/avatar-default.svg" },
+    // Only the explicitly selected Bays Ranch demo retains the original Figma card values.
+    metrics: account.farm.isDemo ? { recordingsToday: 5, newRecordings: 1, activeWorkers: 12, responseAccuracy: 90, asOf: "2026-04-29" } : data.metrics,
+    fields: data.filterOptions.fields.map(field => ({ ...field, mapImageUrl: field.mapImageUrl ?? "" })),
     logs: data.logs.map(log => ({ ...log, field: { ...log.field, mapImageUrl: log.field.mapImageUrl ?? "" }, tags: log.tags.map(tag => tag.label), recording: log.recording ? { url: log.recording.url, durationSeconds: log.recording.durationSeconds ?? 0, clips: log.recording.clips } : { url: "", durationSeconds: 0 } })),
   };
   async function addTag(logId: string, label: string) {
@@ -23,5 +25,5 @@ export function DashboardPage({ activityPage = false }: { activityPage?: boolean
     const result = await requestJson<LogTagsResponse>(`/api/logs/${logId}/tags/${tag.id}`, { method: "DELETE" });
     setLogTags(logId, result.data.tags); return result.data.tags.map(tag => tag.label);
   }
-  return <Dashboard embedded activityPage={activityPage} data={adapted} initialExpandedId={search.get("log")} onAddTag={addTag} onRemoveTag={removeTag} onNavigate={path => router.push(path)} />;
+  return <Dashboard embedded reviewMode onReview={account.farm.isDemo ? undefined : markReviewed} activityPage={activityPage} data={adapted} initialExpandedId={search.get("log")} onAddTag={addTag} onRemoveTag={removeTag} onNavigate={path => router.push(path)} />;
 }

@@ -117,13 +117,17 @@ function LogDetails({ log, fields, tags, onAddTag, onRemoveTag, onExpandMap, onN
   </div>;
 }
 
-export function Dashboard({ data, initialExpandedId = null, embedded = false, activityPage = false, onAddTag, onRemoveTag, onNavigate }: {
+export function Dashboard({ data, initialExpandedId = null, embedded = false, activityPage = false, reviewMode = false, onReview, onAddTag, onRemoveTag, onNavigate }: {
   data: DashboardData; initialExpandedId?: string | null; embedded?: boolean; activityPage?: boolean;
+  reviewMode?: boolean;
+  onReview?: (logId: string) => Promise<void>;
   onAddTag?: (logId: string, label: string) => Promise<string[]>;
   onRemoveTag?: (logId: string, label: string) => Promise<string[]>;
   onNavigate?: (path: string) => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId);
+  const [reviewFilter, setReviewFilter] = useState<"new" | "all">(reviewMode && !activityPage ? "new" : "all");
+  const reviewAttempts = useRef(new Set<string>());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOrder>("date-asc");
@@ -150,6 +154,13 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const filterDatePanel = useRef<HTMLDivElement>(null);
   const logCard = useRef<HTMLElement>(null);
   useEffect(() => { setExpandedId(initialExpandedId); }, [initialExpandedId]);
+  useEffect(() => {
+    if (!onReview || !expandedId || !data.logs.find(log => log.id === expandedId)?.isNew || reviewAttempts.current.has(expandedId)) return;
+    reviewAttempts.current.add(expandedId);
+    void onReview(expandedId).catch(cause => {
+      setNotice(cause instanceof Error ? cause.message : "The review could not be saved. Close and reopen the log to retry.");
+    });
+  }, [expandedId, onReview, data.logs]);
   // With a backend the logs themselves carry saved tags, including live updates from other
   // sessions; local overrides only serve the fixture preview and must not mask newer data.
   useEffect(() => { if (onAddTag) setTags(previous => Object.keys(previous).length ? {} : previous); }, [data.logs, onAddTag]);
@@ -213,7 +224,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     }
   }
 
-  const logs = useMemo(() => {
+  const matchingLogs = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = data.logs.filter(log => (!range || (log.date >= range.from && log.date <= range.to)) && (!activity || log.activity === activity) && (!field || log.field.id === field) && (!query || [log.employee.name, log.activity, log.field.name, formatDate(log.date), ...(tags[log.id] ?? log.tags)].join(" ").toLowerCase().includes(query)));
     return filtered.sort((a, b) => {
@@ -225,12 +236,15 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     });
   }, [data.logs, search, activity, field, range, sort, tags]);
 
+  // Keep an opened row visible after its shared review flag clears.
+  const logs = matchingLogs.filter(log => reviewFilter === "all" || log.isNew || log.id === expandedId);
   const isExpanded = logs.some(log => log.id === expandedId);
-  const newCount = logs.filter(log => log.isNew).length;
+  const newCount = matchingLogs.filter(log => log.isNew).length;
   const selectedCount = logs.filter(log => selected.has(log.id)).length;
   const filterCount = Number(Boolean(activity)) + Number(Boolean(field));
 
   function toggleLog(id: string) {
+    if (expandedId === id) reviewAttempts.current.delete(id);
     setExpandedId(current => current === id ? null : id);
   }
   function toggleSelected(id: string) { setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
@@ -268,8 +282,9 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
       </section>}
 
       <section ref={logCard} className={`${styles.logCard} ${isExpanded ? styles.expandedCard : ""}`} aria-label="Employee activity logs">
-        <div className={styles.toolbar}><h2><DesignIcon name="log-audio" /><span>{activityPage ? "All Employee Logs" : "Employee Logs"} <span className={styles.logCount}>({logs.length})</span></span>{newCount > 0 && <span className={styles.newLogCount}>{newCount} new</span>}</h2>
+        <div className={styles.toolbar}><h2><DesignIcon name="log-audio" /><span>{reviewMode && reviewFilter === "new" ? "New Employee Logs" : activityPage ? "All Employee Logs" : "Employee Logs"} <span className={styles.logCount}>({reviewFilter === "new" ? newCount : logs.length})</span></span>{reviewFilter === "all" && newCount > 0 && <span className={styles.newLogCount}>{newCount} new</span>}</h2>
           <div className={styles.controls} ref={controls}>
+            {reviewMode && <div className={styles.reviewSwitch} role="group" aria-label="Log review status"><button type="button" aria-pressed={reviewFilter === "new"} onClick={() => setReviewFilter("new")}>New</button><button type="button" aria-pressed={reviewFilter === "all"} onClick={() => setReviewFilter("all")}>All</button></div>}
             {sort !== "none" && <button type="button" className={`${styles.pill} ${styles.darkPill}`} onClick={() => setSort("none")} aria-label="Remove current sort"><X size={16} /><span>{sort.startsWith("date") ? "Date" : sort === "employee" ? "Employee" : "Activity"}</span></button>}
             <div className={styles.popoverAnchor}><button type="button" className={styles.pill} data-popover-trigger="sort" aria-haspopup="menu" aria-expanded={popover === "sort"} onClick={() => setPopover(popover === "sort" ? null : "sort")}><ListFilter size={16} /><span>Sort</span></button>
               {popover === "sort" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="sort"]') ?? null} panelRef={panel} width={250} className={styles.popover} role="menu" aria-label="Sort logs" onKeyDown={event => {
@@ -320,16 +335,16 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
                   <td>{log.employee.name}</td><td>{log.activity}</td><td>{formatDate(log.date)}</td><td>{log.field.name}</td><td>{formatTime(log.startAt, data.farm.timezone)} - {formatTime(log.endAt, data.farm.timezone)}</td>
                   <td className={styles.actionCell}><button type="button" className={styles.viewButton} aria-label={`${expandedId === log.id ? "Close" : "View"} ${log.employee.name}'s log`} aria-expanded={expandedId === log.id} aria-controls={expandedId === log.id ? `details-${log.id}` : undefined} onClick={event => { event.stopPropagation(); toggleLog(log.id); }}>{expandedId === log.id ? "Close" : "View"}</button></td>
                 </tr>
-                {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} fields={data.logs.map(item => item.field)} tags={tags[log.id] ?? log.tags} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
+                {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} fields={data.fields ?? [...new Map(data.logs.map(item => [item.field.id, item.field])).values()]} tags={tags[log.id] ?? log.tags} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
               </Fragment>)}
-              {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>No matching logs</h3><p>{range ? `No logs match your filters for ${rangeDescription(range)}.` : "Try another search or clear your filters."}</p><button type="button" onClick={() => { resetFilters(); setDateFilter({ kind: "all" }); }}>Clear filters</button></td></tr>}
+              {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>{reviewMode && reviewFilter === "new" ? "You’re all caught up" : "No matching logs"}</h3><p>{reviewMode && reviewFilter === "new" ? "New submissions will appear here when your team records work." : range ? `No logs match your filters for ${rangeDescription(range)}.` : "Try another search or clear your filters."}</p><button type="button" onClick={() => { resetFilters(); setDateFilter({ kind: "all" }); setReviewFilter("all"); }}>{reviewMode && reviewFilter === "new" ? "View all logs" : "Clear filters"}</button></td></tr>}
             </tbody>
           </table>
         </ScrollAnchor>
       </section>
     </div>
 
-    {mapLog && <MapDialog log={mapLog} fields={data.logs.map(item => item.field)} onClose={() => setMapLog(null)} />}
+    {mapLog && <MapDialog log={mapLog} fields={data.fields ?? [...new Map(data.logs.map(item => [item.field.id, item.field])).values()]} onClose={() => setMapLog(null)} />}
     {tagLog && <Modal title="Add a tag" onClose={() => setTagLog(null)}><form className={styles.tagForm} onSubmit={async event => {
       event.preventDefault(); const value = tagDraft.trim();
       if (!value) { setTagError("Enter a tag name."); return; }
@@ -341,7 +356,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
         setTags(previous => ({ ...previous, [tagLog.id]: saved })); setTagLog(null); setNotice("Tag added to the log.");
       } catch (cause) { setTagError(cause instanceof Error ? cause.message : "The tag could not be saved."); }
       finally { setTagSaving(false); }
-    }}><p>{tagLog.employee.name} · {tagLog.activity} · {tagLog.field.name}</p><label htmlFor="tag-name">Tag name</label><input id="tag-name" placeholder="e.g. Reviewed" value={tagDraft} onChange={event => { setTagDraft(event.target.value); setTagError(""); }} maxLength={40} data-autofocus aria-invalid={Boolean(tagError)} aria-describedby={tagError ? "tag-error" : undefined} />{tagError && <span id="tag-error" className={styles.formError} role="alert">{tagError}</span>}<div className={styles.suggestedTags}>{["Reviewed", "Follow up", "Equipment"].map(tag => <button type="button" key={tag} onClick={() => setTagDraft(tag)}>{tag}</button>)}</div><div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={() => setTagLog(null)}>Cancel</button><button type="submit" className={styles.primaryButton} disabled={tagSaving}>{tagSaving ? "Saving…" : "Add Tag"}</button></div></form></Modal>}
+    }}><p>{tagLog.employee.name} · {tagLog.activity} · {tagLog.field.name}</p><label htmlFor="tag-name">Tag name</label><input id="tag-name" value={tagDraft} onChange={event => { setTagDraft(event.target.value); setTagError(""); }} maxLength={40} data-autofocus aria-invalid={Boolean(tagError)} aria-describedby={tagError ? "tag-error" : undefined} />{tagError && <span id="tag-error" className={styles.formError} role="alert">{tagError}</span>}<div className={styles.suggestedTags}>{["Reviewed", "Follow up", "Equipment"].map(tag => <button type="button" key={tag} onClick={() => setTagDraft(tag)}>{tag}</button>)}</div><div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={() => setTagLog(null)}>Cancel</button><button type="submit" className={styles.primaryButton} disabled={tagSaving}>{tagSaving ? "Saving…" : "Add Tag"}</button></div></form></Modal>}
     {section && <Modal title={section} onClose={() => setSection(null)}><p className={styles.sectionNote}>{section === "Switch User" || section === "Log Out" ? "You’re viewing Bays Ranch as a demo administrator. Account switching and sign-in are outside this dashboard preview." : `${section} is outside this dashboard preview. You can explore employee logs, recordings, tags, and field maps from the dashboard.`}</p><div className={styles.dialogActions}><button type="button" className={styles.primaryButton} onClick={() => setSection(null)}>Back to Dashboard</button></div></Modal>}
     {notice && <div className={styles.toast} role="status"><Check size={16} /><span>{notice}</span><button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")}><X size={14} /></button></div>}
   </div>;

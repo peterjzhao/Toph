@@ -1,5 +1,5 @@
-import RecordingWorkspace from "@/features/recording/RecordingWorkspace";
+import AccountGateway from "@/features/accounts/AccountGateway";
 
 export default function RecordScreen() {
-  return <RecordingWorkspace />;
+  return <AccountGateway />;
 }

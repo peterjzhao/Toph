@@ -4,6 +4,32 @@ Target: **peterjzhao/Toph**, branch **main**, existing project serving
 **https://toph-rho.vercel.app**. This guide prepares a website/backend deployment; it does not
 deploy the separate native app. No build or startup command runs migrations or loads data.
 
+## Account release prerequisite (September 17)
+
+The account/onboarding release requires migrations through **0008_farm_accounts** before
+serving the new application. Run `npm run db:migrate` from the reviewed checkout with
+`DATABASE_MIGRATION_URL` set to the intended Supabase owner/session connection and
+`DATABASE_APP_ROLE=toph_app`; this also applies the current runtime grants. A Git push or
+Vercel build does not perform this step. Do not seed a new farm; signup creates empty data.
+The migration registers the existing Bays Ranch sample profiles without rewriting its logs.
+
+The local Docker database is migrated; the hosted database was **not** migrated by the
+account task. See [accounts](backend/accounts.md) for sessions, roles, and verification.
+Keep `TOPH_MOBILE_ENABLED=true` for authenticated worker routes. Rebuild the native app for
+its new SecureStore dependency; OTA JavaScript alone cannot add a native module.
+
+Browser field inference uses ONNX Runtime Web and an exported 512px FP32 Delineate Anything
+v2 model. The 248 MB model is intentionally excluded from Git. Serve it from a static
+HTTPS URL with CORS enabled, then set `NEXT_PUBLIC_FIELD_MODEL_URL` before building. Local
+development uses the ignored `public/models/delineate-v2-512-fp32.onnx` artifact. No model
+artifact was published by this task. [Browser segmentation](backend/browser-segmentation.md)
+records the reproducible export, model license, benchmarks, and hosting requirements.
+Manual field outlining remains available if model download/inference fails; it never sends
+an image to a server-side inference fallback.
+
+The historical setup notes below describe the preceding release; where account/session
+behavior differs, the current accounts guide and contracts are authoritative.
+
 ## Project settings before pushing
 
 In the existing Vercel project, open **Settings → Build and Deployment**:

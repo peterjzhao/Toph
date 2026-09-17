@@ -4,8 +4,8 @@ import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import styles from "./filters.module.css";
 
-export function FilterSelect({ label, value, options, onChange }: {
-  label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void;
+export function FilterSelect({ label, value, options, onChange, disabled = false }: {
+  disabled?: boolean; label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void;
 }) {
   const id = useId(); const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -32,7 +32,7 @@ export function FilterSelect({ label, value, options, onChange }: {
   }
   return <div className={styles.select} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
     <span id={`${id}-label`} className={styles.label}>{label}</span>
-    <button ref={trigger} type="button" role="combobox" aria-labelledby={`${id}-label`} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? `${id}-options` : undefined} aria-activedescendant={open ? `${id}-${active}` : undefined} className={styles.selectTrigger} onKeyDown={keyDown} onClick={() => open ? setOpen(false) : reveal()}>
+    <button disabled={disabled} ref={trigger} type="button" role="combobox" aria-labelledby={`${id}-label`} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? `${id}-options` : undefined} aria-activedescendant={open ? `${id}-${active}` : undefined} className={styles.selectTrigger} onKeyDown={keyDown} onClick={() => open ? setOpen(false) : reveal()}>
       <span>{options[selected]?.label}</span><ChevronDown size={15} aria-hidden className={open ? styles.rotated : undefined}/>
     </button>
     {open && <div id={`${id}-options`} role="listbox" aria-labelledby={`${id}-label`} className={styles.options}>

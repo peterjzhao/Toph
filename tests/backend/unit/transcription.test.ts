@@ -16,13 +16,14 @@ describe("recording transcription boundary", () => {
     vi.stubEnv("TOPH_MOBILE_ENABLED", "true");
     for (const key of [undefined, "", "   "]) {
       vi.stubEnv("OPENAI_API_KEY", key);
-      expect((await POST(upload())).status).toBe(503);
+      expect(() => transcriptionKey()).toThrow("server API key");
+      expect((await POST(upload())).status).toBe(401);
     }
     vi.stubEnv("OPENAI_API_KEY", " server-key "); vi.stubEnv("NODE_ENV", "production");
     expect(transcriptionKey()).toBe("server-key");
     expect((await POST(new Request("http://localhost", { method: "POST" }))).status).toBe(403);
   });
-  it("accepts native M4A and sends only audio/model/format to OpenAI", async () => {
+  it("accepts native M4A and requests English transcription from OpenAI", async () => {
     const { file: audio, context } = await readAudioUpload(upload());
     expect(context).toMatchObject({ referenceDate: "2026-09-16" });
     const fetcher = vi.fn(async () => Response.json({ text: "  Checked Field A.  " }));
@@ -31,8 +32,10 @@ describe("recording transcription boundary", () => {
     expect(url).toBe("https://api.openai.com/v1/audio/transcriptions");
     expect(init.headers).toEqual({ Authorization: "Bearer test-server-key" });
     const body = init.body as FormData;
-    expect([...body.keys()]).toEqual(["file", "model", "response_format"]);
+    expect([...body.keys()]).toEqual(["file", "model", "response_format", "language", "prompt"]);
     expect(body.get("model")).toBe("gpt-4o-transcribe");
+    expect(body.get("language")).toBe("en");
+    expect(body.get("prompt")).toContain("Return only the spoken words in English.");
   });
   it("validates multipart, nonempty audio, signature, context and extra fields", async () => {
     await expect(readAudioUpload(new Request("http://localhost", { method: "POST", body: '{}' }))).rejects.toMatchObject({ status: 415 });

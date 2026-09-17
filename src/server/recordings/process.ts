@@ -8,6 +8,7 @@ import { readJsonBody } from "@/server/http/body";
 import { readAudioUpload, transcribeAudio, TranscriptionError } from "./audio";
 import { extractLogFields } from "./extraction";
 import { reserveTranscription } from "./quota";
+import { assertOwnEmployee, type AccountContext } from "@/server/accounts/service";
 
 const contextSchema = z.object({
   accountId: z.string().uuid(), referenceDate: z.string().refine(isValidCalendarDate),
@@ -41,6 +42,7 @@ export async function processRecording(request: Request, ctx: FarmContext, key: 
     throw error;
   }
   const bootstrap = await getMobileBootstrap(ctx);
+  if ("account" in ctx) assertOwnEmployee(ctx as AccountContext, context.accountId);
   if (!bootstrap.accounts.some(account => account.id === context.accountId)) throw new TranscriptionError(404, "ACCOUNT_UNAVAILABLE", "Choose an active account from this farm.");
   if (!bootstrap.fields.length) throw new TranscriptionError(503, "NOT_CONFIGURED", "Add a farm field before processing recordings.");
   await reserveTranscription(ctx);

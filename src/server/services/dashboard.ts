@@ -22,6 +22,10 @@ type DateRange = { from: string; to: string } | null;
 type ViewRow = typeof dashboardLogs.$inferSelect;
 
 async function attachMobileClips(ctx: FarmContext, logs: LogDto[]): Promise<LogDto[]> {
+  if (logs.length) {
+    const maps = await ctx.db.select({ id: fields.id, boundary: fields.boundary }).from(fields).where(eq(fields.farmId, ctx.farmId));
+    logs = logs.map(log => { const field = maps.find(map => map.id === log.field.id); return field?.boundary ? { ...log, field: { ...log.field, boundary: field.boundary } } : log; });
+  }
   const ids = logs.filter(log => log.recording?.url.startsWith("/api/mobile/v1/recordings/")).map(log => log.id);
   if (!ids.length) return logs;
   const clips = await ctx.sql`select id, log_id, duration_seconds from toph.mobile_recordings where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[]) order by position`;
@@ -158,7 +162,7 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
       .groupBy(workLogs.activity)
       .orderBy(asc(sql`lower(${workLogs.activity})`), asc(workLogs.activity)),
     ctx.db
-      .select({ id: fields.id, name: fields.name })
+      .select({ id: fields.id, name: fields.name, boundary: fields.boundary, mapImageUrl: fields.mapImagePath })
       .from(fields)
       .where(eq(fields.farmId, ctx.farmId))
       .orderBy(asc(fields.name), asc(fields.id)),
@@ -178,7 +182,7 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
       logs: await attachMobileClips(ctx, rows.map(toLogDto)),
       filterOptions: {
         activities: activityRows.map((r) => r.activity),
-        fields: fieldRows.map((r) => ({ id: r.id, name: r.name })),
+        fields: fieldRows.map((r) => ({ id: r.id, name: r.name, ...(r.boundary ? { boundary: r.boundary, mapImageUrl: r.mapImageUrl } : {}) })),
       },
     },
     meta: {

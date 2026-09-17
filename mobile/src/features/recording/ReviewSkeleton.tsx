@@ -3,10 +3,12 @@ import { AccessibilityInfo, Animated, StyleSheet, View } from "react-native";
 import { colors, radius } from "./styles";
 
 export const ReviewLoading = createContext(false);
+export const ReviewProcessing = createContext(false);
 
 /** The real child determines size and layout; there is no second skeleton form to maintain. */
-export function ReviewSkeleton({ children }: { children: ReactNode }) {
-  const loading = useContext(ReviewLoading);
+export function ReviewSkeleton({ children, loading: override }: { children: ReactNode; loading?: boolean }) {
+  const defaultLoading = useContext(ReviewLoading);
+  const loading = override ?? defaultLoading;
   const opacity = useRef(new Animated.Value(0.45)).current;
   const [reduceMotion, setReduceMotion] = useState(true);
   useEffect(() => {

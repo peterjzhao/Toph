@@ -65,6 +65,8 @@ export async function transcribeAudio(file: File, apiKey: string, signal: AbortS
   body.append("file", file);
   body.append("model", MODEL);
   body.append("response_format", "json");
+  body.append("language", "en");
+  body.append("prompt", "Transcribe this farm work recording in English. Return only the spoken words in English.");
   const timeout = AbortSignal.timeout(60_000);
   const combined = AbortSignal.any([signal, timeout]);
   try {

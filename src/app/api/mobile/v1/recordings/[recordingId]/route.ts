@@ -1,4 +1,4 @@
-import { resolveFarmContext } from "@/server/farm-context";
+import { resolveAccountContext } from "@/server/accounts/service";
 import { notFound } from "@/server/errors";
 import { handleRoute } from "@/server/http/responses";
 import { requireMobileAccess } from "@/server/mobile/access";
@@ -8,8 +8,9 @@ export async function GET(request: Request, context: { params: Promise<{ recordi
   return handleRoute(async () => {
     requireMobileAccess(request);
     const id = parseUuid((await context.params).recordingId, "recordingId");
-    const ctx = await resolveFarmContext();
-    const [row] = await ctx.sql`select bytes, mime_type from toph.mobile_recordings where farm_id = ${ctx.farmId} and id = ${id}`;
+    const ctx = await resolveAccountContext(request);
+    const [row] = await ctx.sql`select r.bytes, r.mime_type from toph.mobile_recordings r join toph.work_logs l on l.id = r.log_id and l.farm_id = r.farm_id
+      where r.farm_id = ${ctx.farmId} and r.id = ${id} and (${ctx.account.role === "admin"} or l.employee_id = ${ctx.account.employeeId}::uuid)`;
     if (!row) throw notFound("Recording not found.");
     const bytes = row.bytes as Buffer;
     const headers = { "Content-Type": row.mime_type, "Cache-Control": "private, no-store", "Accept-Ranges": "bytes", "X-Content-Type-Options": "nosniff" };

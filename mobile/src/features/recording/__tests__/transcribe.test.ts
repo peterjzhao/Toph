@@ -1,5 +1,8 @@
 import { transcriptResult, transcriptionContext } from "./transcription-fixture";
 import { transcribeRecording } from "../transcribe";
+import { File } from "expo-file-system";
+
+jest.mock("expo-file-system", () => require("./fake-file-system").createFakeFileSystem());
 
 const audio = { uri: "file:///cache/recording.m4a", mimeType: "audio/mp4", extension: "m4a" };
 const options = { baseUrl: "http://127.0.0.1:3000", context: transcriptionContext };
@@ -22,7 +25,8 @@ test("uploads audio to Toph without bundling an OpenAI key, model, or category p
   expect(url).toBe("http://127.0.0.1:3000/api/mobile/v1/transcriptions");
   expect(init.headers).toEqual({ "X-Toph-Client": "toph-mobile", Accept: "application/json" });
   expect((init.body as unknown as FakeFormData).entries.size).toBe(2);
-  expect((init.body as unknown as FakeFormData).get("file")).toEqual({ uri: audio.uri, name: "recording.m4a", type: "audio/mp4" });
+  expect((init.body as unknown as FakeFormData).get("file")).toBeInstanceOf(File);
+  expect((init.body as unknown as FakeFormData).get("file")).toMatchObject({ uri: audio.uri, name: "recording.m4a", type: "audio/x-m4a" });
 });
 
 test("missing configuration and pre-cancellation never send audio", async () => {

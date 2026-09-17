@@ -1,6 +1,7 @@
 /** Pure helpers shared by the recording screens. */
 import type { RecordingDraft } from "./local-drafts";
 import { treatmentActivities as sharedTreatmentActivities, treatmentUnits, workTags } from "@toph/contracts/recording";
+import { activityForm } from "./activity-forms";
 
 export type WorkDetails = Pick<RecordingDraft, "field" | "activity" | "workDate" | "startTime" | "endTime" | "notes" | "product" | "amount" | "unit" | "tags">;
 
@@ -79,6 +80,11 @@ export function validateDetails(details: WorkDetails, hasAudio: boolean) {
   if (!details.workDate || !details.startTime || !details.endTime) return "Fill in the date, start time, and end time.";
   if (details.endTime <= details.startTime) return "End time must be later than start time for this work date.";
   if (!hasAudio && !details.notes.trim()) return "Add a short note or a recording before saving.";
-  if (details.amount && (!Number.isFinite(Number(details.amount)) || Number(details.amount) <= 0)) return "Enter an amount greater than zero, or leave it blank.";
+  const form = activityForm(details.activity);
+  if (form.itemLabel && !details.product.trim()) return `Choose ${form.itemLabel.toLowerCase()}.`;
+  if (form.quantityLabel) {
+    if (!details.amount.trim() || !Number.isFinite(Number(details.amount)) || Number(details.amount) <= 0) return `Enter ${form.quantityLabel.toLowerCase()} greater than zero.`;
+    if (!form.units?.includes(details.unit)) return "Choose a valid unit.";
+  }
   return "";
 }

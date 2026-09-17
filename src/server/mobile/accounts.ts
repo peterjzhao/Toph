@@ -6,6 +6,8 @@ import { ApiError, notFound, validationError } from "@/server/errors";
 import { getWorkspace } from "@/server/workspace/service";
 import { parseWorkspaceState } from "@/server/workspace/validation";
 import { parseUuid } from "@/server/validation/ids";
+import { normalizeAccountName } from "@/server/accounts/validation";
+import { nameTaken } from "@/server/accounts/service";
 
 export const MAX_MOBILE_AUDIO_BYTES = 3_800_000;
 const avatar = z.string().max(180_000).nullable().refine(value => {
@@ -23,7 +25,7 @@ const editSchema = z.object({
   profile: z.object({
     name: z.string().trim().min(1).max(80), role: z.string().trim().min(1).max(80),
     email: z.union([z.literal(""), z.string().trim().email().max(254)]), phone: z.string().trim().max(60),
-    avatarUrl: avatar, defaultField: z.string().trim().min(1).max(120), defaultActivity: z.string().trim().min(1).max(80),
+    avatarUrl: avatar, defaultField: z.string().trim().max(120), defaultActivity: z.string().trim().min(1).max(80),
   }).strict(),
 }).strict();
 export function parseAccountEdit(body: unknown): { expectedRevision: number; profile: MobileAccountEdit } {
@@ -52,15 +54,18 @@ export async function getMobileBootstrap(ctx: FarmContext): Promise<MobileBootst
 export async function updateMobileAccount(ctx: FarmContext, accountId: string, body: unknown): Promise<MobileBootstrap> {
   const id = parseUuid(accountId, "accountId");
   const { expectedRevision, profile } = parseAccountEdit(body);
+  const normalized = normalizeAccountName(profile.name);
+  profile.name = normalized.name;
   await getWorkspace(ctx);
-  await ctx.sql.begin(async tx => {
+  try { await ctx.sql.begin(async tx => {
     const [row] = await tx`select payload, revision from toph.workspace_state where farm_id = ${ctx.farmId} for update`;
     if (row.revision !== expectedRevision) throw new ApiError(409, "REVISION_CONFLICT", "The account changed elsewhere. Reload accounts and try again.");
     const state = parseWorkspaceState(typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload);
     const employee = state.employees.find(person => person.id === id && person.status === "Active");
     if (!employee) throw notFound("This account is no longer available.");
-    const fields = await tx`select id from toph.fields where farm_id = ${ctx.farmId} and name = ${profile.defaultField}`;
-    if (!fields.length) throw validationError("Choose a field from this farm.");
+    const fields = await tx`select id, name from toph.fields where farm_id = ${ctx.farmId}`;
+    if (fields.length ? !fields.some(field => field.name === profile.defaultField) : profile.defaultField !== "") throw validationError("Choose a field from this farm.");
+    await tx`update toph.accounts set name = ${normalized.name}, normalized_name = ${normalized.normalizedName} where farm_id = ${ctx.farmId} and employee_id = ${id}`;
     Object.assign(employee, { name: profile.name, role: profile.role, email: profile.email, phone: profile.phone });
     await tx`insert into toph.mobile_profiles (farm_id, employee_id, avatar_url, default_field, default_activity)
       values (${ctx.farmId}, ${id}, ${profile.avatarUrl}, ${profile.defaultField}, ${profile.defaultActivity})
@@ -68,6 +73,6 @@ export async function updateMobileAccount(ctx: FarmContext, accountId: string, b
     // Roster is authoritative for web contact details; the normalized row supplies log avatars/names.
     await tx`update toph.employees set display_name = ${profile.name}, avatar_path = ${profile.avatarUrl}, updated_at = now() where farm_id = ${ctx.farmId} and id = ${id}`;
     await tx`update toph.workspace_state set payload = ${JSON.stringify(state)}::jsonb, revision = revision + 1, updated_at = now() where farm_id = ${ctx.farmId}`;
-  });
+  }); } catch (error) { nameTaken(error); }
   return getMobileBootstrap(ctx);
 }

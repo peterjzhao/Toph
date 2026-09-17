@@ -6,36 +6,40 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileAccount, MobileAccountEdit, MobileBootstrap, MobileRemoteLog } from "@toph/contracts/mobile";
-import { assetUrl, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
+import type { AccountSession } from "@toph/contracts/accounts";
+import { assetHeaders, assetUrl, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
+import { sessionAccount } from "@/features/accounts/session-account";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AccountSheet from "./AccountSheet";
 import ReviewLog from "./ReviewLog";
 import AudioReview from "./AudioReview";
 import ProfileAvatar from "./ProfileAvatar";
-import { readAccounts, saveAccounts } from "./mobile-accounts";
 import { Press } from "./fields";
 import { draftClips, listDrafts, saveDraft, type RecordingDraft } from "./local-drafts";
-import { defaultProfile, fields, readProfile } from "./recording-profile";
 import {
-  clock, dateLabel, emptyDetails, fieldLabel, isTreatment, localDate, validateDetails, type WorkDetails,
+  clock, dateLabel, emptyDetails, fieldLabel, localDate, validateDetails, type WorkDetails,
 } from "./recording-utils";
 import { colors, fonts, shared, fontSize, lineHeight, spacing } from "./styles";
 import { useTranscription } from "./use-transcription";
 import { useRecorder } from "./use-recorder";
 import { applyExtractedDetails } from "./extracted-details";
+import { activityDetailSummary, activityForm } from "./activity-forms";
+import { saveActivityItem } from "./activity-catalog";
 import type { ExtractedLogFields } from "@toph/contracts/transcription";
 
 type Screen = "capture" | "review" | "saved" | "library" | "remote";
 const pageTitles: Record<Exclude<Screen, "review">, string> = { capture: "Record", saved: "Draft saved", library: "Logs", remote: "Saved log" };
-const initialAccount: MobileAccount = { ...defaultProfile, id: "10000000-0000-4000-8000-000000000001", role: "Farm worker", email: "", phone: "", avatarUrl: null };
 const api = createMobileClient();
+type Props = { session: AccountSession; initialBootstrap: MobileBootstrap; onSignOut: () => Promise<void> };
 
-export default function RecordingWorkspace() {
+export default function RecordingWorkspace({ session, initialBootstrap, onSignOut }: Props) {
+  const initialAccount = sessionAccount(initialBootstrap, session);
+  const catalogScope = `${session.farm.id}:${session.account.id}`;
   const recorder = useRecorder();
   const insets = useSafeAreaInsets();
   const network = useNetworkState();
   const [screen, setScreen] = useState<Screen>("capture");
-  const [details, setDetails] = useState<WorkDetails>(emptyDetails);
+  const [details, setDetails] = useState<WorkDetails>(() => ({ ...emptyDetails, workDate: localDate(), field: initialAccount.defaultField, activity: initialAccount.defaultActivity, unit: activityForm(initialAccount.defaultActivity).units?.[0] ?? "" }));
   const [drafts, setDrafts] = useState<RecordingDraft[]>([]);
   const [editing, setEditing] = useState<RecordingDraft | null>(null);
   const [saved, setSaved] = useState<RecordingDraft | null>(null);
@@ -43,8 +47,8 @@ export default function RecordingWorkspace() {
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [profile, setProfile] = useState<MobileAccount>(initialAccount);
-  const [bootstrap, setBootstrap] = useState<MobileBootstrap | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [bootstrap, setBootstrap] = useState<MobileBootstrap>(initialBootstrap);
+  const [connected, setConnected] = useState(true);
   const [connectionError, setConnectionError] = useState("");
   const [remoteLogs, setRemoteLogs] = useState<MobileRemoteLog[]>([]);
   const [remoteLog, setRemoteLog] = useState<MobileRemoteLog | null>(null);
@@ -62,6 +66,10 @@ export default function RecordingWorkspace() {
       const previous = previousSuggestions.current;
       previousSuggestions.current = fields;
       setDetails(current => applyExtractedDetails(current, fields, bootstrap?.fields ?? [], editedFields.current, previous));
+      if (fields.activity && fields.product && activityForm(fields.activity).itemLabel) {
+        try { saveActivityItem(fields.activity, fields.product, catalogScope); }
+        catch (cause) { setError(cause instanceof Error ? cause.message : "This choice could not be saved on your device."); }
+      }
     },
   });
   const { clips, transcript, append, load } = transcription;
@@ -71,22 +79,9 @@ export default function RecordingWorkspace() {
   const online = network.isConnected !== false && network.isInternetReachable !== false;
   const active = recorder.status === "recording" || recorder.status === "paused";
   const busy = active || recorder.status === "requesting" || recorder.status === "stopping";
-  const treatment = isTreatment(details.activity);
 
   useEffect(() => {
-    try {
-      const cache = readAccounts();
-      const storedProfile = cache?.bootstrap.accounts.find(item => item.id === cache.activeId) ?? { ...initialAccount, ...readProfile() };
-      setProfile(storedProfile);
-      selectedId.current = storedProfile.id;
-      if (cache) setBootstrap(cache.bootstrap);
-      setDetails({ ...emptyDetails, workDate: localDate(), field: storedProfile.defaultField, activity: storedProfile.defaultActivity });
-    } catch {
-      setDetails({ ...emptyDetails, workDate: localDate() });
-      setError("Account settings could not be loaded.");
-    }
     listDrafts().then(setDrafts).catch((cause: Error) => setError(cause.message)).finally(() => setLoadingDrafts(false));
-    void refreshAccounts().catch(() => undefined);
     return () => { connectionGeneration.current++; };
   }, []);
 
@@ -95,11 +90,9 @@ export default function RecordingWorkspace() {
     try {
       const data = await api.accounts();
       if (generation !== connectionGeneration.current) return;
-      setBootstrap(data);
-      const account = data.accounts.find(item => item.id === selectedId.current);
-      if (!account) throw new Error("Your selected account is unavailable. Choose another farm account.");
-      saveAccounts(data, account.id);
+      const account = sessionAccount(data, session);
       setBootstrap(data); setProfile(account); setConnected(true); setConnectionError("");
+      if (screen === "capture" && recorder.status === "idle") setDetails(current => ({ ...current, field: data.fields.some(field => field.name === current.field) ? current.field : account.defaultField }));
     } catch (cause) {
       if (generation !== connectionGeneration.current) return;
       setConnected(false);
@@ -151,7 +144,10 @@ export default function RecordingWorkspace() {
 
   function change<K extends keyof WorkDetails>(key: K, value: WorkDetails[K]) {
     editedFields.current.add(key);
-    setDetails((current) => ({ ...current, [key]: value }));
+    if (key === "activity" && value !== details.activity) {
+      for (const field of ["product", "amount", "unit"] as const) editedFields.current.delete(field);
+      setDetails(current => ({ ...current, activity: value as string, product: "", amount: "", unit: activityForm(value as string).units?.[0] ?? "" }));
+    } else setDetails((current) => ({ ...current, [key]: value }));
     setError("");
   }
 
@@ -161,7 +157,7 @@ export default function RecordingWorkspace() {
     setEditing(null);
     setSaved(null);
     draftId.current = null;
-    setDetails({ ...emptyDetails, workDate: localDate(), field: profile.defaultField, activity: profile.defaultActivity });
+    setDetails({ ...emptyDetails, workDate: localDate(), field: profile.defaultField, activity: profile.defaultActivity, unit: activityForm(profile.defaultActivity).units?.[0] ?? "" });
     setError("");
     setScreen("capture");
   }
@@ -174,32 +170,24 @@ export default function RecordingWorkspace() {
       if (cause instanceof MobileApiError && cause.status === 409) await refreshAccounts().catch(() => undefined);
       throw cause;
     }
-    saveAccounts(data, profile.id);
-    const next = data.accounts.find(item => item.id === profile.id)!;
+    const next = sessionAccount(data, session);
     setBootstrap(data); setProfile(next); setConnected(true); setConnectionError("");
     if (screen === "capture" && recorder.status === "idle") {
-      setDetails((current) => ({ ...current, field: next.defaultField, activity: next.defaultActivity }));
+      setDetails((current) => ({ ...current, field: next.defaultField, activity: next.defaultActivity, unit: activityForm(next.defaultActivity).units?.[0] ?? "" }));
     }
   }
 
-  async function switchAccount(next: MobileAccount) {
-    if (next.id === profile.id) return;
-    if (busy || saving || saveInProgress.current) throw new Error("Finish saving or recording before switching accounts.");
-    // Save even incomplete work locally before changing its owner/context.
+  async function signOut() {
+    if (busy || saving || saveInProgress.current) throw new Error("Finish saving or recording before signing out.");
+    // Keep even incomplete work under this farm and author before ending the session.
     if ((screen === "capture" || screen === "review") && !editing?.sync && (clips.length || details.notes.trim() || details.product || details.startTime || details.endTime)) {
       transcription.cancel();
       const stored = await saveDraft(currentDraft());
       rememberDraft(stored);
     }
-    if (!bootstrap) throw new Error("Connect to Toph to load accounts.");
-    saveAccounts(bootstrap, next.id);
     connectionGeneration.current++;
-    selectedId.current = next.id;
-    setProfile(next); setRemoteLogs([]); setRemoteLog(null); setLoadingRemote(false);
-    recorder.reset(); clearTranscript(); setEditing(null); setSaved(null); draftId.current = null;
-    setDetails({ ...emptyDetails, workDate: localDate(), field: next.defaultField, activity: next.defaultActivity });
-    setScreen("capture"); setError("");
-    void refreshAccounts().catch(() => undefined);
+    transcription.cancel();
+    await onSignOut();
   }
 
   function finishRecording() {
@@ -217,7 +205,7 @@ export default function RecordingWorkspace() {
   }
 
   function openDraft(draft: RecordingDraft) {
-    if (draft.employee.id !== profile.id) return;
+    if (draft.employee.id !== profile.id || draft.farmId !== session.farm.id) return;
     if (draft.sync) {
       const remote = remoteLogs.find(item => item.id === draft.sync?.logId);
       if (remote) { setRemoteLog(remote); setScreen("remote"); return; }
@@ -251,16 +239,18 @@ export default function RecordingWorkspace() {
   function currentDraft(): RecordingDraft {
     const now = new Date().toISOString();
     if (!draftId.current) draftId.current = editing?.id ?? Crypto.randomUUID();
-    return { ...details, notes: details.notes.trim(), product: treatment ? details.product.trim() : "", amount: treatment ? details.amount : "",
+    const form = activityForm(details.activity);
+    return { ...details, notes: details.notes.trim(), product: form.itemLabel ? details.product.trim() : "", amount: form.quantityLabel ? details.amount : "",
       id: draftId.current, createdAt: editing?.createdAt ?? now, updatedAt: now,
-      employee: editing?.employee ?? { id: profile.id, name: profile.name }, farmId: editing?.farmId ?? bootstrap?.farm.id ?? "00000000-0000-4000-8000-000000000001",
+      employee: editing?.employee ?? { id: profile.id, name: profile.name }, farmId: editing?.farmId ?? session.farm.id,
       transcript: transcript.text, clips, audio: clips[0]?.audio ?? null, durationSeconds: clips.reduce((total, clip) => total + clip.durationSeconds, 0) };
   }
 
   async function syncDraft(stored: RecordingDraft) {
     if (stored.sync) return;
     if (!online) throw new Error("Saved on this device. Connect to the internet and tap Sync log to send it to Toph.");
-    const data = bootstrap ?? await api.accounts();
+    if (stored.employee.id !== profile.id || stored.farmId !== session.farm.id) throw new Error("Sign in to this draft’s original farm account to sync it.");
+    const data = bootstrap;
     const receipt = await api.submit(stored, data);
     const synced = await saveDraft({ ...stored, sync: { logId: receipt.logId, savedAt: receipt.savedAt } });
     rememberDraft(synced);
@@ -277,30 +267,33 @@ export default function RecordingWorkspace() {
 
   async function submit() {
     if (saveInProgress.current || saving || busy || transcript.status === "working") return;
-    const problem = validateDetails(details, clips.length > 0);
+    const problem = bootstrap.fields.length ? validateDetails(details, clips.length > 0) : (!clips.length && !details.notes.trim() ? "Add a note or recording to keep a device draft." : "");
     if (problem) { setError(problem); return; }
     setSaving(true);
     saveInProgress.current = true;
     setError("");
     const draft = currentDraft();
     try {
+      if (draft.product) saveActivityItem(draft.activity, draft.product, catalogScope);
       const stored = await saveDraft(draft);
       rememberDraft(stored);
       setScreen("saved");
-      await syncDraft(stored);
+      if (bootstrap.fields.length) await syncDraft(stored);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The draft could not be saved. Please try again."); }
     finally { setSaving(false); saveInProgress.current = false; }
   }
 
-  const statusText = recorder.status === "requesting" ? "Connecting…" : recorder.status === "recording" ? "Recording" : recorder.status === "paused" ? "Paused" : "";
+  const statusText = recorder.status === "requesting" ? "Starting microphone…" : recorder.status === "recording" ? "Recording" : recorder.status === "paused" ? "Paused" : "";
   const noticeMessage = error || recorder.error;
-  const accountDrafts = drafts.filter(draft => draft.employee.id === profile.id && draft.farmId === (bootstrap?.farm.id ?? "00000000-0000-4000-8000-000000000001"));
+  const accountDrafts = drafts.filter(draft => draft.employee.id === profile.id && draft.farmId === session.farm.id);
   const visibleRemoteLogs = remoteLogs.filter(log => !accountDrafts.some(draft => draft.sync?.logId === log.id));
+  const localRemoteDraft = remoteLog ? accountDrafts.find(draft => draft.sync?.logId === remoteLog.id) : undefined;
 
   return <View style={styles.app}>
     <View style={styles.appContent} pointerEvents={accountOpen ? "none" : "auto"} accessibilityElementsHidden={accountOpen} importantForAccessibility={accountOpen ? "no-hide-descendants" : "auto"}>
       <View style={[styles.header, { paddingTop: 18 + insets.top, height: 80 + insets.top }]}>
         <Press onPress={newRecording} disabled={busy || saving} accessibilityRole="button" accessibilityLabel="Toph, new recording"><Text style={styles.brand}>toph</Text></Press>
+        <Text style={styles.farmName} numberOfLines={1}>{session.farm.name}{session.farm.isDemo ? " · Demo" : ""}</Text>
         <Press style={styles.avatarButton} onPress={() => setAccountOpen(true)} disabled={busy || saving} accessibilityRole="button" accessibilityLabel="Open account">
           <ProfileAvatar name={profile.name} uri={profile.avatarUrl} size={38} />
         </Press>
@@ -314,6 +307,7 @@ export default function RecordingWorkspace() {
           </View>}
           {!online && <View style={shared.notice} accessibilityLiveRegion="polite"><WifiOff size={17} color={colors.muted} /><Text style={shared.noticeText}>Offline</Text></View>}
           {noticeMessage ? <View style={shared.notice} accessibilityRole="alert"><CircleHelp size={18} color={colors.muted} /><Text style={shared.noticeText}>{noticeMessage}</Text></View> : null}
+          {!bootstrap.fields.length && <View style={shared.notice}><Text style={shared.noticeText}>Your farm admin is setting up the fields. You can keep recordings as device drafts until fields are ready.</Text><Press onPress={() => void refreshAccounts().catch(() => undefined)} accessibilityRole="button" accessibilityLabel="Refresh fields"><RefreshCw size={18} color={colors.muted} /></Press></View>}
 
           {screen === "capture" && <View style={styles.recordCard} accessibilityLabel="Record a log">
             {/* <View style={styles.contextFields}>
@@ -349,6 +343,8 @@ export default function RecordingWorkspace() {
           </View>}
 
           {screen === "review" && <ReviewLog details={details} clips={clips} transcript={transcript}
+            catalogScope={catalogScope}
+            extractedFields={transcription.extractedFields}
             fieldOptions={bootstrap?.fields.map(field => field.name)}
             loading={recorder.status === "stopping" || transcript.status === "working"} stopping={recorder.status === "stopping"}
             saving={saving} editing={Boolean(editing)} onChange={change}
@@ -360,9 +356,10 @@ export default function RecordingWorkspace() {
             <View style={styles.savedSummary}>
               <Text style={styles.savedTitle}>{saved.activity} · {fieldLabel(saved.field)}</Text>
               <Text style={[shared.muted, styles.centered]}>{dateLabel(saved.workDate)} · {saved.audio ? clock(saved.durationSeconds) : "Note"}</Text>
+              {activityDetailSummary(saved) ? <Text style={[shared.text, styles.centered]}>{activityDetailSummary(saved)}</Text> : null}
             </View>
-            <Text style={[shared.muted, styles.centered]}>{saved.sync ? "Saved to Toph and available on the dashboard." : saving ? "Syncing to Toph…" : "Draft kept on this device."}</Text>
-            {!saved.sync && <Press style={shared.primaryButton} onPress={() => void retrySync()} disabled={saving} accessibilityRole="button"><CloudUpload size={18} color={colors.white} /><Text style={shared.primaryText}>{saving ? "Syncing…" : "Sync log"}</Text></Press>}
+            {!saved.sync && <Text style={[shared.muted, styles.centered]}>{saving ? "Syncing…" : "Saved on device"}</Text>}
+            {!saved.sync && bootstrap.fields.length > 0 && <Press style={shared.primaryButton} onPress={() => void retrySync()} disabled={saving} accessibilityRole="button"><CloudUpload size={18} color={colors.white} /><Text style={shared.primaryText}>{saving ? "Syncing…" : "Sync log"}</Text></Press>}
             <Press style={shared.primaryButton} onPress={newRecording} disabled={saving} accessibilityRole="button"><Plus size={18} color={colors.white} /><Text style={shared.primaryText}>New recording</Text></Press>
             <Pressable style={shared.quietButton} onPress={openLibrary} accessibilityRole="button"><Text style={shared.quietText}>View logs</Text><ArrowRight size={16} color={colors.muted} /></Pressable>
           </View>}
@@ -391,8 +388,9 @@ export default function RecordingWorkspace() {
             <Text style={shared.muted}>{dateLabel(remoteLog.date)} · {remoteLog.employee.name}</Text>
             <Text style={shared.text}>{remoteLog.notes}</Text>
             {remoteLog.treatment && <><Text style={shared.label}>Treatment</Text><Text style={shared.text}>{[remoteLog.treatment.product, remoteLog.treatment.amount, remoteLog.treatment.unit].filter(value => value !== null).join(" ")}</Text></>}
+            {!remoteLog.treatment && localRemoteDraft && activityDetailSummary(localRemoteDraft) ? <Text style={shared.text}>{activityDetailSummary(localRemoteDraft)}</Text> : null}
             {remoteLog.transcript && <><Text style={shared.label}>Transcript</Text><Text style={shared.text}>{remoteLog.transcript}</Text></>}
-            {(remoteLog.clips.length ? remoteLog.clips : remoteLog.recording ? [{ url: remoteLog.recording.url, durationSeconds: remoteLog.recording.durationSeconds ?? 0, mimeType: "audio/mpeg" }] : []).map((clip, index) => <AudioReview key={clip.url} title={`Recording ${index + 1}`} audio={{ uri: assetUrl(clip.url)!, mimeType: clip.mimeType, extension: clip.mimeType === "audio/mpeg" ? "mp3" : "m4a" }} seconds={clip.durationSeconds} />)}
+            {(remoteLog.clips.length ? remoteLog.clips : remoteLog.recording ? [{ url: remoteLog.recording.url, durationSeconds: remoteLog.recording.durationSeconds ?? 0, mimeType: "audio/mpeg" }] : []).map((clip, index) => <AudioReview key={clip.url} title={`Recording ${index + 1}`} headers={assetHeaders(assetUrl(clip.url)!)} audio={{ uri: assetUrl(clip.url)!, mimeType: clip.mimeType, extension: clip.mimeType === "audio/mpeg" ? "mp3" : "m4a" }} seconds={clip.durationSeconds} />)}
             <Press style={shared.quietButton} onPress={openLibrary} accessibilityRole="button"><ArrowLeft size={16} color={colors.muted} /><Text style={shared.quietText}>Back to logs</Text></Press>
           </View>}
         </ScrollView>
@@ -409,7 +407,7 @@ export default function RecordingWorkspace() {
         </Press>
       </View>
     </View>
-    {accountOpen && <AccountSheet profile={profile} accounts={bootstrap?.accounts ?? []} fields={bootstrap?.fields.map(field => field.name) ?? fields} farmName={bootstrap?.farm.name ?? "Bays Ranch"} connected={connected} connectionError={connectionError} onRefresh={refreshAccounts} onSwitch={switchAccount} logCount={accountDrafts.length + visibleRemoteLogs.length} onClose={closeAccount} onSave={updateProfile} onViewLogs={() => { setAccountOpen(false); openLibrary(); }} />}
+    {accountOpen && <AccountSheet profile={profile} fields={bootstrap.fields.map(field => field.name)} farmName={session.farm.name} connected={connected} connectionError={connectionError} onRefresh={refreshAccounts} onSignOut={signOut} logCount={accountDrafts.length + visibleRemoteLogs.length} onClose={closeAccount} onSave={updateProfile} onViewLogs={() => { setAccountOpen(false); openLibrary(); }} />}
   </View>;
 }
 
@@ -418,6 +416,7 @@ const styles = StyleSheet.create({
   appContent: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xl, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.line },
   brand: { fontFamily: fonts.semibold, fontSize: 30, lineHeight: 36, letterSpacing: -1.5, color: colors.ink },
+  farmName: { flex: 1, paddingHorizontal: spacing.md, fontFamily: fonts.regular, fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.muted, textAlign: "right" },
   avatarButton: { width: 44, height: 44, padding: 3, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   avatar: { width: 38, height: 38, borderRadius: 19 },
   body: { flex: 1 },

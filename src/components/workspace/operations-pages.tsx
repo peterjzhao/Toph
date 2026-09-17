@@ -48,7 +48,7 @@ export function AuditPage() {
   }
 
   return <div className={styles.page}>
-    <PageHeader title="Audit Manager" description="Review field activity and keep a clear record of every decision." />
+    <PageHeader title="Audit Manager" />
     <div className={styles.metrics}>
       <Metric label="Awaiting review" value={counts.Pending} detail="Logs ready for your attention" icon={<ClipboardCheck size={17} />} />
       <Metric label="Approved logs" value={counts.Approved} detail="Reviewed and signed off" icon={<ShieldCheck size={17} />} />
@@ -136,7 +136,7 @@ export function ReportsPage() {
   }
 
   return <div className={styles.page}>
-    <PageHeader title="Reports" description="Turn farm activity into useful records you can share and export." />
+    <PageHeader title="Reports" />
     <div className={styles.reportLayout}>
       <section className={styles.panel}><div className={styles.toolbar}><h2><FileText size={17} /> Create report</h2><span className={styles.badge}>CSV export</span></div>
         <form className={`${styles.form} ${styles.padded}`} onSubmit={generate}>
@@ -225,7 +225,7 @@ export function SchedulePage() {
   }
 
   return <div className={styles.page}>
-    <PageHeader title="Schedule" description="Plan field work and keep everyone on the same page."><button className={styles.primaryButton} onClick={() => openAssignment()}><Plus size={16} />New assignment</button></PageHeader>
+    <PageHeader title="Schedule"><button className={styles.primaryButton} onClick={() => openAssignment()}><Plus size={16} />New assignment</button></PageHeader>
     <div className={styles.metrics}>
       <Metric label="This month's assignments" value={monthItems.length} detail={monthLabel} icon={<CalendarDays size={17} />} />
       <Metric label="Scheduled" value={monthItems.filter((item) => item.status === "Scheduled").length} detail="Work still to be completed" icon={<Clock3 size={17} />} />
@@ -248,7 +248,7 @@ export function SchedulePage() {
     </section>
     {draft && <Modal title={editing ? "Edit assignment" : "New assignment"} onClose={() => setDraft(null)}>
       <form className={styles.form} onSubmit={saveAssignment}>
-        <label>Assignment title<input autoFocus value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="e.g. Morning irrigation" required maxLength={120} /></label>
+        <label>Assignment title<input autoFocus value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required maxLength={120} /></label>
         <div className={styles.formGrid}><label>Employee<select value={draft.employeeId} required onChange={(event) => setDraft({ ...draft, employeeId: event.target.value })}><option value="" disabled>Select employee</option>{workspace.employees.filter((employee) => employee.status === "Active" || employee.id === draft.employeeId).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}{employee.status === "Inactive" ? " (inactive)" : ""}</option>)}</select></label><label>Field<select value={draft.fieldId} required onChange={(event) => setDraft({ ...draft, fieldId: event.target.value })}><option value="" disabled>Select field</option>{data.filterOptions.fields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label></div>
         <label>Date<input type="date" value={draft.date} required onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
         <div className={styles.formGrid}><label>Start time<input type="time" value={draft.startTime} required onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} /></label><label>End time<input type="time" value={draft.endTime} required onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} /></label></div>

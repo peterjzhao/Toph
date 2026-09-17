@@ -5,3 +5,5 @@
 .region polygon { fill: transparent; stroke: transparent; stroke-width: 2px; pointer-events: all; }
 .region:hover polygon, .region:focus-visible polygon { fill: rgb(0 101 240 / 18%); stroke: white; }
 .region:focus-visible polygon { stroke-width: 3px; stroke: #0065f0; fill: rgb(0 101 240 / 30%); }
+
+.selectedRegion polygon { fill:rgb(0 101 240 / 20%); stroke:#0065f0; stroke-width:2px; }

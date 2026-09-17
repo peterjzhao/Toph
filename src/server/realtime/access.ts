@@ -17,7 +17,7 @@ export const LIVE_UPDATES_POLICY = "toph_live_updates_receive";
 export const LIVE_UPDATES_ROLE = "anon";
 
 // Exactly the topic shape built by toph.notify_farm_change(): toph:farm:<uuid>.
-const TOPIC_PATTERN = "^toph:farm:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+const DEMO_TOPIC = "toph:farm:00000000-0000-4000-8000-000000000001";
 
 export type RealtimeAccessResult = { applied: true } | { applied: false; reason: string };
 
@@ -49,7 +49,7 @@ export async function applyRealtimeAccess(sql: postgres.Sql, role: string = LIVE
   await sql.begin(async (tx) => {
     await tx`drop policy if exists ${tx(LIVE_UPDATES_POLICY)} on realtime.messages`;
     await tx.unsafe(`create policy ${LIVE_UPDATES_POLICY} on realtime.messages for select to ${role}
-      using (extension = 'broadcast' and realtime.topic() ~ '${TOPIC_PATTERN}')`);
+      using (extension = 'broadcast' and realtime.topic() = '${DEMO_TOPIC}')`);
   });
   return { applied: true };
 }

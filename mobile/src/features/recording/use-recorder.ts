@@ -1,7 +1,8 @@
 import {
-  RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, type RecordingStatus,
+  getRecordingPermissionsAsync, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, type RecordingStatus,
 } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import type { RecordingAudio } from "./local-drafts";
 
 export type RecorderStatus = "idle" | "requesting" | "recording" | "paused" | "stopping" | "ready";
@@ -32,8 +33,25 @@ export function useRecorder() {
   const accumulated = useRef(0);
   const started = useRef(0);
   const generation = useRef(0);
+  const permission = useRef<ReturnType<typeof getRecordingPermissionsAsync> | null>(null);
   const onStatus = useRef<(event: RecordingStatus) => void>(() => {});
   const recorder = useAudioRecorder(recordingOptions, (event) => onStatus.current(event));
+
+  // Read existing permission before the tap. Only Start may open the system prompt;
+  // do not prepare or activate the microphone while the screen is idle.
+  useEffect(() => {
+    const refreshPermission = () => {
+      const pending = getRecordingPermissionsAsync();
+      permission.current = pending;
+      void pending.catch(() => { if (permission.current === pending) permission.current = null; });
+    };
+    refreshPermission();
+    const listener = AppState.addEventListener("change", state => {
+      if (state === "active") refreshPermission();
+      else permission.current = null;
+    });
+    return () => listener.remove();
+  }, []);
 
   const update = useCallback((next: RecorderStatus) => {
     statusRef.current = next;
@@ -102,15 +120,21 @@ export function useRecorder() {
   };
 
   async function start() {
+    if (["requesting", "recording", "paused", "stopping"].includes(statusRef.current)) return;
     reset();
     const attempt = generation.current;
     update("requesting");
     try {
-      const permission = await requestRecordingPermissionsAsync();
+      const existing = await permission.current?.catch(() => null);
       if (attempt !== generation.current) return;
-      if (!permission.granted) throw new Error("Microphone access is blocked. Check microphone permissions or write a note.");
+      const access = existing?.granted ? existing : await requestRecordingPermissionsAsync();
+      permission.current = Promise.resolve(access);
+      if (attempt !== generation.current) return;
+      if (!access.granted) throw new Error("Microphone access is blocked. Check microphone permissions or write a note.");
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
+      if (attempt !== generation.current) return;
+      // Supplying options creates a new native file on iOS for each appended clip.
+      await recorder.prepareToRecordAsync(recordingOptions);
       if (attempt !== generation.current) { stopQuietly(); return; }
       recorder.record();
       started.current = Date.now();

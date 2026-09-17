@@ -8,6 +8,7 @@ import * as logRoute from "@/app/api/logs/[logId]/route";
 import * as logTagsRoute from "@/app/api/logs/[logId]/tags/route";
 import * as logTagRoute from "@/app/api/logs/[logId]/tags/[tagId]/route";
 import * as tagsRoute from "@/app/api/tags/route";
+import { enterDemo } from "@/server/accounts/service";
 import { ISAAC_LOG_ID, recordId } from "@/server/db/initial-data";
 import { openTestSql } from "../helpers/test-db";
 import { OTHER_FARM, prepareTestDatabase, resetTags } from "../helpers/prepare-db";
@@ -15,21 +16,22 @@ import { TEST_APP_ORIGIN, applyEnv, useRouteTestEnv } from "../helpers/route-env
 
 const BASE = "http://127.0.0.1:3000";
 const MAYA_LOG_ID = recordId("workLog", 2);
+let cookie = "";
 
 function params<T extends Record<string, string>>(value: T): { params: Promise<T> } {
   return { params: Promise.resolve(value) };
 }
 
 function get(path: string): NextRequest {
-  return new NextRequest(`${BASE}${path}`);
+  return new NextRequest(`${BASE}${path}`, { headers: { cookie } });
 }
 
 function post(path: string, body: BodyInit | null, headers: Record<string, string> = {}): NextRequest {
-  return new NextRequest(`${BASE}${path}`, { method: "POST", body, headers });
+  return new NextRequest(`${BASE}${path}`, { method: "POST", body, headers: { cookie, ...headers } });
 }
 
 function del(path: string, headers: Record<string, string> = {}): NextRequest {
-  return new NextRequest(`${BASE}${path}`, { method: "DELETE", headers });
+  return new NextRequest(`${BASE}${path}`, { method: "DELETE", headers: { cookie, ...headers } });
 }
 
 const WRITE_HEADERS = { origin: TEST_APP_ORIGIN, "content-type": "application/json" };
@@ -50,6 +52,7 @@ describe("HTTP route handlers", () => {
     await prepareTestDatabase(sql);
     await resetTags(sql);
     restoreEnv = useRouteTestEnv();
+    cookie = `toph_session=${(await enterDemo("web")).token}`;
   });
 
   afterEach(() => {
@@ -127,7 +130,7 @@ describe("HTTP route handlers", () => {
       const detail = await json<LogResponse>(await logRoute.GET(get(`/api/logs/${ISAAC_LOG_ID}`), params({ logId: ISAAC_LOG_ID })));
       expect(detail.data.tags).toEqual(addedBody.data.tags);
 
-      const catalog = await json<TagsResponse>(await tagsRoute.GET());
+      const catalog = await json<TagsResponse>(await tagsRoute.GET(get("/api/tags")));
       expect(catalog.data).toEqual([{ id: tagId, label: "Needs review" }]);
 
       const removed = await logTagRoute.DELETE(
@@ -265,16 +268,16 @@ describe("HTTP route handlers", () => {
   });
 
   describe("configuration and availability", () => {
-    it("answers 503 NOT_CONFIGURED when the farm is not configured or does not exist", async () => {
+    it("uses the authenticated farm independently of the legacy configured farm", async () => {
       applyEnv({ TOPH_FARM_ID: undefined });
       const missing = await dashboardRoute.GET(get("/api/dashboard"));
-      expect(missing.status).toBe(503);
-      expect((await json<ErrorBody>(missing)).error.code).toBe("NOT_CONFIGURED");
+      expect(missing.status).toBe(200);
+      expect((await json<DashboardResponse>(missing)).data.farm.name).toBe("Bays Ranch");
 
       applyEnv({ TOPH_FARM_ID: "00000000-0000-4000-8000-000000000042" });
       const unknown = await dashboardRoute.GET(get("/api/dashboard"));
-      expect(unknown.status).toBe(503);
-      expect((await json<ErrorBody>(unknown)).error.code).toBe("NOT_CONFIGURED");
+      expect(unknown.status).toBe(200);
+      expect((await json<DashboardResponse>(unknown)).data.farm.name).toBe("Bays Ranch");
     });
 
     it("returns a sanitized 503 without a database URL and never fake data", async () => {

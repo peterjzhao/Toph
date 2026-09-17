@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { readRuntimeConfig, resolveFarmContext } from "@/server/farm-context";
+import { readRuntimeConfig } from "@/server/farm-context";
+import { resolveAccountContext } from "@/server/accounts/service";
 import { validationError } from "@/server/errors";
 import { readJsonBody } from "@/server/http/body";
 import { assertWriteOrigin } from "@/server/http/origin";
@@ -16,7 +17,7 @@ function assertNoQuery(request: NextRequest): void {
 export async function GET(request: NextRequest): Promise<Response> {
   return handleRoute(async () => {
     assertNoQuery(request);
-    return jsonResponse(await getWorkspace(await resolveFarmContext()));
+    return jsonResponse(await getWorkspace(await resolveAccountContext(request, "admin")));
   });
 }
 
@@ -25,6 +26,6 @@ export async function PATCH(request: NextRequest): Promise<Response> {
     assertNoQuery(request);
     assertWriteOrigin(request, readRuntimeConfig().appOrigin);
     const body = await readJsonBody(request, MAX_WORKSPACE_BODY_BYTES);
-    return jsonResponse(await patchWorkspace(await resolveFarmContext(), body));
+    return jsonResponse(await patchWorkspace(await resolveAccountContext(request, "admin"), body));
   });
 }

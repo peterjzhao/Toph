@@ -1,9 +1,9 @@
-import { ArrowLeft, ArrowRight, AudioLines, Check, Camera, RefreshCw, Users, X } from "lucide-react-native";
+import { ArrowRight, AudioLines, Camera, LogOut, RefreshCw, X } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import type { MobileAccount, MobileAccountEdit } from "@toph/contracts/mobile";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Animated, BackHandler, Easing, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, BackHandler, Easing, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Press, SelectField, TextField } from "./fields";
 import { activities } from "./recording-profile";
@@ -12,13 +12,12 @@ import { colors, fonts, shared, fontSize, lineHeight, radius, spacing } from "./
 
 type Props = {
   profile: MobileAccount;
-  accounts: MobileAccount[];
   fields: string[];
   farmName: string;
   connectionError: string;
   connected: boolean;
   onRefresh: () => Promise<void>;
-  onSwitch: (profile: MobileAccount) => Promise<void>;
+  onSignOut: () => Promise<void>;
   logCount: number;
   onClose: () => void;
   onSave: (profile: MobileAccountEdit) => Promise<void>;
@@ -27,13 +26,11 @@ type Props = {
 
 const duration = 200;
 
-export default function AccountSheet({ profile, accounts, fields, farmName, connected, connectionError, onRefresh, onSwitch, logCount, onClose, onSave, onViewLogs }: Props) {
+export default function AccountSheet({ profile, fields, farmName, connected, connectionError, onRefresh, onSignOut, logCount, onClose, onSave, onViewLogs }: Props) {
   const [edited, setEdited] = useState(profile);
   const [error, setError] = useState("");
   const [closing, setClosing] = useState(false);
   const [working, setWorking] = useState(false);
-  const [switching, setSwitching] = useState(false);
-  const [search, setSearch] = useState("");
   const workingRef = useRef(false);
   // Refreshing the same account after a revision conflict must not discard unsaved edits.
   useEffect(() => { setEdited(profile); setError(""); }, [profile.id]);
@@ -107,12 +104,6 @@ export default function AccountSheet({ profile, accounts, fields, farmName, conn
     });
   }
 
-  function selectAccount(account: MobileAccount) {
-    const change = () => void act(async () => { await onSwitch(account); setSwitching(false); setSearch(""); });
-    if (JSON.stringify(edited) !== JSON.stringify(profile)) Alert.alert("Discard account changes?", "Your profile changes have not been saved.", [{ text: "Keep editing", style: "cancel" }, { text: "Switch account", onPress: change }]);
-    else change();
-  }
-
   async function submit() {
     if (!edited.name.trim()) { setError("Enter your name."); return; }
     await act(async () => {
@@ -130,23 +121,11 @@ export default function AccountSheet({ profile, accounts, fields, farmName, conn
         <View style={styles.grip} {...pan.panHandlers}>
           <View style={styles.handle} />
           <View style={styles.heading}>
-            <Text style={shared.heading} accessibilityRole="header">{switching ? "Switch account" : "Account"}</Text>
+            <Text style={shared.heading} accessibilityRole="header">Account</Text>
             <Pressable style={styles.close} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close account"><X size={21} color={colors.muted} /></Pressable>
           </View>
         </View>
         <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-          {switching ? <>
-            <Text style={shared.muted}>Choose an account at {farmName}. Each person keeps their own drafts.</Text>
-            <TextField label="Find an account" value={search} onChangeText={setSearch} placeholder="Name or role" />
-            {accounts.filter(account => `${account.name} ${account.role}`.toLowerCase().includes(search.toLowerCase())).map(account => <Press key={account.id} style={styles.accountRow} disabled={working} onPress={() => selectAccount(account)} accessibilityRole="button" accessibilityLabel={`Switch to ${account.name}`} accessibilityState={{ selected: account.id === profile.id }}>
-              <ProfileAvatar name={account.name} uri={account.avatarUrl} />
-              <View style={styles.accountName}><Text style={shared.text}>{account.name}</Text><Text style={shared.muted}>{account.role}</Text></View>
-              {account.id === profile.id ? <Check size={18} color={colors.green} /> : <ArrowRight size={17} color={colors.muted} />}
-            </Press>)}
-            {!accounts.length && <Text style={shared.muted}>Connect to Toph to load the farm accounts.</Text>}
-            <Press style={shared.quietButton} onPress={() => void act(onRefresh)} disabled={working} accessibilityRole="button"><RefreshCw size={16} color={colors.muted} /><Text style={shared.quietText}>Reload accounts</Text></Press>
-            <Press style={shared.quietButton} onPress={() => setSwitching(false)} disabled={working} accessibilityRole="button"><ArrowLeft size={16} color={colors.muted} /><Text style={shared.quietText}>Back to account</Text></Press>
-          </> : <>
           <View style={styles.identity}>
             <Press onPress={() => void choosePhoto()} disabled={working} accessibilityRole="button" accessibilityLabel="Change profile photo"><ProfileAvatar name={edited.name} uri={edited.avatarUrl} size={72} /></Press>
             <Text style={styles.name}>{edited.name}</Text>
@@ -154,13 +133,12 @@ export default function AccountSheet({ profile, accounts, fields, farmName, conn
             <Press style={shared.quietButton} onPress={() => void choosePhoto()} disabled={working} accessibilityRole="button"><Camera size={16} color={colors.muted} /><Text style={shared.quietText}>Change photo</Text></Press>
             {edited.avatarUrl && <Press onPress={() => setEdited({ ...edited, avatarUrl: null })} disabled={working} accessibilityRole="button"><Text style={shared.quietText}>Remove photo</Text></Press>}
           </View>
-          <Press style={styles.logs} onPress={() => setSwitching(true)} disabled={working} accessibilityRole="button"><Users size={19} color={colors.ink} /><Text style={[shared.text, styles.logsLabel]}>Switch account</Text><ArrowRight size={17} color={colors.ink} /></Press>
           <View style={styles.fields}>
             <TextField label="Name" value={edited.name} editable={!working} maxLength={80} autoComplete="name" textContentType="name" onChangeText={(name) => { setEdited({ ...edited, name }); setError(""); }} />
-            <TextField label="Role" value={edited.role} editable={!working} maxLength={80} onChangeText={role => setEdited({ ...edited, role })} />
+            <TextField label="Role" value={edited.role} editable={false} />
             <TextField label="Email" value={edited.email} editable={!working} keyboardType="email-address" autoCapitalize="none" autoComplete="email" maxLength={254} onChangeText={email => setEdited({ ...edited, email })} />
             <TextField label="Phone" value={edited.phone} editable={!working} keyboardType="phone-pad" autoComplete="tel" maxLength={60} onChangeText={phone => setEdited({ ...edited, phone })} />
-            <SelectField label="Default field" value={edited.defaultField} values={fields} disabled={working} onChange={(defaultField) => setEdited({ ...edited, defaultField })} />
+            <SelectField label="Default field" value={edited.defaultField} values={fields} disabled={working || !fields.length} onChange={(defaultField) => setEdited({ ...edited, defaultField })} />
             <SelectField label="Default activity" value={edited.defaultActivity} values={[...new Set([...activities, edited.defaultActivity])]} disabled={working} onChange={(defaultActivity) => setEdited({ ...edited, defaultActivity })} />
           </View>
           <Pressable style={styles.logs} onPress={onViewLogs} disabled={working} accessibilityRole="button" accessibilityLabel={`My logs, ${logCount}`}>
@@ -169,15 +147,15 @@ export default function AccountSheet({ profile, accounts, fields, farmName, conn
             <Text style={shared.muted}>{logCount}</Text>
             <ArrowRight size={17} color={colors.ink} />
           </Pressable>
-          <Text style={shared.muted}>Accounts share this farm workspace. Changes are saved to Toph.</Text>
+          <Text style={shared.muted}>Your profile and logs belong to {farmName}. Device drafts stay with your account when you sign out.</Text>
           {!connected && <Press style={shared.quietButton} onPress={() => void act(onRefresh)} disabled={working} accessibilityRole="button"><RefreshCw size={16} color={colors.muted} /><Text style={shared.quietText}>Reconnect to Toph</Text></Press>}
-          </>}
+          <Press style={styles.logs} onPress={() => void act(onSignOut)} disabled={working} accessibilityRole="button"><LogOut size={19} color={colors.ink} /><Text style={[shared.text, styles.logsLabel]}>Sign out</Text><ArrowRight size={17} color={colors.ink} /></Press>
           {connectionError && !error ? <View style={shared.notice} accessibilityRole="alert"><Text style={shared.noticeText}>{connectionError}</Text></View> : null}
           {error ? <View style={shared.notice} accessibilityRole="alert"><Text style={shared.noticeText}>{error}</Text></View> : null}
         </ScrollView>
-        {!switching && <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}>
           <Press style={shared.primaryButton} onPress={() => void submit()} disabled={closing || working || !connected} accessibilityRole="button"><Text style={shared.primaryText}>{working ? "Saving…" : "Save changes"}</Text></Press>
-        </View>}
+        </View>
       </KeyboardAvoidingView>
     </Animated.View>
   </View>;
@@ -199,7 +177,5 @@ const styles = StyleSheet.create({
   fields: { gap: 18 },
   logs: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingVertical: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
   logsLabel: { flex: 1 },
-  accountRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, minHeight: 62, borderBottomWidth: 1, borderBottomColor: colors.line },
-  accountName: { flex: 1, gap: 4 },
   footer: { paddingTop: spacing.sm, paddingHorizontal: spacing.xl, borderTopWidth: 1, borderTopColor: colors.line },
 });

@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Production field detector worker test</title>
+<style>body{font:16px system-ui;max-width:1000px;margin:24px auto}button,select{font:inherit;padding:10px;margin:4px}#stage{position:relative}img,svg{width:100%;display:block}svg{position:absolute;inset:0;height:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}polygon{fill:#13ce6644;stroke:#00ff88;stroke-width:0.002}</style>
+<h1>Production browser worker test</h1><p>Uses the app's actual detectFields helper and worker, bundled as a standalone test. The farm image stays in this browser.</p>
+<select id="sample"><option value="salinas">Salinas farm</option><option value="iowa-farm">Iowa farm</option><option value="iowa">Lake control</option></select>
+<button id="run">Detect fields</button><button id="cancel" disabled>Cancel</button><p id="status">Ready</p><p id="ticks">UI heartbeat: 0</p>
+<div id="stage"><img id="image" src="./samples/salinas.jpg" alt="Public USGS aerial sample"><svg id="overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg></div><pre id="result"></pre>
+<script type="module">
+import {detectFields} from './detect-fields.js';
+const $=id=>document.getElementById(id);let abort,ticks=0;setInterval(()=>{$('ticks').textContent=`UI heartbeat: ${++ticks}`},100);
+$('sample').onchange=()=>{$('image').src=`./samples/${$('sample').value}.jpg`;$('overlay').replaceChildren()};
+$('cancel').onclick=()=>abort?.abort();
+$('run').onclick=async()=>{
+  abort=new AbortController();$('run').disabled=true;$('cancel').disabled=false;const start=performance.now(),before=ticks;
+  try{
+    await $('image').decode();const polygons=await detectFields($('image'),{signal:abort.signal,onProgress:text=>$('status').textContent=text});
+    $('overlay').replaceChildren(...polygons.map(points=>{const p=document.createElementNS('http://www.w3.org/2000/svg','polygon');p.setAttribute('points',points.map(({x,y})=>`${x},${y}`).join(' '));return p}));
+    $('status').textContent='Complete: production browser worker succeeded';
+    $('result').textContent=JSON.stringify({sample:$('sample').value,elapsedMs:performance.now()-start,heartbeatsDuringRun:ticks-before,candidates:polygons.length,vertexCounts:polygons.map(p=>p.length),allCoordinatesNormalized:polygons.flat().every(({x,y})=>Number.isFinite(x)&&Number.isFinite(y)&&x>=0&&x<=1&&y>=0&&y<=1)},null,2);
+  }catch(error){$('status').textContent=error.name==='AbortError'?'Cancelled — worker terminated':'Failed';$('result').textContent=String(error.stack??error)}finally{$('run').disabled=false;$('cancel').disabled=true}
+};
+</script></html>

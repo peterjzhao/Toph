@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpRight, AudioLines, CalendarDays, Check, Clock3, Download, MessageSquare, Pencil, Plus, Search, Send, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, AudioLines, CalendarDays, Check, CheckCheck, Clock3, Download, MessageSquare, Pencil, Plus, Search, Send, Users } from "lucide-react";
 import type { Employee } from "@/contracts/workspace";
 import type { LogDto } from "@/contracts/dashboard";
+import { InviteCode } from "../accounts/account-page";
 import { mergeEmployeeEdit } from "@/lib/employee-edit";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { Modal, PageHeader } from "@/components/workspace/workspace-ui";
@@ -29,7 +30,7 @@ function EmptyState({ title, description }: { title: string; description: string
 }
 
 function EmployeeForm({ employee, onClose }: { employee: Employee | null; onClose: () => void }) {
-  const { workspace, update, saving, notify } = useWorkspace();
+  const { workspace, update, saving, notify, account } = useWorkspace();
   const [name, setName] = useState(employee?.name ?? "");
   const [role, setRole] = useState(employee?.role ?? "Farm worker");
   const [email, setEmail] = useState(employee?.email ?? "");
@@ -54,11 +55,11 @@ function EmployeeForm({ employee, onClose }: { employee: Employee | null; onClos
   return <Modal title={employee ? "Edit employee" : "Add employee"} onClose={onClose}>
     <form className={styles.form} onSubmit={submit}>
       <p className={styles.formIntro}>Keep the people behind your farm&apos;s activity up to date.</p>
-      <label>Full name<input autoFocus required disabled={saving} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Alex Morgan" autoComplete="name" /></label>
-      <label>Role<input required disabled={saving} maxLength={80} value={role} onChange={(event) => setRole(event.target.value)} placeholder="e.g. Field Supervisor" /></label>
+      <label>Full name<input autoFocus required disabled={saving || !account.farm.isDemo} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>
+      <label>Role<input required disabled={saving} maxLength={80} value={role} onChange={(event) => setRole(event.target.value)} /></label>
       <div className={styles.formGrid}><label>Email <span className={styles.optional}>(optional)</span><input type="email" disabled={saving} maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="alex@example.com" autoComplete="email" /></label><label>Phone <span className={styles.optional}>(optional)</span><input type="tel" disabled={saving} maxLength={60} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Phone number" autoComplete="tel" /></label></div>
       <label>Status<select disabled={saving} value={status} onChange={(event) => setStatus(event.target.value as Employee["status"])}><option>Active</option><option>Inactive</option></select></label>
-      <p className={styles.caption}>This creates a profile in your farm workspace. No invitation is sent.</p>
+      <p className={styles.caption}>{account.farm.isDemo ? "This creates a profile in the sample farm workspace." : "Set a worker to Inactive to remove access. Their recorded work is preserved."}</p>
       {error && <p role="alert" className={styles.error}>{error}</p>}
       <div className={styles.formActions}><button className={styles.button} type="button" onClick={onClose}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={saving}>{saving ? "Saving…" : employee ? "Save changes" : "Add employee"}</button></div>
     </form>
@@ -66,11 +67,12 @@ function EmployeeForm({ employee, onClose }: { employee: Employee | null; onClos
 }
 
 export function EmployeesPage() {
-  const { workspace, data, avatars } = useWorkspace();
+  const { workspace, data, avatars, account } = useWorkspace();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
   const [editing, setEditing] = useState<Employee | null | undefined>(undefined);
+  const [inviting, setInviting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const roles = [...new Set(workspace.employees.map((item) => item.role))].sort();
   const employees = workspace.employees.filter((employee) => (status === "all" || employee.status === status) && (role === "all" || employee.role === role) && `${employee.name} ${employee.role} ${employee.email}`.toLowerCase().includes(query.trim().toLowerCase()));
@@ -80,7 +82,8 @@ export function EmployeesPage() {
   const loggedEmployees = new Set(data.logs.map((log) => log.employee.id)).size;
 
   return <div className={styles.page}>
-    <PageHeader title="Employees" description="The people who keep your farm growing."><button className={styles.primaryButton} onClick={() => setEditing(null)}><Plus size={16} />Add employee</button></PageHeader>
+    <PageHeader title="Employees"><button className={styles.primaryButton} onClick={() => account.farm.isDemo ? setEditing(null) : setInviting(true)}><Plus size={16} />{account.farm.isDemo ? "Add employee" : "Invite workers"}</button></PageHeader>
+    {inviting && <Modal title="Invite workers" onClose={() => setInviting(false)}><InviteCode compact /></Modal>}
     <div className={styles.stats}>
       <StatCard label="Team members" value={workspace.employees.length} detail="Profiles in your farm workspace" icon={<Users size={16} />} />
       <StatCard label="Active employees" value={activeCount} detail={`${workspace.employees.length - activeCount} inactive profiles`} icon={<Check size={16} />} />
@@ -92,7 +95,6 @@ export function EmployeesPage() {
         const logs = data.logs.filter((log) => log.employee.id === employee.id);
         return <tr key={employee.id}><td><button className={styles.personButton} onClick={() => setSelectedId(employee.id)}><Avatar name={employee.name} src={avatars[employee.id]} /><span>{employee.name}<small>View profile</small></span></button></td><td>{employee.role}</td><td><span className={styles.contact}>{employee.email || "No email added"}<small>{employee.phone || "No phone added"}</small></span></td><td><span className={`${styles.badge} ${employee.status === "Active" ? styles.greenBadge : styles.grayBadge}`}><span className={styles.statusDot} />{employee.status}</span></td><td>{logs.length}</td><td><div className={styles.rowActions}><Link className={styles.iconButton} aria-label={`Message ${employee.name}`} href={`/messages?employee=${encodeURIComponent(employee.id)}`}><MessageSquare size={16} /></Link><button className={styles.button} onClick={() => setEditing(employee)} aria-label={`Edit ${employee.name}`}><Pencil size={13} />Edit</button></div></td></tr>;
       })}</tbody></table></div> : <EmptyState title="No employees found" description="Try a different name, role, or status filter." />}
-      <div className={styles.cardFooter}>Employee profiles and changes are saved to this farm&apos;s workspace.</div>
     </section>
     {editing !== undefined && <EmployeeForm employee={editing} onClose={() => setEditing(undefined)} />}
     {selected && <Modal title="Employee profile" onClose={() => setSelectedId(null)} wide>
@@ -145,7 +147,7 @@ export function PerformancePage() {
   }
 
   return <div className={styles.page}>
-    <PageHeader title="Performance" description="Understand your team's recorded work and time in the field."><button className={styles.button} onClick={download} disabled={invalidRange}><Download size={16} />Export CSV</button></PageHeader>
+    <PageHeader title="Performance"><button className={styles.button} onClick={download} disabled={invalidRange}><Download size={16} />Export CSV</button></PageHeader>
     <div className={styles.periodBar}><div><CalendarDays size={16} /><span>Reporting period</span></div><div className={styles.dateControls}><label>From<input type="date" aria-label="Performance start date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><span className={styles.dateDash}>—</span><label>To<input type="date" aria-label="Performance end date" value={to} onChange={(event) => setTo(event.target.value)} /></label><button className={styles.textButton} onClick={() => { setFrom("2026-04-01"); setTo("2026-04-30"); }}>April 2026</button></div></div>
     {invalidRange && <p className={styles.error} role="alert">Choose an end date on or after the start date.</p>}
     <div className={styles.stats}>
@@ -160,7 +162,9 @@ export function PerformancePage() {
 }
 
 export function MessagesPage() {
-  const { workspace, avatars, update, saving, notify } = useWorkspace();
+  const { workspace, avatars, sendMessage, markMessagesRead, messageError } = useWorkspace();
+  const [saving, setSaving] = useState(false);
+  const pendingSends = useRef<Record<string, { id: string; body: string }>>({});
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedId = searchParams.get("employee");
@@ -191,17 +195,16 @@ export function MessagesPage() {
     setReadErrors((previous) => ({ ...previous, [employeeId]: "" }));
     if (!messageIds.length) return;
     lastReadAttempt.current = `${employeeId}:${messageIds.join(",")}`;
-    const ids = new Set(messageIds);
-    const saved = await update("messages", (previous) => previous.map((message) => ids.has(message.id) && message.employeeId === employeeId && message.from === "employee" ? { ...message, read: true } : message));
-    if (!saved) setReadErrors((previous) => ({ ...previous, [employeeId]: "We couldn’t save this conversation’s read status. Your messages are still available." }));
-  }, [update]);
+    try { await markMessagesRead({ employeeId, messageIds }); }
+    catch { setReadErrors((previous) => ({ ...previous, [employeeId]: "We couldn’t save this conversation’s read status. Your messages are still available." })); }
+  }, [markMessagesRead]);
 
   useEffect(() => { if (requestedId) setSelectedId(requestedId); }, [requestedId]);
   useEffect(() => { conversationEnd.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [selectedId, messages.length]);
   useEffect(() => {
     const unread = workspace.messages.filter((message) => message.employeeId === selectedId && message.from === "employee" && !message.read);
     const key = `${selectedId}:${unread.map((message) => message.id).join(",")}`;
-    if (!unread.length || saving || lastReadAttempt.current === key) return;
+    if (!unread.length || saving || document.visibilityState !== "visible" || lastReadAttempt.current === key) return;
     void markRead(selectedId, unread.map((message) => message.id));
   }, [selectedId, workspace.messages, saving, markRead]);
 
@@ -215,23 +218,27 @@ export function MessagesPage() {
     const recipientId = selected.id;
     if (workspace.messages.length >= 2000) { setSendErrors((previous) => ({ ...previous, [recipientId]: "This farm workspace has reached its limit of 2,000 messages. Your draft is still here." })); return; }
     const submittedVersion = draftVersions.current[recipientId] ?? 0;
-    const message = { id: crypto.randomUUID(), employeeId: recipientId, body: draft.trim(), from: "admin" as const, createdAt: new Date().toISOString(), read: true };
-    sending.current = true;
+    const previousSend = pendingSends.current[recipientId];
+    const attempt = previousSend?.body === draft.trim() ? previousSend : { id: crypto.randomUUID(), body: draft.trim() };
+    pendingSends.current[recipientId] = attempt;
+    sending.current = true; setSaving(true);
     try {
-      const saved = await update("messages", (previous) => [...previous, message]);
-      if (saved) {
+      await sendMessage({ ...attempt, employeeId: recipientId });
+      delete pendingSends.current[recipientId];
+      {
         // A slow save must not erase edits made after Send, even if the user switches conversations.
         setDrafts((previous) => (draftVersions.current[recipientId] ?? 0) === submittedVersion ? { ...previous, [recipientId]: "" } : previous);
         setSendErrors((previous) => ({ ...previous, [recipientId]: "" }));
-        notify("Message saved in your farm workspace.");
-      } else setSendErrors((previous) => ({ ...previous, [recipientId]: "Your message could not be saved. Try again; your draft is still here." }));
-    } finally { sending.current = false; }
+      }
+    } catch (cause) { setSendErrors((previous) => ({ ...previous, [recipientId]: cause instanceof Error ? cause.message : "Your message could not be sent. Try again; your draft is still here." })); }
+    finally { sending.current = false; setSaving(false); }
   }
   const messageTime = (date: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: workspace.settings.timezone || "America/Los_Angeles" }).format(new Date(date));
   const messageDay = (date: string) => new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: workspace.settings.timezone || "America/Los_Angeles" }).format(new Date(date));
 
   return <div className={`${styles.page} ${styles.messagesPage}`}>
-    <PageHeader title="Messages" description="Keep farm conversations together in one place."><button className={styles.primaryButton} onClick={() => setCompose(true)}><Pencil size={15} />New message</button></PageHeader>
+    <PageHeader title="Messages"><button className={styles.primaryButton} onClick={() => setCompose(true)}><Pencil size={15} />New message</button></PageHeader>
+    {messageError && <p className={styles.error} role="status">{messageError}</p>}
     <div className={styles.messenger}>
       <aside className={styles.conversations} aria-label="Conversations"><div className={styles.conversationsHeader}><h2>Team inbox</h2>{unreadCount > 0 && <span className={styles.unreadTotal}>{unreadCount}</span>}</div><label className={`${styles.search} ${styles.contactSearch}`}><Search size={15} /><input aria-label="Search conversations" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your team" /></label><div className={styles.conversationList}>{people.map((employee) => {
         const thread = workspace.messages.filter((message) => message.employeeId === employee.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -242,8 +249,8 @@ export function MessagesPage() {
       <section className={styles.conversation} aria-label={selected ? `Conversation with ${selected.name}` : "Select a conversation"}>
         {selected ? <><div className={styles.conversationHeader}><Avatar name={selected.name} src={avatars[selected.id]} /><div><h2>{selected.name}</h2><p>{selected.role} <span>·</span> {selected.status}</p></div><Link className={styles.iconButton} href="/employees" aria-label="Open employee directory"><Users size={17} /></Link></div>{readErrors[selectedId] && <div className={styles.readError} role="alert"><span>{readErrors[selectedId]}</span><button type="button" disabled={saving} onClick={() => void markRead(selectedId, messages.filter((message) => message.from === "employee" && !message.read).map((message) => message.id))}>Retry</button></div>}<div className={styles.messageArea} aria-live="polite" aria-relevant="additions text">
           {!messages.length && <div className={styles.conversationEmpty}><span className={styles.emptyIcon}><MessageSquare size={22} /></span><h3>Start a conversation with {selected.name.split(" ")[0]}</h3><p>Share a field update, ask a question, or plan the day&apos;s work.</p></div>}
-          {messages.map((message, index) => <div key={message.id}>{(index === 0 || messageDay(messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className={styles.dateSeparator}><span>{messageDay(message.createdAt)}</span></div>}<div className={`${styles.messageRow} ${message.from === "admin" ? styles.outgoing : styles.incoming}`}><div className={styles.messageBubble}><p>{message.body}</p><span className={styles.messageMeta}><time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>{message.from === "admin" && <span title="Saved in workspace" aria-label="Saved in workspace"><Check size={12} /></span>}</span></div></div></div>)}<div ref={conversationEnd} />
-        </div><div className={styles.composerWrapper}><p className={styles.workspaceNote}>Farm workspace messages are saved here. No email, SMS, or external delivery.</p><form className={styles.composer} onSubmit={send}><label className={styles.srOnly} htmlFor="message-draft">Message to {selected.name}</label><textarea id="message-draft" placeholder={`Message ${selected.name.split(" ")[0]}…`} value={draft} maxLength={4000} rows={2} onChange={(event) => { const value = event.target.value; draftVersions.current[selectedId] = (draftVersions.current[selectedId] ?? 0) + 1; setDrafts((previous) => ({ ...previous, [selectedId]: value })); setSendErrors((previous) => ({ ...previous, [selectedId]: "" })); }} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button type="submit" className={styles.sendButton} disabled={!draft.trim() || saving} aria-label={`Send message to ${selected.name}`}><Send size={17} /><span>{saving ? "Saving…" : "Send"}</span></button></form><div className={styles.composerHint}><span>⌘ / Ctrl + Enter to send</span><span>{draft.length.toLocaleString()} / 4,000</span></div>{error && <p className={styles.error} role="alert">{error}</p>}</div></> : <EmptyState title="Choose a conversation" description="Select a team member or create an employee profile to get started." />}
+          {messages.map((message, index) => <div key={message.id}>{(index === 0 || messageDay(messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className={styles.dateSeparator}><span>{messageDay(message.createdAt)}</span></div>}<div className={`${styles.messageRow} ${message.from === "admin" ? styles.outgoing : styles.incoming}`}><div className={styles.messageBubble}><p>{message.body}</p><span className={styles.messageMeta}><time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>{message.from === "admin" && <span title={message.read ? "Read by worker" : "Sent to inbox"} aria-label={message.read ? "Read by worker" : "Sent to inbox"}>{message.read ? <CheckCheck size={12} /> : <Check size={12} />}</span>}</span></div></div></div>)}<div ref={conversationEnd} />
+        </div><div className={styles.composerWrapper}><p className={styles.workspaceNote}>Messages reach the worker’s inbox. Updates appear while the app is open.</p><form className={styles.composer} onSubmit={send}><label className={styles.srOnly} htmlFor="message-draft">Message to {selected.name}</label><textarea id="message-draft" placeholder={`Message ${selected.name.split(" ")[0]}…`} value={draft} maxLength={4000} rows={2} onChange={(event) => { const value = event.target.value; draftVersions.current[selectedId] = (draftVersions.current[selectedId] ?? 0) + 1; setDrafts((previous) => ({ ...previous, [selectedId]: value })); setSendErrors((previous) => ({ ...previous, [selectedId]: "" })); }} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button type="submit" className={styles.sendButton} disabled={!draft.trim() || saving || selected.status !== "Active"} aria-label={`Send message to ${selected.name}`}><Send size={17} /><span>{saving ? "Saving…" : "Send"}</span></button></form><div className={styles.composerHint}><span>⌘ / Ctrl + Enter to send</span><span>{draft.length.toLocaleString()} / 4,000</span></div>{error && <p className={styles.error} role="alert">{error}</p>}</div></> : <EmptyState title="Choose a conversation" description="Invite a worker to your farm, then select them to start a conversation." />}
       </section>
     </div>
     {compose && <Modal title="New message" onClose={() => setCompose(false)}><p className={styles.formIntro}>Choose a team member to start a conversation.</p><label className={`${styles.search} ${styles.modalSearch}`}><Search size={15} /><input autoFocus type="search" aria-label="Find a message recipient" placeholder="Search name or role" value={contactQuery} onChange={(event) => setContactQuery(event.target.value)} /></label><div className={styles.recipientList}>{workspace.employees.filter((employee) => `${employee.name} ${employee.role}`.toLowerCase().includes(contactQuery.trim().toLowerCase())).map((employee) => <button onClick={() => openConversation(employee.id)} key={employee.id}><Avatar name={employee.name} src={avatars[employee.id]} /><span>{employee.name}<small>{employee.role}</small></span><ArrowUpRight size={16} /></button>)}{!workspace.employees.some((employee) => `${employee.name} ${employee.role}`.toLowerCase().includes(contactQuery.trim().toLowerCase())) && <p className={styles.noContacts}>No matching employees. Add a profile from the Employees page.</p>}</div><Link href="/employees" className={styles.directoryLink}><Users size={14} />Manage employee directory<ArrowUpRight size={14} /></Link></Modal>}

@@ -1,7 +1,7 @@
 import "server-only";
 import { forbidden, notConfigured } from "@/server/errors";
 
-/** Shared-farm access, not user authentication. */
+/** Feature/client-origin gate. Every mobile HTTP route separately resolves its account session. */
 export function mobileEnabled() {
   return process.env.TOPH_MOBILE_ENABLED === "true";
 }

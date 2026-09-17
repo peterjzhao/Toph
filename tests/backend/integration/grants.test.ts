@@ -51,16 +51,12 @@ describe.skipIf(!target.appUrl)("runtime role grants", () => {
     await resetTags(owner);
   });
 
-  it("cannot modify fixture records, delete tags, or change the schema", async () => {
-    await denied(() => app`insert into toph.farms (id, name, timezone) values (gen_random_uuid(), 'X', 'UTC')`);
-    await denied(() => app`insert into toph.employees (id, farm_id, display_name) values (gen_random_uuid(), ${FARM_ID}, 'X')`);
-    await denied(() => app`insert into toph.fields (id, farm_id, name) values (gen_random_uuid(), ${FARM_ID}, 'X')`);
-    await denied(
-      () => app`insert into toph.work_logs (id, farm_id, employee_id, field_id, activity, work_date, start_at, end_at, summary)
-        values (gen_random_uuid(), ${FARM_ID}, '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'X', '2026-04-19', now(), now() + interval '1 hour', 'x')`,
-    );
+  it("has onboarding/review privileges but cannot rewrite log content, delete history or change schema", async () => {
+    for (const table of ["farms", "employees", "fields", "accounts", "account_sessions", "farm_access", "farm_images"]) {
+      expect((await app`select has_table_privilege(current_user, ${`toph.${table}`}, 'INSERT') as allowed`)[0].allowed).toBe(true);
+    }
+    expect((await app`select has_column_privilege(current_user, 'toph.work_logs', 'reviewed_by', 'UPDATE') as allowed`)[0].allowed).toBe(true);
     await denied(() => app`update toph.work_logs set summary = 'tampered' where id = ${ISAAC_LOG_ID}`);
-    await denied(() => app`update toph.work_logs set is_new = false where id = ${ISAAC_LOG_ID}`);
     await denied(() => app`delete from toph.work_logs where id = ${ISAAC_LOG_ID}`);
     await denied(() => app`delete from toph.tags where farm_id = ${FARM_ID}`);
     await denied(() => app`update toph.tags set label = 'x' where farm_id = ${FARM_ID}`);

@@ -21,7 +21,11 @@ describe("versioned migrations", () => {
     expect(result.applied).toBeGreaterThan(0);
 
     expect(await listTables(sql, "toph")).toEqual([
+      "account_sessions",
+      "accounts",
       "employees",
+      "farm_access",
+      "farm_images",
       "farms",
       "fields",
       "mobile_profiles",

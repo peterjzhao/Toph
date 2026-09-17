@@ -24,7 +24,8 @@ export function describeRuntimeGrants(role: string): string[] {
     `GRANT SELECT ON ALL TABLES IN SCHEMA toph TO ${role} (includes the dashboard_logs view)`,
     `GRANT INSERT ON toph.tags TO ${role}`,
     `GRANT INSERT, DELETE ON toph.work_log_tags TO ${role}`,
-    `GRANT UPDATE (updated_at) ON toph.work_logs TO ${role}`,
+    `GRANT UPDATE (updated_at, is_new, reviewed_by, reviewed_at) ON toph.work_logs TO ${role}`,
+    `GRANT INSERT and scoped column UPDATE privileges for farm/account onboarding TO ${role}`,
     `GRANT INSERT, UPDATE (payload, revision, updated_at) ON toph.workspace_state TO ${role}`,
     `GRANT EXECUTE ON FUNCTION toph.waveform_peaks_valid(jsonb) TO ${role}`,
     `ALTER DEFAULT PRIVILEGES IN SCHEMA toph GRANT SELECT ON TABLES TO ${role}`,
@@ -68,7 +69,15 @@ export async function applyRuntimeGrants(sql: postgres.Sql, role: string): Promi
     await tx`grant select on all tables in schema toph to ${tx(role)}`;
     await tx`grant insert on toph.tags to ${tx(role)}`;
     await tx`grant insert, delete on toph.work_log_tags to ${tx(role)}`;
-    await tx`grant update (updated_at) on toph.work_logs to ${tx(role)}`;
+    await tx`grant update (updated_at, is_new, reviewed_by, reviewed_at) on toph.work_logs to ${tx(role)}`;
+    await tx`grant insert on toph.farms, toph.employees, toph.accounts, toph.account_sessions, toph.farm_access, toph.farm_images, toph.fields to ${tx(role)}`;
+    await tx`grant update (name, timezone, updated_at) on toph.farms to ${tx(role)}`;
+    await tx`grant update (display_name, is_active, updated_at) on toph.employees to ${tx(role)}`;
+    await tx`grant update (name, normalized_name, is_active) on toph.accounts to ${tx(role)}`;
+    await tx`grant update (revoked_at) on toph.account_sessions to ${tx(role)}`;
+    await tx`grant update (join_code, setup_complete) on toph.farm_access to ${tx(role)}`;
+    await tx`grant update (mime_type, bytes, width, height, updated_at) on toph.farm_images to ${tx(role)}`;
+    await tx`grant update (name, label, boundary, map_image_path, updated_at), delete on toph.fields to ${tx(role)}`;
     await tx`grant insert, update (payload, revision, updated_at) on toph.workspace_state to ${tx(role)}`;
     await tx`grant execute on function toph.waveform_peaks_valid(jsonb) to ${tx(role)}`;
     await tx`alter default privileges in schema toph grant select on tables to ${tx(role)}`;

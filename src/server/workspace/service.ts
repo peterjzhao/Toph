@@ -1,6 +1,6 @@
 import "server-only";
 import type postgres from "postgres";
-import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
+import type { Message, WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import type { FarmContext } from "@/server/farm-context";
 import { ApiError, validationError } from "@/server/errors";
 import { mapDatabaseError } from "@/server/db/errors";
@@ -63,6 +63,30 @@ export async function getWorkspace(ctx: FarmContext): Promise<WorkspaceResponse>
   } catch (error) { throw mapDatabaseError(error) ?? error; }
 }
 
+/** Narrow atomic mutation: concurrent sends never replace each other's messages or settings. */
+export async function changeWorkspaceMessages(
+  ctx: FarmContext,
+  change: (messages: Message[], tx: postgres.TransactionSql) => Promise<Message[]>,
+): Promise<WorkspaceResponse> {
+  try {
+    return await ctx.sql.begin(async tx => {
+      await initialize(tx, ctx);
+      const [row] = await tx<Row[]>`select payload, revision from toph.workspace_state where farm_id = ${ctx.farmId} for update`;
+      const current = parseWorkspaceState(decodePayload(row.payload));
+      const messages = await change(current.messages, tx);
+      if (messages === current.messages) return { data: current, revision: row.revision };
+      const state = parseWorkspaceState({ ...current, messages });
+      const encoded = JSON.stringify(state);
+      const [{ bytes }] = await tx<{ bytes: number }[]>`select octet_length(${encoded}::jsonb::text) as bytes`;
+      if (bytes > MAX_WORKSPACE_STATE_BYTES) throw validationError("The farm workspace is full. Your message has not been sent.");
+      const [saved] = await tx<{ revision: number }[]>`update toph.workspace_state
+        set payload = ${encoded}::jsonb, revision = revision + 1, updated_at = now()
+        where farm_id = ${ctx.farmId} returning revision`;
+      return { data: state, revision: saved.revision };
+    });
+  } catch (error) { throw mapDatabaseError(error) ?? error; }
+}
+
 /** Whole-section replacement under a row lock. A stale revision can never silently lose a write. */
 export async function patchWorkspace(ctx: FarmContext, body: unknown): Promise<WorkspaceResponse> {
   const { patch, expectedRevision } = parseWorkspacePatch(body);
@@ -75,6 +99,21 @@ export async function patchWorkspace(ctx: FarmContext, body: unknown): Promise<W
       }
       const state = parseWorkspaceState({ ...parseWorkspaceState(decodePayload(row.payload)), ...patch });
       await validateRelationships(tx, ctx, state);
+      const [access] = await tx`select is_demo from toph.farm_access where farm_id = ${ctx.farmId}`;
+      if (access && !access.is_demo) {
+        const memberships = await tx`select id, employee_id, name from toph.accounts where farm_id = ${ctx.farmId} and role = 'worker'`;
+        if (state.employees.length !== memberships.length || state.employees.some(employee => !memberships.some(member => member.employee_id === employee.id && member.name === employee.name))) {
+          throw validationError("Invite workers with the farm code. Account names are changed by the signed-in worker.", { employees: "Keep the existing farm memberships and names." });
+        }
+        for (const employee of state.employees) {
+          const member = memberships.find(value => value.employee_id === employee.id)!;
+          const active = employee.status === "Active";
+          await tx`update toph.employees set is_active = ${active}, updated_at = now() where farm_id = ${ctx.farmId} and id = ${employee.id}`;
+          await tx`update toph.accounts set is_active = ${active} where farm_id = ${ctx.farmId} and id = ${member.id}`;
+          if (!active) await tx`update toph.account_sessions set revoked_at = now() where account_id = ${member.id} and revoked_at is null`;
+        }
+        await tx`update toph.farms set name = ${state.settings.farmName}, timezone = ${state.settings.timezone}, updated_at = now() where id = ${ctx.farmId}`;
+      }
       const encoded = JSON.stringify(state);
       // PostgreSQL's canonical JSON includes spacing. Check its exact stored representation
       // as well as the compact request size so the SQL constraint never surfaces as a 500.

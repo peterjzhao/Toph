@@ -23,6 +23,8 @@ export function createFakeFileSystem() {
     get exists() { return files.has(this.uri); }
     get size() { return files.get(this.uri)?.length ?? 0; }
     get name() { return this.uri.slice(this.uri.lastIndexOf("/") + 1); }
+    get type() { return this.name.endsWith(".m4a") ? "audio/x-m4a" : "application/octet-stream"; }
+    async bytes() { return new Uint8Array([...this.textSync()].map(character => character.charCodeAt(0))); }
     get parentDirectory() { return new Directory(parent(this.uri)); }
     create() { files.set(this.uri, ""); }
     write(content: string) { files.set(this.uri, content); }

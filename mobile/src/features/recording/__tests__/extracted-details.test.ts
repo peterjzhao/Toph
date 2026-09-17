@@ -17,3 +17,14 @@ test("a later spoken correction clears prior automatic treatment suggestions", (
   const corrected = applyExtractedDetails(first, { ...emptyExtraction, activity: "Monitoring" }, catalog, new Set(["workDate"]), fields);
   expect(corrected).toMatchObject({ activity: "Monitoring", field: "", product: "", amount: "", unit: "", workDate: first.workDate });
 });
+
+test.each(["L", null] as const)("switching to planting uses planting units when extraction returns %s", (unit) => {
+  const first = applyExtractedDetails(emptyDetails, fields, catalog, new Set());
+  const planted = applyExtractedDetails(first, { ...fields, activity: "Planting", product: "Tomato", amount: 50, unit }, catalog, new Set(), fields);
+  expect(planted).toMatchObject({ activity: "Planting", product: "Tomato", amount: "50", unit: "plants" });
+});
+
+test("appended suggestions for another activity cannot replace the manually selected crop", () => {
+  const current = { ...emptyDetails, activity: "Planting", product: "Tomato", amount: "50", unit: "plants" };
+  expect(applyExtractedDetails(current, fields, catalog, new Set(["activity"]))).toMatchObject({ activity: "Planting", product: "Tomato", amount: "50", unit: "plants" });
+});

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delineate Anything v2 — actual browser inference</title>
+<style>
+  body{font:16px system-ui;margin:24px auto;max-width:1120px;padding:0 20px;background:#f5f6f3;color:#17231e}h1{font-size:25px}button,select,input{font:inherit;padding:10px;margin:4px;border:1px solid #aab5ad;border-radius:6px;background:white}button{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.result{background:white;border-radius:12px;padding:18px;margin-top:16px}canvas{max-width:100%;height:auto;background:#ddd}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}#status{font-weight:600;min-height:24px}.muted{color:#56625c}
+</style>
+<h1>Delineate Anything v2: 512px browser test</h1>
+<p>This page runs the actual ONNX model on this browser's device. The server only serves static files. Candidate regions need human review; this model can mistake water for fields.</p>
+<p id="capability" class="muted">Checking browser capabilities…</p>
+<div class="controls">
+  <label>Runtime <select id="runtime"><option value="webgpu">WebGPU</option><option value="wasm">WASM CPU (single thread)</option></select></label>
+  <label>Precision <select id="precision"><option value="fp32">FP32</option><option value="fp16">FP16</option></select></label>
+  <label>Image <select id="sample"><option value="salinas">Salinas farm</option><option value="iowa-farm">Iowa farm</option><option value="iowa">Lake control</option></select></label>
+  <label>Confidence <select id="confidence"><option value="0.15">0.15</option><option value="0.5">0.5</option></select></label>
+</div>
+<div class="controls"><button id="run">Run sample and compare PyTorch</button><button id="all">Run all three samples</button><label>Or local image <input type="file" accept="image/*" id="upload"></label></div>
+<p id="status" role="status">Ready</p>
+<div class="result"><canvas id="preview" width="1024" height="1024"></canvas></div>
+<div class="result"><h2>Measured result</h2><pre id="result">No inference has run.</pre><button id="download" disabled>Download result JSON</button></div>
+<script src="./ort/ort.webgpu.min.js"></script>
+<script type="module" src="./experiment.js"></script>
+</html>

@@ -26,6 +26,10 @@ Change `brand` here and the next web/native build uses the new value wherever th
 token is referenced. Hover and tinted colors are separate tokens (`brandHover`, `brandTint`),
 so a palette change should update those intentionally as well.
 
+`colors.warning` (`#b85c00`) is the shared orange for details missing from a recording's
+structured extraction. Native styles expose it as `colors.warning`; the web adapter exposes
+`--toph-color-warning`. Found details use the existing brand green.
+
 On the website, existing CSS Modules use:
 
 ```css

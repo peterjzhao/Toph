@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { readRuntimeConfig, resolveFarmContext } from "@/server/farm-context";
+import { readRuntimeConfig } from "@/server/farm-context";
+import { resolveAccountContext } from "@/server/accounts/service";
 import { parseAddTagBody, readJsonBody } from "@/server/http/body";
 import { assertWriteOrigin } from "@/server/http/origin";
 import { handleRoute, jsonResponse } from "@/server/http/responses";
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest, { params }: RouteContext): Prom
     const { logId } = await params;
     assertWriteOrigin(request, readRuntimeConfig().appOrigin);
     const { label } = parseAddTagBody(await readJsonBody(request));
-    const ctx = await resolveFarmContext();
+    const ctx = await resolveAccountContext(request, "admin");
     return jsonResponse({ data: await addLogTag(ctx, logId, label) });
   });
 }

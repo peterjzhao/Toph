@@ -2,9 +2,9 @@ import "server-only";
 /**
  * Trusted farm context.
  *
- * Every service call receives a FarmContext whose farm was resolved on the server from
- * configuration (TOPH_FARM_ID) and verified in the database. Request input never selects the
- * farm. This deployment serves one farm; per-user authorization is a later concern.
+ * Every service call receives a trusted FarmContext. HTTP routes resolve its farm through
+ * accounts/service.ts from a verified session. The configuration-based helpers in this file
+ * remain for operator scripts and isolated tests; they must not select an HTTP user's farm.
  */
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -65,7 +65,7 @@ async function loadFarm(db: Database, farmId: string): Promise<Farm> {
 }
 
 /**
- * Resolves the farm context for an HTTP request from server configuration and the shared
+ * Resolves the legacy operator farm context from server configuration and the shared
  * runtime pool. Throws 503 ApiErrors when the database, the farm setting, or the farm row is
  * missing.
  */

@@ -11,6 +11,7 @@ test("requests strict structured output using the farm's field catalog and no re
   const body = JSON.parse(init.body as string);
   expect(body).toMatchObject({ model: "gpt-4.1-mini", store: false, text: { format: { type: "json_schema", strict: true } } });
   expect(body.text.format.schema.properties.fieldId.anyOf[0].enum).toEqual([context.fields[0].id]);
+  expect(JSON.parse(body.input[0].content).activityDetails.Planting).toMatchObject({ itemLabel: "Crop / variety", units: ["plants", "trays", "rows"] });
 });
 test("rejects invented fields, invalid calendar dates, unsupported categories and extra properties", () => {
   for (const patch of [{ fieldId: "outside-farm" }, { workDate: "2026-02-30" }, { activity: "invented" }, { unit: "buckets" }, { unknown: true }]) {
@@ -18,8 +19,28 @@ test("rejects invented fields, invalid calendar dates, unsupported categories an
   }
 });
 test("keeps unknowns null and does not infer missing treatment amounts or an overnight end", () => {
-  expect(validateExtractedLog({ ...fields, fieldId: null, workDate: null, endTime: "04:00", unit: null }, context)).toMatchObject({ fieldId: null, workDate: null, endTime: null, amount: null });
+  expect(validateExtractedLog({ ...fields, fieldId: null, workDate: null, endTime: "04:00", unit: null }, context)).toMatchObject({ fieldId: null, workDate: null, endTime: null, amount: 2 });
   expect(validateExtractedLog({ ...fields, activity: "Monitoring" }, context)).toMatchObject({ product: null, amount: null, unit: null });
+});
+
+test.each([
+  ["Planting", "Oak trees", "plants"], ["Seeding", "Rye", "seeds"],
+  ["Harvesting", "Apples", "crates"], ["Fertilizing", "Compost", "kg"],
+])("retains %s items and quantities outside the original treatment-only form", (activity, product, unit) => {
+  expect(validateExtractedLog({ ...fields, activity, product, amount: 20, unit }, context)).toMatchObject({ activity, product, amount: 20, unit });
+});
+
+test("an oak-tree amendment fills the crop even with no count or existing crop catalog", async () => {
+  const transcript = "I was planting in Field A yesterday from 6 AM until 8 AM.\n\nI planted oak trees.";
+  const result = { ...fields, activity: "Planting", product: "Oak trees", amount: null, unit: "plants", notes: "Online voice log created.\n\nOak trees were planted in Field A on September 16, from 6 AM to 8 AM." };
+  const fetcher = vi.fn(async () => completed(result));
+  expect(await extractLogFields(transcript, context, "key", new AbortController().signal, fetcher)).toEqual(result);
+  const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+  expect(JSON.parse(JSON.parse(init.body as string).input[0].content).transcript).toBe(transcript);
+});
+
+test("rejects incompatible units without deleting a known quantity or crop", () => {
+  expect(validateExtractedLog({ ...fields, activity: "Planting", product: "Oak trees", amount: 20, unit: "L" }, context)).toMatchObject({ product: "Oak trees", amount: 20, unit: null });
 });
 test("handles refusals, partial JSON and schema failures as retryable extraction errors", async () => {
   for (const payload of [{ status: "incomplete", output: [] }, { status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "No" }] }] }]) {

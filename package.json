@@ -30,6 +30,7 @@
     "geist": "1.7.2",
     "lucide-react": "1.46.0",
     "next": "16.3.5",
+    "onnxruntime-web": "1.30.0",
     "postgres": "3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",

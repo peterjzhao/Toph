@@ -6,6 +6,8 @@
  * connection details, or internal exception text.
  */
 export type ApiErrorCode =
+  | "UNAUTHORIZED"
+  | "NAME_TAKEN"
   | "VALIDATION_ERROR"
   | "FORBIDDEN"
   | "NOT_FOUND"
