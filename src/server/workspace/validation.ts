@@ -33,7 +33,7 @@ const report = z.object({
   id, name: requiredText(160), kind: z.enum(["activity", "compliance", "hours"]), from: date, to: date, createdAt: instant,
 }).strict().refine((item) => item.to >= item.from, { message: "End date must be on or after start date.", path: ["to"] });
 const message = z.object({
-  id, employeeId: id, body: requiredText(4000), from: z.enum(["admin", "employee"]), createdAt: instant, read: z.boolean(),
+  id, employeeId: id, body: requiredText(4000), from: z.enum(["admin", "employee"]), createdAt: instant, read: z.boolean(), readAt: instant.nullable().optional(),
 }).strict();
 const ticket = z.object({
   id, subject: requiredText(160), category: z.enum(["General", "Technical", "Account"]),
@@ -78,6 +78,9 @@ export function parseWorkspacePatch(value: unknown): { expectedRevision: number;
 
 export function parseWorkspaceState(value: unknown): WorkspaceState {
   const state = parse(workspaceSchema, value);
+  // The old admin-only composer used read=true to mean "saved". Those messages have
+  // never been seen by a worker. New recipient acknowledgements carry a server timestamp.
+  state.messages = state.messages.map(message => message.from === "admin" && message.read && !message.readAt ? { ...message, read: false } : message);
   for (const section of ["employees", "schedule", "reports", "messages", "tickets"] as const) {
     const values = state[section].map((item) => item.id);
     if (new Set(values).size !== values.length) throw validationError("Duplicate record IDs are not allowed.", { [section]: "IDs must be unique within the section." });

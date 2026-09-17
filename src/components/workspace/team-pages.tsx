@@ -164,6 +164,7 @@ export function PerformancePage() {
 export function MessagesPage() {
   const { workspace, avatars, sendMessage, markMessagesRead, messageError } = useWorkspace();
   const [saving, setSaving] = useState(false);
+  const [visible, setVisible] = useState(true);
   const pendingSends = useRef<Record<string, { id: string; body: string }>>({});
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -200,13 +201,18 @@ export function MessagesPage() {
   }, [markMessagesRead]);
 
   useEffect(() => { if (requestedId) setSelectedId(requestedId); }, [requestedId]);
+  useEffect(() => {
+    const changed = () => setVisible(document.visibilityState === "visible");
+    changed(); document.addEventListener("visibilitychange", changed);
+    return () => document.removeEventListener("visibilitychange", changed);
+  }, []);
   useEffect(() => { conversationEnd.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [selectedId, messages.length]);
   useEffect(() => {
     const unread = workspace.messages.filter((message) => message.employeeId === selectedId && message.from === "employee" && !message.read);
     const key = `${selectedId}:${unread.map((message) => message.id).join(",")}`;
-    if (!unread.length || saving || document.visibilityState !== "visible" || lastReadAttempt.current === key) return;
+    if (!unread.length || saving || !visible || lastReadAttempt.current === key) return;
     void markRead(selectedId, unread.map((message) => message.id));
-  }, [selectedId, workspace.messages, saving, markRead]);
+  }, [selectedId, workspace.messages, saving, visible, markRead]);
 
   function openConversation(id: string) {
     setSelectedId(id); setCompose(false); setContactQuery(""); lastReadAttempt.current = "";
@@ -214,7 +220,7 @@ export function MessagesPage() {
   }
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.trim() || !selected || saving || sending.current) return;
+    if (!draft.trim() || !selected || selected.status !== "Active" || saving || sending.current) return;
     const recipientId = selected.id;
     if (workspace.messages.length >= 2000) { setSendErrors((previous) => ({ ...previous, [recipientId]: "This farm workspace has reached its limit of 2,000 messages. Your draft is still here." })); return; }
     const submittedVersion = draftVersions.current[recipientId] ?? 0;
@@ -225,11 +231,9 @@ export function MessagesPage() {
     try {
       await sendMessage({ ...attempt, employeeId: recipientId });
       delete pendingSends.current[recipientId];
-      {
-        // A slow save must not erase edits made after Send, even if the user switches conversations.
-        setDrafts((previous) => (draftVersions.current[recipientId] ?? 0) === submittedVersion ? { ...previous, [recipientId]: "" } : previous);
-        setSendErrors((previous) => ({ ...previous, [recipientId]: "" }));
-      }
+      // A slow save must not erase edits made after Send, even if the user switches conversations.
+      setDrafts((previous) => (draftVersions.current[recipientId] ?? 0) === submittedVersion ? { ...previous, [recipientId]: "" } : previous);
+      setSendErrors((previous) => ({ ...previous, [recipientId]: "" }));
     } catch (cause) { setSendErrors((previous) => ({ ...previous, [recipientId]: cause instanceof Error ? cause.message : "Your message could not be sent. Try again; your draft is still here." })); }
     finally { sending.current = false; setSaving(false); }
   }

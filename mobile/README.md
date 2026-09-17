@@ -59,9 +59,20 @@ The avatar opens your own profile, photo, defaults, and Sign out. Save log keeps
 device copy and syncs to the same PostgreSQL database the dashboard reads. A failed upload
 stays in the library with a Sync log action. The combined audio limit is 3.8 MB per log.
 
-Adding the photo picker or SecureStore requires rebuilding the phone app once. An already rebuilt Release
-app needs only to be reopened after the server deploys; future server changes do not require
-a native rebuild unless the app itself or its bundled configuration changes.
+Adding the photo picker or SecureStore requires rebuilding the phone app once. This messaging
+release also changes bundled JavaScript, so an installed Release app must be rebuilt to gain
+the Inbox tab. From the repository root, run `npm --prefix mobile run ios:release` with the
+phone connected and choose it when prompted. Install in place to keep local drafts. Server-only
+changes do not require a native rebuild. A Git push does not update installed app binaries.
+
+## Worker inbox
+
+The Inbox tab opens your conversation with the farm admin without discarding your recording
+draft. Unread messages show a badge. Messages and replies persist in PostgreSQL, refresh every
+five seconds while active, and catch up when you reopen the app. Sent/Read indicates server
+save and recipient acknowledgement. Failed sends retain their composer text for retry while
+the workspace is mounted. No APNs setup or notification permission is required; there are no
+notifications while the app is closed. See [messaging](../docs/backend/messages.md).
 
 Name-based access intentionally has no password or email verification for this project's
 simplified account model; knowing a name is enough to sign in. The server issues an opaque

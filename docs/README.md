@@ -9,6 +9,7 @@ Start with the repository [README](../README.md) for the layout and local comman
 | Native recording app | [Mobile README](../mobile/README.md) |
 | Accounts and farm onboarding | [Farm accounts](backend/accounts.md) |
 | Worker profiles and log sync | [Mobile API](backend/mobile.md) |
+| Worker inboxes and admin messages | [Messaging](backend/messages.md) |
 | On-device field segmentation | [Browser test and integration](backend/browser-segmentation.md) |
 | Transcription and form filling | [Recording processing](backend/transcription.md) |
 | Live updates on open dashboards | [Dashboard live updates](backend/realtime.md) |

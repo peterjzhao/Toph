@@ -213,6 +213,13 @@ Local prerequisites for the UI to see data: the Docker database is running (`npm
 `.env.local` exists, and `npm run db:migrate` plus `npm run db:seed` have been run
 (`setup.md`). `GET /api/health` confirms it.
 
+## Messaging
+
+The web Messages page and native Inbox tab use authenticated two-way messaging. See
+[worker inboxes](messages.md) for the narrow send/read APIs, recipient scope, five-second
+foreground refresh, read receipts, and limits. `messages` is read-only through
+`/api/workspace`; use `/api/messages` or `/api/mobile/v1/messages` to send.
+
 ## Mobile
 
 The native app uses the canonical `/api/mobile/v1` routes for the shared farm's accounts,

@@ -1,5 +1,11 @@
 # Mobile API
 
+Current messaging: the native **Inbox** tab uses `GET` / `POST /api/mobile/v1/messages`
+and `POST /api/mobile/v1/messages/read`. Each signed-in worker can access only their own
+conversation with the farm admin. See [worker inboxes](messages.md) for delivery, receipts,
+and foreground refresh without APNs. The [account guide](accounts.md) supersedes the earlier
+shared-profile access description below.
+
 The Expo app in `mobile/` calls the same Next.js backend and PostgreSQL database as the
 website. Canonical endpoints live under `/api/mobile/v1`; service code is in
 `src/server/mobile/`, and shared types are in `src/contracts/mobile.ts`.

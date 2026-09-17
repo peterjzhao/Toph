@@ -43,3 +43,14 @@ test("native auth sends the client type and authenticated requests carry the bea
   expect(fetcher.mock.calls[2][0]).toBe("https://toph.example/api/mobile/v1/accounts");
   expect(fetcher.mock.calls[3][0]).toContain(`/api/mobile/v1/logs?accountId=${id}`);
 });
+
+test("messaging uses the private mobile routes and never supplies sender or read state", async () => {
+  const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { messages: [], revision: 1 } }) });
+  const api = createMobileClient({ baseUrl: "https://toph.example", fetcher, headers: () => ({ Authorization: "Bearer worker-session" }) });
+  await api.messages();
+  await api.sendMessage({ id: draftId, employeeId: id, body: "Gate checked" });
+  await api.readMessages({ employeeId: id, messageIds: [draftId] });
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["https://toph.example/api/mobile/v1/messages", "https://toph.example/api/mobile/v1/messages", "https://toph.example/api/mobile/v1/messages/read"]);
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ id: draftId, employeeId: id, body: "Gate checked" });
+  for (const [, init] of fetcher.mock.calls) expect(init.headers).toMatchObject({ Authorization: "Bearer worker-session", "X-Toph-Client": "toph-mobile" });
+});

@@ -1,6 +1,7 @@
 import { File } from "expo-file-system";
 import type { MobileAccountEdit, MobileBootstrap, MobileLogReceipt, MobileLogSubmission, MobileRemoteLog } from "@toph/contracts/mobile";
 import type { AccountSession, AuthResponse } from "@toph/contracts/accounts";
+import type { MessageInbox, SendMessageRequest, ReadMessagesRequest } from "@toph/contracts/messages";
 import { sessionHeaders } from "./session-token";
 import { draftClips, type RecordingDraft } from "@/features/recording/local-drafts";
 import { isTreatment, validateDetails } from "@/features/recording/recording-utils";
@@ -46,6 +47,9 @@ export function createMobileClient({ baseUrl, fetcher = fetch, headers = session
     demo: () => request<AuthResponse["data"]>("/api/auth/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client: "mobile" }) }),
     logout: () => request<unknown>("/api/auth/logout", { method: "POST" }),
     accounts: () => request<MobileBootstrap>("/api/mobile/v1/accounts"),
+    messages: () => request<MessageInbox>("/api/mobile/v1/messages", {}, 15_000),
+    sendMessage: (message: SendMessageRequest) => request<MessageInbox>("/api/mobile/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(message) }, 15_000),
+    readMessages: (body: ReadMessagesRequest) => request<MessageInbox>("/api/mobile/v1/messages/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, 15_000),
     updateAccount: (id: string, profile: MobileAccountEdit, expectedRevision: number) => request<MobileBootstrap>(`/api/mobile/v1/accounts/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, expectedRevision }) }),
     logs: (accountId: string) => request<MobileRemoteLog[]>(`/api/mobile/v1/logs?accountId=${encodeURIComponent(accountId)}`),
     async submit(draft: RecordingDraft, bootstrap: MobileBootstrap): Promise<MobileLogReceipt> {

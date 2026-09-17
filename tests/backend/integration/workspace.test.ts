@@ -84,16 +84,15 @@ describe("persistent workspace pages", () => {
     expect((await getWorkspace(ctx)).revision).toBe(1);
   });
 
-  it("accepts new workspace employees and their assignments/messages atomically", async () => {
+  it("accepts new workspace employees and their assignments atomically", async () => {
     const initial = await getWorkspace(ctx);
     const employee = { id: randomUUID(), name: "Sample new employee", role: "Field lead", email: "", phone: "", status: "Active" as const, joinedAt: "2026-04-29" };
     const result = await patchWorkspace(ctx, { expectedRevision: 0, patch: {
       employees: [...initial.data.employees, employee],
       schedule: [...initial.data.schedule, { ...initial.data.schedule[0], id: randomUUID(), employeeId: employee.id }],
-      messages: [{ id: randomUUID(), employeeId: employee.id, body: "Sample assignment", from: "admin", read: true, createdAt: new Date().toISOString() }],
     } });
     expect(result.data.employees).toHaveLength(12);
-    expect(result.data.messages[0].employeeId).toBe(employee.id);
+    expect(result.data.messages).toEqual(initial.data.messages);
     expect((await owner`select count(*)::int as n from toph.employees where farm_id = ${FARM_ID}`)[0].n).toBe(11);
   });
 
@@ -127,14 +126,13 @@ describe("persistent workspace pages", () => {
     expect((await getWorkspace(ctx)).revision).toBe(0);
   });
 
-  it("supports archive, schedules, reports, messages, support and settings in the same transaction", async () => {
+  it("supports archive, schedules, reports, support and settings without replacing messages", async () => {
     const { data } = await getWorkspace(ctx);
     const timestamp = new Date().toISOString();
     const saved = await patchWorkspace(ctx, { expectedRevision: 0, patch: {
       employees: data.employees.map((employee, index) => index === 0 ? { ...employee, status: "Inactive" } : employee),
       schedule: data.schedule.map((item) => ({ ...item, status: "Completed" })),
       reports: [{ id: randomUUID(), name: "April hours", kind: "hours", from: "2026-04-01", to: "2026-04-30", createdAt: timestamp }],
-      messages: data.messages.map((message) => ({ ...message, read: true })),
       tickets: [{ id: randomUUID(), subject: "Irrigation valve", category: "Technical", body: "The valve on FIELD D sticks when opened.", status: "Open", createdAt: timestamp }],
       settings: { ...data.settings, notifications: { recordings: false, weekly: false, reminders: false } },
     } });
@@ -142,6 +140,7 @@ describe("persistent workspace pages", () => {
     expect(saved.data.schedule.every((item) => item.status === "Completed")).toBe(true);
     expect(saved.data.reports).toHaveLength(1);
     expect(saved.data.tickets).toHaveLength(1);
+    expect(saved.data.messages).toEqual(data.messages);
   });
 
   it("returns no-store HTTP envelopes, persists PATCH and returns 409 on retries", async () => {

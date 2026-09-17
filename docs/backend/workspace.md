@@ -1,5 +1,11 @@
 # Workspace pages backend
 
+September 17 update: farm scope now comes from authenticated [accounts](accounts.md).
+Messages have dedicated [send/read APIs](messages.md) and are delivered to each worker's
+native inbox. They remain present in workspace reads, but `PATCH /api/workspace` rejects the
+`messages` section. Existing message text and dates are preserved. The original implementation
+notes below describe the earlier admin-only workspace and its initial verification.
+
 The September 16 request expands the dashboard into working sidebar pages. `/api/workspace`
 stores their editable data in actual PostgreSQL. It runs locally with the existing Next.js
 server and the trusted farm context (`TOPH_FARM_ID`). There is no deployment or external message delivery.

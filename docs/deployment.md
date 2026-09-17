@@ -4,6 +4,52 @@ Target: **peterjzhao/Toph**, branch **main**, existing project serving
 **https://toph-rho.vercel.app**. This guide prepares a website/backend deployment; it does not
 deploy the separate native app. No build or startup command runs migrations or loads data.
 
+## Messaging release
+
+Commit all staged messaging source, tests, docs, and `vercel.json`, then push to `main`.
+The checked-in Vercel config pins Next.js, `npm ci`, and `npm run build`; the existing Git
+integration deploys the root website/API. Messaging uses the existing database and auth
+configuration, with no additional environment variable, webhook, push service, or migration.
+
+The hosted Supabase database was checked read-only during messaging release preparation:
+all nine migrations through 0008 are applied; `toph_app` can read accounts/sessions/workspace
+and update workspace payload/revision. The public CA committed in `certs/` successfully
+verifies its TLS connection. No hosted data or configuration was changed by this check.
+The live website still served the preceding anonymous API and no messaging routes at that
+time; the next successful deployment must include the account and messaging source together.
+
+After Vercel reports Ready, run `npm run check:mobile-server`. It verifies PostgreSQL health
+and that account/inbox routes require authentication. Optionally supply `TOPH_MOBILE_TOKEN`
+as an environment variable containing an existing worker session to verify their private
+bootstrap, logs and inbox; the script never logs tokens, sends messages, or marks them read.
+The anonymous check alone does not prove two-way delivery.
+
+**The iPhone Release app also needs the new Inbox JavaScript. A Git push does not update an
+already installed binary.** With the phone connected, run from the repository root:
+
+```sh
+npm --prefix mobile ci
+npm --prefix mobile run ios:release
+```
+
+Choose the connected phone when prompted. Install in place to retain local recordings and
+drafts. The default server URL is already `https://toph-rho.vercel.app`; no mobile secret or
+new messaging dependency is required. Android's corresponding command is
+`npm --prefix mobile run android:release`. This release does not add EAS Update or APNs.
+
+On the updated app, sign in as a worker and open Inbox. Send from the web Messages page;
+the worker receives it on the next five-second foreground refresh, can reply, and both sides
+see read receipts. Closed apps receive their saved messages when reopened, without OS push
+notifications. See [worker inboxes](backend/messages.md) for privacy and storage limits.
+
+Release preparation verified the exact staged source in a separate clean checkout using
+Node 24: `npm ci` and the production build passed, and all 29 API traces include the database
+CA. The production build was then run locally against the guarded disposable PostgreSQL
+test database: admin-to-worker delivery, worker reply, both read receipts, identical-send
+retry, and the authenticated deployment checker passed. Backend (176), frontend (40), and
+native (92) tests passed, as did both typechecks. No commit, push, hosted deployment, or
+native installation was performed by this preparation.
+
 ## Account release prerequisite (September 17)
 
 The account/onboarding release requires migrations through **0008_farm_accounts** before
@@ -13,8 +59,8 @@ serving the new application. Run `npm run db:migrate` from the reviewed checkout
 Vercel build does not perform this step. Do not seed a new farm; signup creates empty data.
 The migration registers the existing Bays Ranch sample profiles without rewriting its logs.
 
-The local Docker database is migrated; the hosted database was **not** migrated by the
-account task. See [accounts](backend/accounts.md) for sessions, roles, and verification.
+The local Docker and hosted databases are migrated through 0008 (the hosted state was
+verified read-only during messaging preparation). See [accounts](backend/accounts.md) for sessions, roles, and verification.
 Keep `TOPH_MOBILE_ENABLED=true` for authenticated worker routes. Rebuild the native app for
 its new SecureStore dependency; OTA JavaScript alone cannot add a native module.
 

@@ -37,9 +37,9 @@ export async function sendMessage(ctx: AccountContext, body: unknown): Promise<M
     }
     const [worker] = await tx`select a.id from toph.accounts a join toph.employees e on e.id = a.employee_id and e.farm_id = a.farm_id
       where a.farm_id = ${ctx.farmId} and a.employee_id = ${input.employeeId} and a.role = 'worker' and a.is_active and e.is_active`;
-    if (!worker) throw notFound("Active worker");
+    if (!worker) throw notFound("An active worker account was not found in this farm.");
     if (messages.length >= 2000) throw validationError("This farm has reached its limit of 2,000 messages. Your message has not been sent.");
-    return [...messages, { ...input, from, createdAt: new Date().toISOString(), read: false }];
+    return [...messages, { ...input, from, createdAt: new Date().toISOString(), read: false, readAt: null }];
   });
   return inbox(ctx, result);
 }
@@ -54,7 +54,8 @@ export async function readMessages(ctx: AccountContext, body: unknown): Promise<
       throw validationError("Only received messages in this conversation can be marked read.");
     }
     if (targets.every(message => message.read)) return messages;
-    return messages.map(message => ids.has(message.id) ? { ...message, read: true } : message);
+    const readAt = new Date().toISOString();
+    return messages.map(message => ids.has(message.id) && !message.read ? { ...message, read: true, readAt } : message);
   });
   return inbox(ctx, result);
 }

@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { useNetworkState } from "expo-network";
 import {
-  ArrowLeft, ArrowRight, AudioLines, CheckCheck, CircleHelp, CloudUpload, FileText, Mic, Pause, Play, Plus, RefreshCw, Square, WifiOff,
+  ArrowLeft, ArrowRight, AudioLines, CheckCheck, CircleHelp, CloudUpload, FileText, MessageSquare, Mic, Pause, Play, Plus, RefreshCw, Square, WifiOff,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -26,6 +26,8 @@ import { applyExtractedDetails } from "./extracted-details";
 import { activityDetailSummary, activityForm } from "./activity-forms";
 import { saveActivityItem } from "./activity-catalog";
 import type { ExtractedLogFields } from "@toph/contracts/transcription";
+import InboxSheet from "../messages/InboxSheet";
+import { useInbox } from "../messages/use-inbox";
 
 type Screen = "capture" | "review" | "saved" | "library" | "remote";
 const pageTitles: Record<Exclude<Screen, "review">, string> = { capture: "Record", saved: "Draft saved", library: "Logs", remote: "Saved log" };
@@ -58,6 +60,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const draftId = useRef<string | null>(null);
   const saveInProgress = useRef(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const editedFields = useRef(new Set<keyof WorkDetails>());
   const previousSuggestions = useRef<ExtractedLogFields | null>(null);
   const transcription = useTranscription({
@@ -77,6 +80,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const closeAccount = useCallback(() => setAccountOpen(false), []);
   const scrollArea = useRef<ScrollView>(null);
   const online = network.isConnected !== false && network.isInternetReachable !== false;
+  const inbox = useInbox(profile.id, inboxOpen, online);
   const active = recorder.status === "recording" || recorder.status === "paused";
   const busy = active || recorder.status === "requesting" || recorder.status === "stopping";
 
@@ -405,9 +409,14 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
           <AudioLines size={22} color={screen === "library" ? colors.ink : colors.soft} strokeWidth={1.6} />
           <Text style={[styles.navLabel, screen === "library" ? styles.navActive : null]}>Logs</Text>
         </Press>
+        <Press style={styles.navButton} onPress={() => setInboxOpen(true)} disabled={busy || saving} accessibilityRole="tab" accessibilityLabel={`Inbox${inbox.unreadCount ? `, ${inbox.unreadCount} unread` : ""}`} accessibilityState={{ selected: inboxOpen }}>
+          <View><MessageSquare size={22} color={colors.soft} strokeWidth={1.6} />{inbox.unreadCount > 0 && <View style={styles.inboxBadge}><Text style={styles.inboxBadgeText}>{inbox.unreadCount > 99 ? "99+" : inbox.unreadCount}</Text></View>}</View>
+          <Text style={styles.navLabel}>Inbox</Text>
+        </Press>
       </View>
     </View>
     {accountOpen && <AccountSheet profile={profile} fields={bootstrap.fields.map(field => field.name)} farmName={session.farm.name} connected={connected} connectionError={connectionError} onRefresh={refreshAccounts} onSignOut={signOut} logCount={accountDrafts.length + visibleRemoteLogs.length} onClose={closeAccount} onSave={updateProfile} onViewLogs={() => { setAccountOpen(false); openLibrary(); }} />}
+    <InboxSheet visible={inboxOpen} onClose={() => setInboxOpen(false)} employeeId={profile.id} farmName={session.farm.name} online={online} inbox={inbox} />
   </View>;
 }
 
@@ -453,4 +462,6 @@ const styles = StyleSheet.create({
   navButton: { flex: 1, alignItems: "center", justifyContent: "center", gap: 5, minHeight: 54 },
   navLabel: { fontFamily: fonts.regular, fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.soft },
   navActive: { fontFamily: fonts.medium, color: colors.ink },
+  inboxBadge: { position: "absolute", top: -7, right: -13, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: colors.green, alignItems: "center", justifyContent: "center" },
+  inboxBadgeText: { fontFamily: fonts.medium, fontSize: 10, color: colors.white },
 });
