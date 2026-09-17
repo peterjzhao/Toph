@@ -1,0 +1,35 @@
+# Optional isolated PostgreSQL for local Toph development and backend tests.
+#
+# - Binds to loopback only (127.0.0.1:54329) so it never takes over the default
+#   PostgreSQL port 5432 or an existing local database.
+# - Uses a named volume so data persists across container restarts.
+# - The credentials below are local-development-only placeholders documented in
+#   docs/backend/setup.md. They are never used for a hosted database.
+#
+# Start:  docker compose -f compose.db.yaml up -d
+# Stop:   docker compose -f compose.db.yaml stop      (keeps data)
+# Reset:  docker compose -f compose.db.yaml down -v   (deletes local data; never run against a shared database)
+name: toph
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: toph-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: toph_owner
+      POSTGRES_PASSWORD: toph_owner_local_dev_password
+      POSTGRES_DB: toph
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - toph-postgres-data:/var/lib/postgresql/data
+      # Runs only when the data volume is first initialized: creates the restricted
+      # runtime role and the disposable test database.
+      - ./scripts/db/docker-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toph_owner -d toph"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  toph-postgres-data:

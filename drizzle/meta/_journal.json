@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789582727233,
+      "tag": "0000_initial_toph_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789585311343,
+      "tag": "0001_workspace_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789601450443,
+      "tag": "0002_remove_demo_scaffolding",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789604917817,
+      "tag": "0003_employee_avatar",
+      "breakpoints": true
+    }
+  ]
+}

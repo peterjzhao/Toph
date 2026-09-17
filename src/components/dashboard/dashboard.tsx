@@ -2,11 +2,17 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Check, Expand, Funnel, ListFilter, Minus, Pause, Play,
+  CalendarDays, Check, ChevronDown, Expand, Funnel, ListFilter, Minus, Pause, Play,
   Plus, Search, Square, SquareCheck, Star, X,
 } from "lucide-react";
-import { formatDate, formatTime, type DashboardData, type EmployeeLog } from "@/lib/dashboard-data";
+import { formatDate, formatTime } from "@/lib/format";
+import type { DashboardData, EmployeeLog } from "./types";
 import styles from "./dashboard.module.css";
+import filterStyles from "./filters.module.css";
+import { FilterSelect } from "./filter-select";
+import { AnchoredPopover } from "./anchored-popover";
+import { DateFilterPanel } from "./date-filter-panel";
+import { dateRange, dateFilterLabel, initialDateFilter, rangeDescription, type DateFilter } from "./date-range";
 
 function DesignIcon({ name, size = 16 }: { name: string; size?: number }) {
   return <img src={`/assets/icons/${name}.svg`} alt="" aria-hidden="true" width={size} height={size} style={{ display: "block", flexShrink: 0 }} />;
@@ -87,7 +93,7 @@ function LogDetails({ log, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }:
         <img src="/assets/waveform.svg" alt="" className={styles.waveformPlayed} style={{ clipPath: `inset(0 ${100 - progress}% 0 0)` }} />
         <span className={styles.playhead} style={{ left: `${progress}%` }} />
       </div> : <div className={styles.noRecording}>No audio recording is attached to this log.</div>}
-      <audio ref={audio} src={log.recording.url} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setProgress(0); }} onTimeUpdate={() => { const element = audio.current; if (element && element.duration) setProgress(element.currentTime / element.duration * 100); }} />
+      <audio ref={audio} src={log.recording.url || undefined} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setProgress(0); }} onTimeUpdate={() => { const element = audio.current; if (element && element.duration) setProgress(element.currentTime / element.duration * 100); }} />
       <div className={styles.recordingActions}>
         <button type="button" className={styles.detailButton} disabled={!log.recording.url} onClick={togglePlayback}>{playing ? <Pause size={16} /> : <Play size={16} />}<span>{!log.recording.url ? "No Recording" : playing ? "Pause Recording" : "Play Recording"}</span></button>
         <button type="button" className={`${styles.detailButton} ${styles.tagButton}`} onClick={onAddTag}><Star size={16} /><span>Add Tag</span></button>
@@ -99,8 +105,8 @@ function LogDetails({ log, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }:
       <div className={styles.summary}><h3>Summary</h3><p>{log.summary}</p></div>
     </div>
     <div className={styles.detailRight}>
-      <img className={styles.mapPreview} src={log.field.mapImageUrl} alt={`Satellite map of ${log.field.name} showing the work location`} />
-      <button type="button" className={styles.detailButton} onClick={onExpandMap}><Expand size={16} /><span>Expand Map</span></button>
+      <>{log.field.mapImageUrl ? <img className={styles.mapPreview} src={log.field.mapImageUrl} alt={`Satellite map of ${log.field.name} showing the work location`} /> : <div className={styles.noRecording}>No map is attached to this log.</div>}</>
+      <button type="button" className={styles.detailButton} disabled={!log.field.mapImageUrl} onClick={onExpandMap}><Expand size={16} /><span>Expand Map</span></button>
     </div>
   </div>;
 }
@@ -115,10 +121,13 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOrder>("date-asc");
-  const [monthOnly, setMonthOnly] = useState(true);
+  const today = data.metrics.asOf;
+  const [dateFilter, setDateFilter] = useState<DateFilter>(() => initialDateFilter(
+    initialExpandedId ? data.logs.filter(log => log.id === initialExpandedId).map(log => log.date) : data.logs.map(log => log.date), today,
+  ));
   const [activity, setActivity] = useState("");
   const [field, setField] = useState("");
-  const [popover, setPopover] = useState<"sort" | "filter" | null>(null);
+  const [popover, setPopover] = useState<"sort" | "filter" | "date" | null>(null);
   const [mapLog, setMapLog] = useState<EmployeeLog | null>(null);
   const [tagLog, setTagLog] = useState<EmployeeLog | null>(null);
   const [tagDraft, setTagDraft] = useState("");
@@ -130,28 +139,47 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const main = useRef<HTMLDivElement>(null);
   const tableBody = useRef<HTMLTableSectionElement>(null);
   const controls = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const logCard = useRef<HTMLElement>(null);
   useEffect(() => { setExpandedId(initialExpandedId); }, [initialExpandedId]);
+  useEffect(() => {
+    if (!activityPage || !initialExpandedId || expandedId !== initialExpandedId) return;
+    // Run after the shared shell resets its scroll position on navigation.
+    const frame = requestAnimationFrame(() => document.getElementById(`details-${initialExpandedId}`)?.scrollIntoView({ block: "nearest" }));
+    return () => cancelAnimationFrame(frame);
+  }, [activityPage, initialExpandedId, expandedId]);
 
   useEffect(() => {
     if (!popover) return;
-    const trigger = controls.current?.querySelector<HTMLButtonElement>(`[aria-haspopup="${popover === "sort" ? "menu" : "dialog"}"]`);
+    const trigger = controls.current?.querySelector<HTMLButtonElement>(`[data-popover-trigger="${popover}"]`);
     const firstControl = popover === "sort"
-      ? controls.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]') ?? controls.current?.querySelector<HTMLElement>('[role="menuitemradio"]')
-      : controls.current?.querySelector<HTMLElement>("select");
-    firstControl?.focus();
-    function dismiss(event: PointerEvent) { if (!controls.current?.contains(event.target as Node)) setPopover(null); }
+      ? panel.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]') ?? panel.current?.querySelector<HTMLElement>("button")
+      : popover === "filter" ? panel.current?.querySelector<HTMLElement>('[role="combobox"]')
+      : panel.current?.querySelector<HTMLElement>("input") ?? panel.current?.querySelector<HTMLElement>("button");
+    // The portal is positioned before it becomes visible; focus on the next frame.
+    const focusFrame = requestAnimationFrame(() => firstControl?.focus());
+    function dismiss(event: Event) {
+      if (!controls.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) setPopover(null);
+    }
     function escape(event: KeyboardEvent) { if (event.key === "Escape") { setPopover(null); trigger?.focus(); } }
     document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("focusin", dismiss);
     document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); };
+    return () => { cancelAnimationFrame(focusFrame); document.removeEventListener("pointerdown", dismiss); document.removeEventListener("focusin", dismiss); document.removeEventListener("keydown", escape); };
   }, [popover]);
 
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 3500); return () => clearTimeout(timer); }, [notice]);
 
+  const range = useMemo(() => dateRange(dateFilter, today), [dateFilter, today]);
+  const latestMonth = data.logs.map(log => log.date.slice(0, 7)).sort().at(-1);
+  const historyMonth = latestMonth !== today.slice(0, 7) ? latestMonth : undefined;
+  const activityOptions = [...new Set(data.logs.map(log => log.activity))].map(value => ({ value, label: value }));
+  const fieldOptions = [...new Map(data.logs.map(log => [log.field.id, { value: log.field.id, label: log.field.name }])).values()];
+  function applyDate(value: DateFilter) { setDateFilter(value); setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="date"]')?.focus(); }
+
   const logs = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const filtered = data.logs.filter(log => (!monthOnly || log.date.startsWith("2026-04")) && (!activity || log.activity === activity) && (!field || log.field.id === field) && (!query || [log.employee.name, log.activity, log.field.name, formatDate(log.date), ...(tags[log.id] ?? log.tags)].join(" ").toLowerCase().includes(query)));
+    const filtered = data.logs.filter(log => (!range || (log.date >= range.from && log.date <= range.to)) && (!activity || log.activity === activity) && (!field || log.field.id === field) && (!query || [log.employee.name, log.activity, log.field.name, formatDate(log.date), ...(tags[log.id] ?? log.tags)].join(" ").toLowerCase().includes(query)));
     return filtered.sort((a, b) => {
       if (sort === "date-asc") return a.date.localeCompare(b.date);
       if (sort === "date-desc") return b.date.localeCompare(a.date);
@@ -159,7 +187,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
       if (sort === "activity") return a.activity.localeCompare(b.activity);
       return 0;
     });
-  }, [data.logs, search, activity, field, monthOnly, sort, tags]);
+  }, [data.logs, search, activity, field, range, sort, tags]);
 
   const isExpanded = logs.some(log => log.id === expandedId);
   const newCount = logs.filter(log => log.isNew).length;
@@ -178,7 +206,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     if (name === "Map") { setMapLog(data.logs.find(log => log.id === expandedId) ?? data.logs[0]); return; }
     setSection(name);
   }
-  function resetFilters() { setSearch(""); setActivity(""); setField(""); setMonthOnly(true); setSort("date-asc"); }
+  function resetFilters() { setSearch(""); setActivity(""); setField(""); setDateFilter(initialDateFilter(data.logs.map(log => log.date), today)); setSort("date-asc"); }
 
   return <div className={embedded ? styles.embedded : styles.app}>
     {!embedded && <><a className={styles.skipLink} href="#dashboard-content">Skip to dashboard</a>
@@ -208,18 +236,34 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
         <div className={styles.toolbar}><h2><DesignIcon name="log-audio" /><span>{activityPage ? "All Employee Logs" : "New Employee Logs"} <span className={styles.logCount}>({activityPage ? logs.length : newCount})</span></span></h2>
           <div className={styles.controls} ref={controls}>
             {sort !== "none" && <button type="button" className={`${styles.pill} ${styles.darkPill}`} onClick={() => setSort("none")} aria-label="Remove current sort"><X size={16} /><span>{sort.startsWith("date") ? "Date" : sort === "employee" ? "Employee" : "Activity"}</span></button>}
-            <div className={styles.popoverAnchor}><button type="button" className={styles.pill} aria-haspopup="menu" aria-expanded={popover === "sort"} onClick={() => setPopover(popover === "sort" ? null : "sort")}><ListFilter size={16} /><span>Sort</span></button>
-              {popover === "sort" && <div className={styles.popover} role="menu" aria-label="Sort logs" onKeyDown={event => {
+            <div className={styles.popoverAnchor}><button type="button" className={styles.pill} data-popover-trigger="sort" aria-haspopup="menu" aria-expanded={popover === "sort"} onClick={() => setPopover(popover === "sort" ? null : "sort")}><ListFilter size={16} /><span>Sort</span></button>
+              {popover === "sort" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="sort"]') ?? null} panelRef={panel} width={250} className={styles.popover} role="menu" aria-label="Sort logs" onKeyDown={event => {
                 const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
                 const current = items.indexOf(document.activeElement as HTMLButtonElement);
                 const next = event.key === "ArrowDown" ? (current + 1) % items.length : event.key === "ArrowUp" ? (current - 1 + items.length) % items.length : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : -1;
                 if (next >= 0) { event.preventDefault(); items[next]?.focus(); }
-                if (event.key === "Tab") { setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus(); }
-              }}><div className={styles.popoverTitle}>Sort employee logs</div>{sortOptions.map(option => <button type="button" key={option.value} role="menuitemradio" aria-checked={sort === option.value} onClick={() => { setSort(option.value); setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus(); }}><span>{option.label}</span>{sort === option.value && <Check size={15} />}</button>)}</div>}
+                if (event.key === "Tab") { setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="sort"]')?.focus(); }
+              }}><div className={styles.popoverTitle}>Sort employee logs</div>{sortOptions.map(option => <button type="button" key={option.value} role="menuitemradio" aria-checked={sort === option.value} onClick={() => { setSort(option.value); setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="sort"]')?.focus(); }}><span>{option.label}</span>{sort === option.value && <Check size={15} />}</button>)}</AnchoredPopover>}
             </div>
-            {monthOnly && <button type="button" className={`${styles.pill} ${styles.darkPill}`} onClick={() => setMonthOnly(false)} aria-label="Remove this month filter"><X size={16} /><span>This Month{!isExpanded && ` (${newCount})`}</span></button>}
-            <div className={styles.popoverAnchor}><button type="button" className={`${styles.pill} ${filterCount ? styles.appliedFilter : ""}`} aria-haspopup="dialog" aria-expanded={popover === "filter"} onClick={() => setPopover(popover === "filter" ? null : "filter")}><Funnel size={16} /><span>Filter{filterCount ? ` (${filterCount})` : ""}</span></button>
-              {popover === "filter" && <div className={`${styles.popover} ${styles.filterPopover}`} role="dialog" aria-label="Filter logs"><div className={styles.popoverTitle}>Filter employee logs</div><label>Activity<select value={activity} onChange={event => setActivity(event.target.value)}><option value="">All activities</option>{data.logs.map(log => <option key={log.activity}>{log.activity}</option>)}</select></label><label>Field<select value={field} onChange={event => setField(event.target.value)}><option value="">All fields</option>{data.logs.map(log => <option value={log.field.id} key={log.field.id}>{log.field.name}</option>)}</select></label><label className={styles.monthOption}><input type="checkbox" checked={monthOnly} onChange={event => setMonthOnly(event.target.checked)} />This month · April 2026</label><div className={styles.filterFooter}><button type="button" onClick={resetFilters}>Reset</button><button type="button" className={styles.primaryButton} onClick={() => setPopover(null)}>Done</button></div></div>}
+            <div className={styles.popoverAnchor}>
+              <div className={`${styles.pill} ${styles.datePill} ${range ? styles.darkPill : ""} ${dateFilter.kind === "this-month" ? styles.monthPill : ""}`}>
+                {range && <button type="button" className={styles.clearDate} aria-label="Clear date filter" onClick={() => applyDate({ kind: "all" })}><X size={16}/></button>}
+                <button type="button" data-popover-trigger="date" className={styles.dateTrigger} aria-label={`Date range: ${dateFilterLabel(dateFilter)}`} title={rangeDescription(range)} aria-haspopup="dialog" aria-expanded={popover === "date"} onClick={() => setPopover(popover === "date" ? null : "date")}>
+                  {!range && <CalendarDays size={15}/>}<span>{dateFilterLabel(dateFilter)}{range && !isExpanded && ` (${newCount})`}</span>{!range && <ChevronDown size={14}/>}
+                </button>
+              </div>
+              {popover === "date" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="date"]') ?? null} panelRef={panel} width={320} className={filterStyles.panel} role="dialog" aria-label="Choose date range">
+                <DateFilterPanel value={dateFilter} today={today} timezone={data.farm.timezone ?? "America/Los_Angeles"} historyMonth={historyMonth} onChange={applyDate}/>
+              </AnchoredPopover>}
+            </div>
+            <div className={styles.popoverAnchor}><button type="button" data-popover-trigger="filter" className={`${styles.pill} ${filterCount ? styles.appliedFilter : ""}`} aria-haspopup="dialog" aria-expanded={popover === "filter"} onClick={() => setPopover(popover === "filter" ? null : "filter")}><Funnel size={16} /><span>Filter{filterCount ? ` (${filterCount})` : ""}</span></button>
+              {popover === "filter" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="filter"]') ?? null} panelRef={panel} width={280} className={filterStyles.panel} role="dialog" aria-label="Filter logs">
+                <div className={filterStyles.panelHeading}><Funnel size={15}/><h3>Filter employee logs</h3></div>
+                <FilterSelect label="Activity" value={activity} onChange={setActivity} options={[{ value: "", label: "All activities" }, ...activityOptions]}/>
+                <FilterSelect label="Field" value={field} onChange={setField} options={[{ value: "", label: "All fields" }, ...fieldOptions]}/>
+                <button type="button" className={filterStyles.filterDate} onClick={() => setPopover("date")}><span>{dateFilterLabel(dateFilter)}<small>{rangeDescription(range)}</small></span><CalendarDays size={16}/></button>
+                <div className={styles.filterFooter}><button type="button" onClick={resetFilters}>Reset</button><button type="button" className={styles.primaryButton} onClick={() => { setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="filter"]')?.focus(); }}>Done</button></div>
+              </AnchoredPopover>}
             </div>
           </div>
         </div>
@@ -235,7 +279,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
                 </tr>
                 {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} tags={tags[log.id] ?? log.tags} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
               </Fragment>)}
-              {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>No matching logs</h3><p>Try another search or clear your filters.</p><button type="button" onClick={resetFilters}>Clear filters</button></td></tr>}
+              {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>No matching logs</h3><p>{range ? `No logs match your filters for ${rangeDescription(range)}.` : "Try another search or clear your filters."}</p><button type="button" onClick={() => { resetFilters(); setDateFilter({ kind: "all" }); }}>Clear filters</button></td></tr>}
             </tbody>
           </table>
         </div>

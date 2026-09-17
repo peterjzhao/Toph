@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { Dashboard } from "@/components/dashboard";
-import { dashboardData } from "@/lib/dashboard-data";
+import { Dashboard } from "@/components/dashboard/dashboard";
+import { dashboardData } from "@/fixtures/dashboard";
 
 // Local-only overlay of the actual supplied Figma export, for visual review.
 export default async function DesignCheck({ searchParams }: { searchParams: Promise<{ view?: string; overlay?: string }> }) {

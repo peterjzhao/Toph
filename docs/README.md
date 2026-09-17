@@ -1,0 +1,20 @@
+# Documentation map
+
+Start with the repository [README](../README.md) for the layout and local commands.
+
+| Area | Current guide |
+| --- | --- |
+| Web pages and data flow | [Frontend workspace](frontend-workspace.md) |
+| Vercel settings and disabled mobile endpoints | [Deployment guide](deployment.md) |
+| PostgreSQL and migrations | [Database setup](backend/setup.md) |
+| Dashboard contract v2 | [API integration](backend/integration.md) |
+| Other workspace pages | [Workspace API](backend/workspace.md) |
+| Shared web and native styling values | [Design tokens](design-tokens.md), `shared/design/tokens.ts` |
+
+Local historical prompts, agent handoffs, reference captures, and native-app documentation
+are not part of the website release. Current code contracts and the guides above describe
+the implementation.
+
+The earlier browser recording mockup and its guide have been removed after the native Expo
+port. The development-only `/design-check` dashboard comparison remains useful for Figma
+review and reads only `src/fixtures/dashboard.ts`.
