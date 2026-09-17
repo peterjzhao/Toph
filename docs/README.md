@@ -7,7 +7,9 @@ Start with the repository [README](../README.md) for the layout and local comman
 | Web pages and data flow | [Frontend workspace](frontend-workspace.md) |
 | Vercel settings and deployment checks | [Deployment guide](deployment.md) |
 | Native recording app | [Mobile README](../mobile/README.md) |
-| Shared demo accounts, profiles, and log sync | [Mobile demo API](backend/mobile-demo.md) |
+| Accounts, profiles, and log sync | [Mobile API](backend/mobile.md) |
+| Transcription and form filling | [Recording processing](backend/transcription.md) |
+| Backend, web, and mobile responsibilities | [System map](system-map.md) |
 | PostgreSQL and migrations | [Database setup](backend/setup.md) |
 | Dashboard contract v2 | [API integration](backend/integration.md) |
 | Other workspace pages | [Workspace API](backend/workspace.md) |

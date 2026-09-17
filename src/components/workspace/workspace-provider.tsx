@@ -1,11 +1,17 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { DashboardData, TagDto } from "@/contracts/dashboard";
+import type { DashboardData, DashboardResponse, TagDto } from "@/contracts/dashboard";
+import type { RealtimeConfigResponse } from "@/contracts/realtime";
 import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
+import { diffDashboard, diffRoster, employeeAvatars, liveUpdateNotice, type DashboardChange, type RosterChange } from "@/lib/realtime/changes";
+import { startLiveUpdates } from "@/lib/realtime/live-updates";
+import { connectSupabaseChannel } from "@/lib/realtime/supabase-channel";
 
 type WorkspaceContextValue = {
   data: DashboardData; workspace: WorkspaceState; saving: boolean; saveError: string; notice: string;
+  /** Employee photos by ID, as reported on each employee's logs; absent until one is set. */
+  avatars: Record<string, string>;
   update: <K extends keyof WorkspaceState>(key: K, value: WorkspaceState[K] | ((previous: WorkspaceState[K]) => WorkspaceState[K])) => Promise<boolean>;
   notify: (message: string) => void; reloadDashboard: () => Promise<void>;
 };
@@ -22,9 +28,30 @@ export async function requestJson<T>(url: string, options?: RequestInit): Promis
   return body as T;
 }
 
+// Background reads fail fast so a stalled request can never hold up the save queue.
+const LIVE_READ_TIMEOUT_MS = 15_000;
+const DASHBOARD_PAGE_SIZE = 100;
+
+/** Every log for the farm. The API returns at most 100 per request, so later pages are followed. */
+async function fetchDashboard(options?: RequestInit): Promise<DashboardData> {
+  const url = `/api/dashboard?period=all&limit=${DASHBOARD_PAGE_SIZE}`;
+  const first = await requestJson<DashboardResponse>(url, options);
+  const logs = new Map(first.data.logs.map(log => [log.id, log]));
+  let page = first;
+  let offset = page.data.logs.length;
+  while (page.meta.pagination.hasMore && page.data.logs.length > 0 && offset < 5_000) {
+    page = await requestJson<DashboardResponse>(`${url}&offset=${offset}`, options);
+    for (const log of page.data.logs) logs.set(log.id, log);
+    offset += page.data.logs.length;
+  }
+  return { ...first.data, logs: [...logs.values()] };
+}
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [state, setState] = useState<WorkspaceResponse | null>(null);
+  const dataRef = useRef<DashboardData | null>(null);
+  const dashboardRead = useRef(0);
   const stateRef = useRef<WorkspaceResponse | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const [loading, setLoading] = useState(true);
@@ -38,22 +65,71 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setData(previous => previous ? { ...previous, logs: previous.logs.map(log => log.id === id ? { ...log, tags } : log) } : previous);
   }, []);
 
-  const reloadDashboard = useCallback(async () => {
-    const response = await requestJson<{ data: DashboardData }>("/api/dashboard?period=all");
-    setData(response.data);
+  // Silent reads: no loading state, so filters, open rows, scroll position, and form drafts
+  // (all component state below this provider) survive. Each reports what changed, if anything.
+  const readDashboard = useCallback(async (options?: RequestInit): Promise<DashboardChange | null> => {
+    const read = ++dashboardRead.current;
+    const next = await fetchDashboard(options);
+    if (read !== dashboardRead.current) return null; // A newer read owns the result.
+    const previous = dataRef.current;
+    dataRef.current = next; setData(next);
+    return previous ? diffDashboard(previous, next) : null;
+  }, []);
+  const reloadDashboard = useCallback(async () => { await readDashboard(); }, [readDashboard]);
+
+  const readWorkspace = useCallback((options?: RequestInit): Promise<RosterChange | null> => {
+    // Reads share the save queue: this tab's own save is always applied before the read that
+    // its signal triggers, and an older response can never replace a newer revision.
+    const operation = queue.current.then(async () => {
+      const latest = await requestJson<WorkspaceResponse>("/api/workspace", options);
+      const current = stateRef.current;
+      if (!current || latest.revision <= current.revision) return null;
+      stateRef.current = latest; setState(latest);
+      return diffRoster(current.data, latest.data);
+    });
+    queue.current = operation.catch(() => undefined);
+    return operation;
   }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
+    const read = ++dashboardRead.current;
     try {
-      const [dashboard, workspace] = await Promise.all([
-        requestJson<{ data: DashboardData }>("/api/dashboard?period=all"),
-        requestJson<WorkspaceResponse>("/api/workspace"),
-      ]);
-      setData(dashboard.data); setState(workspace); stateRef.current = workspace;
+      const [dashboard, workspace] = await Promise.all([fetchDashboard(), requestJson<WorkspaceResponse>("/api/workspace")]);
+      if (read === dashboardRead.current) { dataRef.current = dashboard; setData(dashboard); }
+      setState(workspace); stateRef.current = workspace;
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The workspace could not be loaded."); }
     finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { dataRef.current = data; }, [data]);
+
+  // Live updates: a content-free signal (or a rejoin after a dropped connection) asks for the
+  // same reads as above. One subscription per tab, for as long as the workspace is mounted.
+  const ready = data !== null && state !== null;
+  useEffect(() => {
+    if (!ready) return;
+    const live = startLiveUpdates({
+      loadConfig: async () => (await requestJson<RealtimeConfigResponse>("/api/realtime")).data,
+      connect: connectSupabaseChannel,
+      refresh: async kinds => {
+        const [dashboard, roster] = await Promise.allSettled([
+          kinds.has("dashboard") ? readDashboard({ signal: AbortSignal.timeout(LIVE_READ_TIMEOUT_MS) }) : null,
+          kinds.has("workspace") ? readWorkspace({ signal: AbortSignal.timeout(LIVE_READ_TIMEOUT_MS) }) : null,
+        ]);
+        const logs = dashboard.status === "fulfilled" ? dashboard.value : null;
+        const team = roster.status === "fulfilled" ? roster.value : null;
+        const message = liveUpdateNotice({
+          newLogs: logs?.newLogs ?? [], addedEmployeeIds: team?.addedEmployeeIds ?? [],
+          changedEmployeeIds: [...(team?.changedEmployeeIds ?? []), ...(logs?.photoEmployeeIds ?? [])],
+          nameOf: id => stateRef.current?.data.employees.find(person => person.id === id)?.name,
+        });
+        if (message) setNotice(message);
+        if (dashboard.status === "rejected" || roster.status === "rejected") throw new Error("A live read failed and will be retried.");
+      },
+    });
+    return () => live.stop();
+  }, [ready, readDashboard, readWorkspace]);
 
   useEffect(() => { void load();
     try { const stored = localStorage.getItem(SESSION_KEY); if (stored) setSession(JSON.parse(stored)); } catch { /* A fresh browser starts with the demo administrator. */ }
@@ -113,7 +189,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return profile ? { ...log, employee: { ...log.employee, name: profile.name } } : log;
     }),
   };
-  return <WorkspaceContext.Provider value={{ data: displayData, workspace: state.data, saving: pending > 0, saveError, notice, update, notify, reloadDashboard, setLogTags, session, switchUser, signOut: () => setDemoSession(null) }}>{children}</WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ data: displayData, workspace: state.data, avatars: employeeAvatars(data), saving: pending > 0, saveError, notice, update, notify, reloadDashboard, setLogTags, session, switchUser, signOut: () => setDemoSession(null) }}>{children}</WorkspaceContext.Provider>;
 }
 
 export function useWorkspace() {

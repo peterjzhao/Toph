@@ -22,6 +22,8 @@ import {
 import { colors, fonts, shared, fontSize, lineHeight, spacing } from "./styles";
 import { useTranscription } from "./use-transcription";
 import { useRecorder } from "./use-recorder";
+import { applyExtractedDetails } from "./extracted-details";
+import type { ExtractedLogFields } from "@toph/contracts/transcription";
 
 type Screen = "capture" | "review" | "saved" | "library" | "remote";
 const pageTitles: Record<Exclude<Screen, "review">, string> = { capture: "Record", saved: "Draft saved", library: "Logs", remote: "Saved log" };
@@ -52,7 +54,16 @@ export default function RecordingWorkspace() {
   const draftId = useRef<string | null>(null);
   const saveInProgress = useRef(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const transcription = useTranscription();
+  const editedFields = useRef(new Set<keyof WorkDetails>());
+  const previousSuggestions = useRef<ExtractedLogFields | null>(null);
+  const transcription = useTranscription({
+    context: { accountId: profile.id, referenceDate: details.workDate || localDate() },
+    onFields: fields => {
+      const previous = previousSuggestions.current;
+      previousSuggestions.current = fields;
+      setDetails(current => applyExtractedDetails(current, fields, bootstrap?.fields ?? [], editedFields.current, previous));
+    },
+  });
   const { clips, transcript, append, load } = transcription;
   const freshRecording = useRef(false);
   const closeAccount = useCallback(() => setAccountOpen(false), []);
@@ -125,6 +136,8 @@ export default function RecordingWorkspace() {
 
   function clearTranscript() {
     freshRecording.current = false;
+    editedFields.current.clear();
+    previousSuggestions.current = null;
     load([]);
   }
 
@@ -137,6 +150,7 @@ export default function RecordingWorkspace() {
   }
 
   function change<K extends keyof WorkDetails>(key: K, value: WorkDetails[K]) {
+    editedFields.current.add(key);
     setDetails((current) => ({ ...current, [key]: value }));
     setError("");
   }
@@ -210,6 +224,8 @@ export default function RecordingWorkspace() {
       if (remote) { setRemoteLog(remote); setScreen("remote"); return; }
       setSaved(draft); setScreen("saved"); return;
     }
+    editedFields.current = new Set((Object.keys(emptyDetails) as (keyof WorkDetails)[]).filter(key => Array.isArray(draft[key]) ? draft[key].length > 0 : Boolean(draft[key])));
+    previousSuggestions.current = null;
     setDetails({ field: draft.field, activity: draft.activity, workDate: draft.workDate,
       startTime: draft.startTime, endTime: draft.endTime, notes: draft.notes,
       product: draft.product, amount: draft.amount, unit: draft.unit, tags: draft.tags });

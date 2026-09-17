@@ -1,9 +1,10 @@
 /** Settings for the local phone app, separate from server identity/auth. */
 import { File, Paths } from "expo-file-system";
 import { storageDirectoryName } from "./local-drafts";
+import { workActivities } from "@toph/contracts/recording";
 
 export const fields = "ABCDEFGHIJK".split("").map((letter) => `FIELD ${letter}`);
-export const activities = ["Spraying", "Fertilizing", "Planting", "Irrigation", "Harvesting", "Scouting", "Pruning", "Soil work", "Equipment maintenance", "Weeding", "Monitoring", "Soil Testing", "Seeding", "Pest Control"];
+export const activities: string[] = [...workActivities];
 export type RecordingProfile = { name: string; defaultField: string; defaultActivity: string };
 export const defaultProfile: RecordingProfile = { name: "Isaac Wang", defaultField: "FIELD A", defaultActivity: "Spraying" };
 

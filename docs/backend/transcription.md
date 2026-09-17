@@ -1,67 +1,94 @@
-# Mobile transcription
+# Recording transcription and form filling
 
-`POST /api/mobile/v1/transcriptions` accepts multipart `file` and returns
-`{ "data": { "text": "…" } }`. It forwards audio to OpenAI's `gpt-4o-transcribe`
-using the server-only `OPENAI_API_KEY`. It sends no category prompt and does no
-structured extraction, note generation, or database mutation. The mobile review
-screen displays the text in a dedicated Transcript section and saves it alongside
-the device draft when the user saves.
+`POST /api/mobile/v1/transcriptions` processes a recording in two steps:
 
-## Local setup
+1. OpenAI `gpt-4o-transcribe` returns the speech as text.
+2. OpenAI `gpt-4.1-mini` uses strict Structured Outputs to extract the work-log fields.
 
-Root `.env.local`:
+The shared Zod schema is `extractedLogSchema` in `src/contracts/transcription.ts`.
+`ExtractedLogFields` is inferred from that schema, the TypeScript equivalent of a validated
+Python dataclass/Pydantic model. It contains field ID, activity, work date, start/end times,
+notes, product, amount, unit, and tags. Field IDs come from the configured farm's database;
+activities, units, and tags share the native form's vocabulary in `src/contracts/recording.ts`.
+
+Missing or ambiguous facts are null. The model must not invent times, field identities,
+products or doses. Relative dates use the supplied reference date and the farm timezone.
+The server validates the output again, including the field catalog and calendar date.
+The worker reviews and edits the suggestions before Save log. Explicit edits win over
+later AI suggestions, including appended recordings; a spoken correction can clear an
+earlier automatic suggestion. No work log is created by the processing endpoint.
+
+## Setup
+
+Set these server-only values in root `.env.local` for local testing and in Vercel Production
+for the hosted app:
 
 ```dotenv
-OPENAI_API_KEY=your-openai-api-key
-TOPH_TRANSCRIPTION_DEV_TOKEN=use-a-random-token-of-at-least-32-characters
+OPENAI_API_KEY=your-project-api-key
+TOPH_TRANSCRIPTION_ENABLED=true
+TOPH_MOBILE_ENABLED=true
 ```
 
-`mobile/.env`:
+Keep `.env.local` ignored. Never put the OpenAI key in mobile environment variables or
+`NEXT_PUBLIC_*`. A separate bundled transcription token is no longer used. Apply migration
+`0006_recording_processing.sql` with the migration runner and run `npm run db:enable-mobile`.
+The application uses the restricted database role, not the schema owner.
 
-```dotenv
-EXPO_PUBLIC_TOPH_API_URL=http://127.0.0.1:3000
-EXPO_PUBLIC_TOPH_TRANSCRIPTION_TOKEN=the-same-local-token
-```
+The farm has a shared allowance of 12 processing requests per minute and 120 per UTC day,
+including failed provider attempts and extraction retries. Atomic PostgreSQL counters
+apply across Vercel instances. This bounds usage for the explicitly chosen shared-account
+application; it does not add user sign-in. The flag is a separate opt-in for paid AI calls.
 
-Use `openssl rand -hex 32` to generate a token. Both env files are gitignored.
-Only the separate development token is bundled into Expo; never use an OpenAI key
-as the public token. The route rejects production execution. Real authenticated
-user access, distributed rate limits, and deployment-specific upload limits are
-required before enabling it outside local development.
+## Request and response
 
-The existing server is loopback-bound. iOS Simulator can use the origin above;
-Android Emulator uses `http://10.0.2.2:3000`. A phone needs a reachable Mac LAN
-origin and an explicitly LAN-bound Next.js development process. Reload Expo after
-changing public variables; rebuild release apps to update embedded configuration.
+Initial request is multipart `file` plus JSON `context` containing `accountId`,
+`referenceDate` (`YYYY-MM-DD`), and optional `previousTranscript`. Audio is limited to 3.8 MB
+and checked for supported MIME/container signatures before forwarding. Supported formats:
+M4A/MP4, MP3, WAV, WebM. Uploads live only in request memory.
 
-## Behavior and bounds
+Response is `{ data: { text, transcript, fields, missingFields, extractionError } }`.
+`text` is this clip's speech; `transcript` combines all clips in order. `fields` is the
+validated object, or null if extraction failed. An extraction failure retains successful
+speech. The client can retry with JSON `{ context, transcript }` to run extraction alone,
+without uploading or transcribing completed audio again. Errors and responses are no-store.
 
-- Authentication and configuration checks run before reading the upload.
-- Exactly one nonempty file, up to 25,000,000 bytes; body limits also apply without
-  Content-Length. Accepted formats: M4A/MP4, MP3, WAV, WebM, with MIME/extension and
-  container-signature checks. OpenAI performs the final audio decoding validation.
-- Two in-flight requests and twelve admitted requests per minute per process.
-- OpenAI timeout: 60 seconds; mobile upload/response timeout: 90 seconds.
-- Abort signals propagate to fetch. Completed upstream work may still incur usage
-  when a request is cancelled; stale results never replace the active mobile log.
-- Uploads exist in memory for the request only. They are not retained on the server.
-- Response: no-store JSON. Errors are sanitized `{ error: { code, message } }` with
-  400/413/415 for uploads, 401 for wrong local token, 503 for missing configuration
-  or production mode, 422 for no speech, 429 for throttling, 502/504 for provider
-  failure/timeout, and 499 for cancellation observed by the provider call.
-- Appended recordings are separate playable/shareable clips within one device log.
-  Transcripts are joined in recording order; already completed clips are not sent
-  again. Cancel retains clips and completed transcript text for retry/manual review.
-- Device drafts are the existing local prototype storage, not PostgreSQL-backed
-  mobile sync. The dashboard database and its API contracts are unchanged.
+The app applies suggestions only to untouched fields. Appending audio re-extracts one work
+log from the entire transcript. Cancel aborts the request and retains audio/completed text;
+stale responses cannot change another draft or account. Raw audio is saved to PostgreSQL
+only by the separate log-save endpoint. Extraction uses `store: false` with OpenAI Responses.
 
-## Verification
+## Testing
 
-Run root `npm run test:unit` and `npm run typecheck`; then in `mobile/`, run
-`npm test -- --runInBand` and `npm run typecheck`. Tests use fake provider responses,
-not live OpenAI. They cover upload validation, server credential boundaries, errors,
-request aborts, stale responses, ordered append/retry, and local multi-clip saving.
-A real end-to-end speech test requires `OPENAI_API_KEY`; none was present during
-implementation. No PostgreSQL persistence claim is made for mobile drafts.
+- `npm run test:unit` checks provider requests, schema validation, malformed/oversize uploads,
+  configuration, refusals, incomplete results, cancellation and sanitized errors.
+- `npm run test:backend` requires the guarded disposable test database and checks real
+  persistence and distributed limits. Provider responses in that suite are mocked.
+- In `mobile/`, `npm test -- --runInBand` checks all-category form filling, manual edits,
+  spoken corrections, append/retry, and transcript retention after extraction failure.
+- After deployment and key configuration, run
+  `npm run check:recording -- public/assets/sample-recording.mp3` to call the live hosted
+  endpoint. The sample is synthesized speech identified in the repository, not a private
+  farm recording. The script prints the transcript and fields and does not save a work log.
+  Pass another audio path, and optionally another server origin, to test your own recording.
 
-Reference: [official OpenAI transcription guide](https://developers.openai.com/api/docs/guides/speech-to-text).
+A missing key is a real test blocker; passing mocked tests must not be described as a live
+OpenAI verification. See [architecture](../system-map.md) for how the two apps share a server.
+
+## Verification recorded September 16, 2026
+
+The production Next.js build and both TypeScript checks pass. Backend tests pass against
+the separate local PostgreSQL test database, including atomic quotas, field validation,
+transcript retention, extraction retries, and legacy mobile receipts. Native tests pass,
+including filling every category in the actual review form and preserving worker edits.
+The updated iOS Release binary built and installed on the connected iPhone.
+
+Supabase migrations through `0006` and the restricted runtime grants are applied. A local
+production build connected to that hosted database and loaded 11 accounts, 11 fields, and
+account logs. Vercel Production has `TOPH_MOBILE_ENABLED=true` and
+`TOPH_TRANSCRIPTION_ENABLED=true`; the old demo flag was replaced. No deployment was
+triggered by this task. `OPENAI_API_KEY` is still absent both locally and on Vercel, so the
+real recording smoke check returns 503 at configuration validation. No live OpenAI call
+or transcription result has been verified yet.
+
+Sources: [OpenAI speech-to-text](https://developers.openai.com/api/docs/guides/speech-to-text)
+and [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).

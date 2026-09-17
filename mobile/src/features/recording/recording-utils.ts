@@ -1,11 +1,12 @@
 /** Pure helpers shared by the recording screens. */
 import type { RecordingDraft } from "./local-drafts";
+import { treatmentActivities as sharedTreatmentActivities, treatmentUnits, workTags } from "@toph/contracts/recording";
 
 export type WorkDetails = Pick<RecordingDraft, "field" | "activity" | "workDate" | "startTime" | "endTime" | "notes" | "product" | "amount" | "unit" | "tags">;
 
-export const suggestedTags = ["Needs review", "Equipment", "Follow-up"];
-export const unitOptions = ["L", "mL", "kg", "g", "gal", "lb"];
-export const treatmentActivities = ["Spraying", "Fertilizing", "Pest Control"];
+export const suggestedTags: string[] = [...workTags];
+export const unitOptions: string[] = [...treatmentUnits];
+export const treatmentActivities: string[] = [...sharedTreatmentActivities];
 export const emptyDetails: WorkDetails = { field: "FIELD A", activity: "Spraying", workDate: "", startTime: "", endTime: "", notes: "", product: "", amount: "", unit: "L", tags: [] };
 export const sampleDetails: WorkDetails = {
   ...emptyDetails, workDate: "2026-04-19", startTime: "06:00", endTime: "10:40",

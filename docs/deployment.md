@@ -33,7 +33,9 @@ In **Settings → Environment Variables**, select **Production** for these serve
 | `TOPH_FARM_ID` | `00000000-0000-4000-8000-000000000001` |
 | `APP_ORIGIN` | `https://toph-rho.vercel.app` (no trailing slash) |
 | `DATABASE_SSL_CA_PATH` | `certs/supabase-prod-ca-2021.crt` |
-| `TOPH_MOBILE_DEMO_ENABLED` | `true` (shared farm demo accounts, profiles, and log sync) |
+| `TOPH_MOBILE_ENABLED` | `true` (shared farm profiles and log sync) |
+| `TOPH_TRANSCRIPTION_ENABLED` | `true` when the server key is configured and recording processing is wanted |
+| `OPENAI_API_KEY` | Server-only project key for speech and structured extraction; store as a Vercel secret |
 
 The certificate is public, not a credential. `next.config.ts` explicitly includes it in
 `/api/**` output traces, so that relative path exists in the deployed server function.
@@ -43,7 +45,7 @@ Remote `sslmode=disable` is rejected; even `sslmode=require` cannot turn verific
 Prepared statements are disabled for compatibility with the transaction pooler.
 
 Do **not** add `DATABASE_MIGRATION_URL`, `DATABASE_APP_ROLE`, `TEST_DATABASE_URL`,
-`TEST_DATABASE_APP_URL`, Supabase admin/service-role/secret keys, `OPENAI_API_KEY`, or
+`TEST_DATABASE_APP_URL`, Supabase admin/service-role/secret keys, or
 `TOPH_TRANSCRIPTION_DEV_TOKEN` to this deployment. None of the runtime variables above
 uses `NEXT_PUBLIC_`. Do not disable TLS with `NODE_TLS_REJECT_UNAUTHORIZED=0`.
 
@@ -53,9 +55,10 @@ writable preview. If a preview is needed later, give it an isolated database and
 
 ## Database and access boundary
 
-The hosted `toph-dev` database has migrations `0000`–`0004` and the original data. Migration
-`0004` and the restricted role's mobile grants were applied on September 16, 2026. The mobile
-opt-in flag is set in Vercel Production and takes effect on the next deployment.
+Apply migrations through `0006_recording_processing` locally using the owner connection,
+then run `npm run db:enable-mobile` for the runtime role. Migration `0005` corrects the
+employee roster; `0006` adds shared transcription usage counters. Applied migration files
+keep their original names. The user performs the commit/push that updates Vercel.
 Do not rerun migration or seed commands as a Vercel build step. Future migrations are an
 explicit operator action using credentials kept locally, following [database setup](backend/setup.md).
 
@@ -65,14 +68,12 @@ and writes that pass the origin check share its data. The origin check prevents 
 browser writes, not direct API access. Keep private data out until authentication and
 authorization are implemented. Messages/support requests are saved records, not delivery.
 
-The app uses `/api/mobile/demo/v1/accounts`, `/logs`, and `/recordings/:id`. The demo endpoints
-share the farm's sample data. See [mobile connection setup](backend/mobile-demo.md) for
-profile updates, retry-safe uploads, and the 3.8 MB combined recording limit.
-
-The separate `POST /api/mobile/v1/logs` remains disabled with `503 MOBILE_SYNC_DISABLED` and performs no
-database, storage, or auth work. `POST /api/mobile/v1/transcriptions` always returns
-`503 NOT_CONFIGURED` in production, even if a development token is supplied. Do not remove
-that guard. `/design-check` and `/design-reference/*` deliberately return 404 in production.
+The app uses `/api/mobile/v1/accounts`, `/logs`, `/recordings/:id`, and `/transcriptions`.
+See [mobile setup](backend/mobile.md) and [transcription setup](backend/transcription.md).
+Old `/api/mobile/demo/v1/*` URLs and the old mobile flag remain compatibility aliases.
+Transcription runs in production when the server key and its separate enable flag are set;
+it returns speech plus validated form fields. `/design-check` and `/design-reference/*`
+continue to return 404 in production.
 
 ## Checks before and after the user's deployment
 
@@ -96,11 +97,13 @@ After the user commits and pushes, check:
 - `/api/health` returns 200 with `database: "connected"`.
 - `/api/dashboard` and `/api/workspace` return stored data, not database configuration errors.
 - A deliberate sample-data edit survives reload; check its origin if writes return 403.
-- `npm run check:mobile-server` passes against the production URL: health, demo accounts,
+- `npm run check:mobile-server` passes against the production URL: health, accounts,
   and account logs all return 200.
 - Reopen the updated phone app, choose an account, save a profile/photo change, and save a
   short log. Confirm the saved details survive reopening and the log appears on the website.
-- The original `/api/mobile/v1/*` endpoints still return 503; design comparison URLs return 404.
+- With the OpenAI key configured, `npm run check:recording -- public/assets/sample-recording.mp3`
+  returns speech and structured fields. This uses the live provider without saving a log.
+- Design comparison URLs return 404 in production.
 
 Sources: the installed Next.js `output` and environment-variable docs under
 `node_modules/next/dist/docs`, [Vercel project settings](https://vercel.com/docs/project-configuration/project-settings),

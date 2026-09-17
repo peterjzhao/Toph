@@ -118,6 +118,8 @@
 .summary p { margin: 0; font-size: var(--toph-font-size-control); font-weight: var(--toph-font-weight-regular); line-height: var(--toph-line-height-control); color: var(--toph-color-text-disabled); overflow-wrap: break-word; }
 .detailRight { display: flex; flex-direction: column; justify-content: center; gap: var(--toph-spacing-lg); min-width: 0; }
 .mapPreview { width: 100%; aspect-ratio: 594 / 335.08; display: block; border-radius: var(--toph-radius-card); }
+.mapLink { display: block; overflow: clip; border-radius: var(--toph-radius-card); }
+.mapLink:focus-visible { outline: 2px solid var(--toph-color-focus); outline-offset: 3px; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tags > span { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #d3e3d8; background: #f3f8f4; border-radius: var(--toph-radius-section); color: var(--toph-color-brand); font-size: var(--toph-font-size-caption); padding: var(--toph-spacing-xxs) 9px; }
 .emptyRow { display: block; }

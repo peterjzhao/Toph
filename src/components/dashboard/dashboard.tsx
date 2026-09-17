@@ -1,5 +1,6 @@
 "use client";
 
+import { FieldMap } from "./field-map";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays, Check, ChevronDown, Expand, Funnel, ListFilter, Minus, Pause, Play,
@@ -59,10 +60,10 @@ function Modal({ title, children, onClose, wide = false }: { title: string; chil
   </dialog>;
 }
 
-function MapDialog({ log, onClose }: { log: EmployeeLog; onClose: () => void }) {
+function MapDialog({ log, fields, onClose }: { log: EmployeeLog; fields: EmployeeLog["field"][]; onClose: () => void }) {
   const [zoom, setZoom] = useState(1);
   return <Modal title={log.field.name} onClose={onClose} wide>
-    <div className={styles.largeMapViewport}><img className={styles.largeMap} src={log.field.mapImageUrl} alt={`Satellite view of ${log.field.name} with the recorded work location marked`} style={{ width: `${zoom * 100}%`, maxWidth: "none" }} /></div>
+    <div className={styles.largeMapViewport}><FieldMap field={log.field} fields={fields} imageUrl={log.field.mapImageUrl} zoom={zoom} /></div>
     <div className={styles.mapFooter}><span>{log.employee.name} · {formatDate(log.date)}</span><div className={styles.zoomControls}>
       <button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoom(Math.max(1, zoom - .5))}><Minus size={16} /></button>
       <button type="button" aria-label="Reset map zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
@@ -71,7 +72,7 @@ function MapDialog({ log, onClose }: { log: EmployeeLog; onClose: () => void }) 
   </Modal>;
 }
 
-function LogDetails({ log, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }: { log: EmployeeLog; tags: string[]; onAddTag: () => void; onRemoveTag?: (label: string) => Promise<void>; onExpandMap: () => void; onNotify: (text: string) => void }) {
+function LogDetails({ log, fields, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }: { log: EmployeeLog; fields: EmployeeLog["field"][]; tags: string[]; onAddTag: () => void; onRemoveTag?: (label: string) => Promise<void>; onExpandMap: () => void; onNotify: (text: string) => void }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [clipIndex, setClipIndex] = useState(0);
@@ -109,7 +110,7 @@ function LogDetails({ log, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }:
       <div className={styles.summary}><h3>Summary</h3><p>{log.summary}</p></div>
     </div>
     <div className={styles.detailRight}>
-      <>{log.field.mapImageUrl ? <img className={styles.mapPreview} src={log.field.mapImageUrl} alt={`Satellite map of ${log.field.name} showing the work location`} /> : <div className={styles.noRecording}>No map is attached to this log.</div>}</>
+      {log.field.mapImageUrl ? <div className={styles.mapLink}><FieldMap field={log.field} fields={fields} imageUrl={log.field.mapImageUrl} /></div> : <div className={styles.noRecording}>No map is attached to this log.</div>}
       <button type="button" className={styles.detailButton} disabled={!log.field.mapImageUrl} onClick={onExpandMap}><Expand size={16} /><span>Expand Map</span></button>
     </div>
   </div>;
@@ -306,7 +307,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
                   <td>{log.employee.name}</td><td>{log.activity}</td><td>{formatDate(log.date)}</td><td>{log.field.name}</td><td>{formatTime(log.startAt, data.farm.timezone)} - {formatTime(log.endAt, data.farm.timezone)}</td>
                   <td className={styles.actionCell}><button type="button" className={styles.viewButton} aria-label={`${expandedId === log.id ? "Close" : "View"} ${log.employee.name}'s log`} aria-expanded={expandedId === log.id} aria-controls={expandedId === log.id ? `details-${log.id}` : undefined} onClick={event => { event.stopPropagation(); toggleLog(log.id); }}>{expandedId === log.id ? "Close" : "View"}</button></td>
                 </tr>
-                {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} tags={tags[log.id] ?? log.tags} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
+                {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} fields={data.logs.map(item => item.field)} tags={tags[log.id] ?? log.tags} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
               </Fragment>)}
               {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>No matching logs</h3><p>{range ? `No logs match your filters for ${rangeDescription(range)}.` : "Try another search or clear your filters."}</p><button type="button" onClick={() => { resetFilters(); setDateFilter({ kind: "all" }); }}>Clear filters</button></td></tr>}
             </tbody>
@@ -315,7 +316,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
       </section>
     </div>
 
-    {mapLog && <MapDialog log={mapLog} onClose={() => setMapLog(null)} />}
+    {mapLog && <MapDialog log={mapLog} fields={data.logs.map(item => item.field)} onClose={() => setMapLog(null)} />}
     {tagLog && <Modal title="Add a tag" onClose={() => setTagLog(null)}><form className={styles.tagForm} onSubmit={async event => {
       event.preventDefault(); const value = tagDraft.trim();
       if (!value) { setTagError("Enter a tag name."); return; }

@@ -16,7 +16,7 @@ describe("versioned migrations", () => {
     await sql.end();
   });
 
-  it("creates the private toph schema with the web and mobile demo tables and dashboard_logs view", async () => {
+  it("creates the private toph schema with the web and mobile tables and dashboard_logs view", async () => {
     const result = await runMigrations(getTestDatabaseTarget().url);
     expect(result.applied).toBeGreaterThan(0);
 
@@ -28,6 +28,7 @@ describe("versioned migrations", () => {
       "mobile_recordings",
       "mobile_submissions",
       "tags",
+      "transcription_usage",
       "work_log_tags",
       "work_logs",
       "workspace_state",

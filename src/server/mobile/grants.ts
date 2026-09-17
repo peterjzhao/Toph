@@ -8,5 +8,7 @@ export async function applyMobileGrants(sql: postgres.Sql, role: string) {
     await tx`grant update (avatar_url, default_field, default_activity) on toph.mobile_profiles to ${tx(role)}`;
     await tx`grant insert on toph.work_logs, toph.employees to ${tx(role)}`;
     await tx`grant update (display_name, avatar_path, updated_at) on toph.employees to ${tx(role)}`;
+    await tx`grant select, insert on toph.transcription_usage to ${tx(role)}`;
+    await tx`grant update (minute_start, minute_count, day_start, day_count) on toph.transcription_usage to ${tx(role)}`;
   });
 }

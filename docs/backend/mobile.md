@@ -1,110 +1,68 @@
-# Mobile connection boundary
+# Mobile API
 
-The iOS and Android apps should use the same Next.js API. The server validates the user,
-derives their farm and employee identity, and writes through Drizzle to PostgreSQL. Database
-credentials stay on the server. Audio belongs in private object storage; PostgreSQL stores
-its durable object reference and recording metadata.
+The Expo app in `mobile/` calls the same Next.js backend and PostgreSQL database as the
+website. Canonical endpoints live under `/api/mobile/v1`; service code is in
+`src/server/mobile/`, and shared types are in `src/contracts/mobile.ts`.
 
-```mermaid
-flowchart LR
-  A[Native app and local drafts] -->|HTTPS + user access token| B[Next.js API]
-  B -->|Validate identity and farm access| C[Server services]
-  C --> D[Drizzle / PostgreSQL]
-  C --> E[Private audio storage]
-```
+The existing farm accounts are shared profiles without sign-in. Selecting an account
+chooses the author of a log; it is not authentication. All reads and writes are scoped to
+the server's configured farm. The database and uploaded recordings are real persisted data.
 
-This is the intended connected architecture. **Mobile sync is currently disabled.** No auth,
-database, bucket, or remote service was configured as part of this preparation.
+## Endpoints
 
-## Implemented now
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/mobile/v1/accounts` | Farm, active employee accounts, fields, defaults, revision, upload limit |
+| `PATCH /api/mobile/v1/accounts/:id` | Edit name, role, contact details, photo and defaults; reject stale revision |
+| `GET /api/mobile/v1/logs?accountId=…` | Up to 100 recent logs for an active farm account |
+| `POST /api/mobile/v1/logs` | Atomically save the reviewed log, all clips, treatment, tags and retry receipt |
+| `GET /api/mobile/v1/recordings/:id` | Farm recording with byte-range playback support |
+| `POST /api/mobile/v1/transcriptions` | Transcript and structured form suggestions; see [recording processing](transcription.md) |
 
-- `src/contracts/mobile.ts`: the submission and committed-receipt types, shared with Expo
-  through type-only `@toph/contracts/*` imports. Existing dashboard contract v2 is unchanged.
-- `mobile/src/features/recording/submission.ts`: converts a saved native draft into upload
-  metadata and a native audio descriptor. It preserves notes, transcript, treatment details,
-  tags, business date, and wall-clock times. It rejects sample recordings and invalid details.
-- `mobile/src/lib/api/mobile-client.ts`: injectable native HTTP client with bearer tokens,
-  multipart audio, cancellation, timeout, typed API errors, and receipt validation. No
-  construction-time requests, environment defaults, automatic retries, or local deletions.
-- `POST /api/mobile/v1/logs`: reserved endpoint returning HTTP 503 with
-  `MOBILE_SYNC_DISABLED`. It does not parse the body or import auth, storage, or database code.
+`TOPH_MOBILE_ENABLED=true` enables mobile access. Writes require `X-Toph-Client: toph-mobile`
+and reject foreign browser origins. This is a deliberate-client check, not a secret or
+user authentication. The previous `TOPH_MOBILE_DEMO_ENABLED` setting is accepted only when
+the canonical setting is absent, to support the existing deployment.
 
-The app's Save action still calls local `saveDraft`. No screen imports the new client or
-submission adapter. Transcription is a separate, implemented local endpoint; see [transcription setup](transcription.md). It does not enable log submission or database persistence. Multi-clip drafts are explicitly rejected by the future single-file submission adapter so appended audio cannot be silently dropped.
+The old `/api/mobile/demo/v1/*` URLs are thin compatibility aliases for installed app builds
+and existing audio links. They call the same canonical handlers and database services.
+The legacy header and `demo-1` submission version remain readable, including retry receipts;
+new code sends version `1`. The duplicate disabled log route and unused native submission
+client have been removed. Applied SQL migrations retain their original filenames.
 
-## What the eventual call looks like
+## Account and recording behavior
 
-Illustrative integration only; this is not run by the app:
+Tap the avatar to select an account or edit it. Photos use the system picker, crop to a
+square, resize to 256 pixels and compress to JPEG. The server accepts bounded JPEG/PNG data
+URLs (128 KB decoded). Profile edits update the website's roster and normalized log avatars;
+field/activity defaults and thumbnails persist in `toph.mobile_profiles`.
 
-```ts
-import { createMobileApiClient } from "@/lib/api/mobile-client";
-import { prepareLogSubmission } from "@/features/recording/submission";
+Switching accounts first saves incomplete work on the device with its original author.
+Save log keeps a durable local copy, uploads all clips, and stores a verified server receipt.
+Failures retain the draft for Sync log. Identical retries return the same dashboard log ID;
+changed content under an already committed draft ID returns 409. Synced logs are read-only.
 
-// apiOrigin, authSession, draft, and selectedField come from the future integration.
-const api = createMobileApiClient({
-  baseUrl: apiOrigin,
-  getAccessToken: () => authSession.getAccessToken(),
-});
-const submission = prepareLogSubmission(draft, selectedField.id);
-const receipt = await api.submitLog(submission);
-// After a confirmed commit, save receipt.logId beside the local draft.
-```
+Small audio clips are stored as binary PostgreSQL rows transactionally with their log.
+Limits are eight clips and 3.8 MB combined audio per log, 100 MB stored audio and 1,000 mobile
+submissions per farm. Over-limit recordings remain on the device and can be shared. Larger
+production uploads can move to private object storage without changing the log concepts.
 
-`createMobileApiClient()` with no configuration is valid and inert. Attempting to submit
-throws `NOT_CONFIGURED` before calling fetch. Even a configured client currently receives
-`MOBILE_SYNC_DISABLED` from the reserved route.
+The seed contains eleven employee profiles plus a separate web administrator, not an extra
+Peter employee. Migration `0005` corrects the earlier roster and refuses to delete recorded
+history. Migration `0006` adds distributed transcription counters.
 
-The native multipart request has `metadata` (JSON) and optional `audio` (file bytes). The
-transport sets the multipart boundary. The API origin must be HTTPS, without a path or
-credentials. Tests inject fake fetch; a future local device test may explicitly pass
-`allowInsecureHttp: true`. A physical phone's localhost is the phone, so connecting to this
-Mac later will require a reachable development origin and an explicitly configured server
-binding. None of those settings have been changed.
+## Setup and checks
 
-The metadata deliberately excludes the draft's local `farmId`, employee identity, and file
-URI. Those profile values are placeholders, not proof of identity. `fieldId` must come from
-the future authenticated field catalog and must be checked again on the server. The server
-resolves the farm timezone and converts the submitted date/time to instants, rejecting
-ambiguous/nonexistent daylight-saving times. The current form supports work within one day.
+Use the owner's connection locally to run `npm run db:migrate`, followed by
+`npm run db:enable-mobile` for the restricted runtime role. Do not reseed an existing farm.
+Set `TOPH_MOBILE_ENABLED=true` on Vercel Production; the app's default origin is
+`https://toph-rho.vercel.app`. Keep all database and OpenAI credentials on the server.
 
-## Work required before enabling
+Only the user commits and pushes. Vercel then builds the root application. Run
+`npm run check:mobile-server` after it shows Ready. Rebuild the phone app when native code,
+app JavaScript, or its bundled configuration changes. Server-only updates need no rebuild.
 
-1. Add real sign-in (Supabase Auth fits the intended stack), validate access tokens on the
-   server, and map users to farm membership and employee records. Enforce permissions on
-   every mobile read and write. The web app's configured farm and demo profile switching
-   are not mobile authentication. Do not spoof the web API's Origin header or relax its
-   write checks to get mobile working.
-2. Implement server validation for the multipart payload, recording MIME type, actual file
-   content, maximum duration/size, field membership, tags, and all captured fields. Client
-   validation is only convenience. Choose deployment upload limits before enabling this
-   multipart endpoint; longer recordings should use a separate signed direct-upload flow
-   rather than buffering large files through the application server.
-3. Add private storage and a durable object key. Use authorized downloads/signed playback
-   URLs rather than a public bucket, and do not persist expiring signed URLs. Clean up
-   uncommitted uploads after failures.
-4. Add migrations for user/employee membership, any missing treatment data, and submission
-   deduplication. The current work-log schema cannot retain product, amount, and unit; do
-   not silently discard them. The runtime database role currently lacks log-insert grants.
-5. Commit the log, tags, recording reference, and deduplication receipt transactionally.
-   Scope uniqueness by authenticated account/farm and `clientDraftId`. Repeated identical
-   submissions must return the same stored `logId`; changed payloads under an existing key
-   must return 409. The client already sends `Idempotency-Key: <clientDraftId>`, but the
-   disabled server does not implement deduplication yet. A later edit to a committed log
-   needs a separate update operation.
-6. Wire sign-in, the field catalog, and an explicit sync action into the app. Persist receipts
-   and retry state before implementing background sync. Preserve local audio until a
-   confirmed receipt; timeout or cancellation may occur after a server commit, so retry
-   the same submission ID. Verify the full path against isolated actual PostgreSQL and
-   private storage before enabling it for real data.
-
-## Verification
-
-`npm run test:unit` tests the disabled route without database setup. From `mobile/`,
-`npm test -- --runInBand` covers submission mapping, missing configuration/auth, HTTPS
-requirements, multipart encoding, stable retry keys, errors, cancellation, timeouts, and
-receipt validation using fake network transports. Typecheck both packages with
-`npm run typecheck` in each directory. These checks do not verify persistence or sign-in.
-
-References: [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/),
-[Supabase database connections](https://supabase.com/docs/guides/database/connecting-to-postgres),
-[Supabase private storage access](https://supabase.com/docs/guides/storage/security/access-control).
+Unit tests exercise validation and client behavior. PostgreSQL integration tests exercise
+profile persistence, photos, field/account scoping, transactional multi-clip uploads,
+idempotent retries, legacy compatibility, and transcription quotas. Mocked provider tests
+do not establish live OpenAI behavior; use the separate live check documented below.

@@ -4,10 +4,10 @@ Toph is a Next.js management dashboard backed by Drizzle and PostgreSQL. The web
 one shared farm with persistent sample data. See [Vercel deployment](docs/deployment.md) for
 the existing project's settings and deployment checks.
 
-The [Expo recording app](mobile/README.md) uses the same server and existing farm demo
+The [Expo recording app](mobile/README.md) uses the same server and existing farm
 accounts. It supports account switching, profile/photo editing, and syncing recordings or
-written logs. See [mobile connection setup](docs/backend/mobile-demo.md). Hosted transcription
-is still disabled; recordings and written notes can be saved without it.
+written logs. See [mobile connection setup](docs/backend/mobile.md). Recording processing returns a transcript plus structured form suggestions when the server
+OpenAI key and transcription flag are configured. See [what runs where](docs/system-map.md).
 
 ## Repository layout
 

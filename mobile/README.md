@@ -2,7 +2,7 @@
 
 React Native app for Toph, built with [Expo](https://expo.dev) SDK 57, React Native 0.86, Expo Router, and TypeScript. It lives in `mobile/` beside the Next.js dashboard at the repository root and has its own `package.json` and `node_modules`.
 
-The app is the worker-facing recording flow: record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. The app connects to the Vercel server using the shared farm demo accounts. See [mobile demo setup](../docs/backend/mobile-demo.md) for the required server deployment and opt-in flag. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Hosted transcription remains disabled; the optional local transcription endpoint is described below.
+The app is the worker-facing recording flow: record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. The app connects to the Vercel server using the shared farm accounts. See [mobile API setup](../docs/backend/mobile.md) for the required server deployment and opt-in flag. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when enabled on the server.
 
 ## Requirements
 
@@ -84,21 +84,18 @@ npx expo run:android --variant release --no-bundler
 
 An app already installed on a phone needs the new binary; Fast Refresh cannot update its native launch screen or launcher icon. Expo Go and development launchers may show their own loading UI, so verify a cold launch from the home screen using a Release build. See [Expo SDK 57 splash-screen documentation](https://docs.expo.dev/versions/v57.0.0/sdk/splash-screen/). If iOS still shows an old launch image after an in-place rebuild, first restart the phone/simulator to refresh its cached launch snapshot. Avoid uninstalling just to clear the cache, since local recordings and drafts live in the app's data directory.
 
-## Transcription (OpenAI)
+## Transcription and form filling
 
-Finishing a recording immediately opens Review log and starts speech-to-text through the Next.js API at `POST /api/mobile/v1/transcriptions`. The default is OpenAI's `gpt-4o-transcribe`. The raw transcript appears below the recording player; notes and categories are not generated or overwritten.
+Finishing a recording calls `POST /api/mobile/v1/transcriptions`. The server transcribes the
+speech and returns a validated object containing field, activity, date, times, notes,
+treatment and tags. The review form fills untouched fields with these suggestions. Missing
+facts stay unknown; manual edits win, including when audio is appended. Check the result
+before saving. A separate Save log request persists it to the shared PostgreSQL database.
 
-The loading state is the real `ReviewLog` layout with `ReviewSkeleton` wrappers. Shared labeled fields automatically inherit the loading context; their real children determine skeleton dimensions. Cancel aborts the pending request and keeps the audio for review/retry. Append recording captures another clip in the same log. Transcripts are joined in clip order, and retry skips clips already transcribed. All clips are copied into device storage when the draft is saved; older single-recording drafts remain readable.
-
-1. In the repository root `.env.local`, set `OPENAI_API_KEY` and a random `TOPH_TRANSCRIPTION_DEV_TOKEN` of at least 32 characters. Generate a token with `openssl rand -hex 32`.
-2. Copy `mobile/.env.example` to `mobile/.env`. Set `EXPO_PUBLIC_TOPH_API_URL` to the Next.js server origin and `EXPO_PUBLIC_TOPH_TRANSCRIPTION_TOKEN` to the same local token.
-3. Run the root Next.js development server and reload the mobile development app. If Expo does not pick up environment changes, restart Metro yourself. Release builds need rebuilding to embed changed public configuration.
-
-For the iOS simulator, use `http://127.0.0.1:3000`; for the Android emulator, use `http://10.0.2.2:3000`. Physical phones require the Mac's reachable LAN IP and an explicitly LAN-bound development server, for example `npx next dev --hostname 0.0.0.0 --port 3001`. Use that same port in the mobile origin. No deployment is required.
-
-`OPENAI_API_KEY` is never included in the mobile bundle. The separate local token is bundled, so the route deliberately refuses production requests until user authentication is implemented. Uploads are bounded to 25 MB per clip, validated, and discarded after transcription. No database write, audio storage service, LLM category extraction, or mobile sync is performed. Missing configuration, failed uploads, and empty speech produce retryable UI states while retaining audio.
-
-See [backend transcription setup](../docs/backend/transcription.md) and the [official OpenAI transcription guide](https://developers.openai.com/api/docs/guides/speech-to-text).
+The root/server environment needs `OPENAI_API_KEY` and `TOPH_TRANSCRIPTION_ENABLED=true`;
+no key or transcription token belongs in the mobile bundle. If extraction fails after
+speech succeeds, the transcript stays available and retry only extracts details. Cancel
+retains the audio and completed text. See [backend setup and live tests](../docs/backend/transcription.md).
 
 ## Checks
 
@@ -114,7 +111,7 @@ npm run typecheck
 npx expo-doctor
 ```
 
-Unit tests cover the pure helpers, draft and profile storage (against an in-memory file-system fake), transcription and demo clients (against fake network transports), account switching, and photo editing. Screen tests cover loading actions, transcript placement, save errors, and preserving drafts while switching accounts. Native recording and playback still require device/simulator verification; mocked tests do not establish microphone or live OpenAI behavior.
+Unit tests cover the pure helpers, draft and profile storage (against an in-memory file-system fake), transcription and mobile clients (against fake network transports), account switching, and photo editing. Screen tests cover loading actions, transcript placement, save errors, and preserving drafts while switching accounts. Native recording and playback still require device/simulator verification; mocked tests do not establish microphone or live OpenAI behavior.
 
 ## Project layout
 

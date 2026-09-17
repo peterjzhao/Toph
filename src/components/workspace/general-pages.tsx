@@ -8,24 +8,33 @@ import { useWorkspace } from "./workspace-provider";
 import { Badge, Button, EmptyState, Modal, PageHeader, Panel } from "./workspace-ui";
 import type { SupportTicket, WorkspaceSettings } from "@/contracts/workspace";
 import { formatDate } from "@/lib/format";
+import { fieldMapImage } from "@/lib/field-map";
+import { FieldMap } from "@/components/dashboard/field-map";
 import s from "./workspace.module.css";
 
 export function MapPage() {
   const { data } = useWorkspace();
   const query = useSearchParams();
-  const [selected, setSelected] = useState(query.get("field") ?? data.filterOptions.fields[0]?.id ?? "");
+  const router = useRouter();
+  const selected = query.get("field") ?? data.filterOptions.fields[0]?.id ?? "";
+  function selectField(id: string) {
+    const next = new URLSearchParams(query.toString());
+    next.set("field", id);
+    router.push(`/map?${next.toString()}`, { scroll: false });
+    setZoom(1);
+  }
   const [search, setSearch] = useState(""); const [zoom, setZoom] = useState(1); const [expanded, setExpanded] = useState(false);
   const field = data.filterOptions.fields.find(item => item.id === selected) ?? data.filterOptions.fields[0];
   const logs = data.logs.filter(log => log.field.id === field?.id);
-  const image = logs[0]?.field.mapImageUrl;
+  const image = field ? fieldMapImage(field.id, logs[0]?.field.mapImageUrl) : "";
   const hours = logs.reduce((sum, log) => sum + (Date.parse(log.endAt) - Date.parse(log.startAt)) / 3600000, 0);
   const zoomControls = <div className={s.inlineActions}><button aria-label="Zoom out" className={s.iconButton} disabled={zoom === 1} onClick={() => setZoom(Math.max(1, zoom - .5))}><Minus size={16}/></button><button className={s.secondaryButton} onClick={() => setZoom(1)} aria-label="Reset map zoom">{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" className={s.iconButton} disabled={zoom === 3} onClick={() => setZoom(Math.min(3, zoom + .5))}><Plus size={16}/></button></div>;
-  const map = image ? <div className={s.mapStage}><img src={image} alt="Bays Ranch reference satellite imagery with the original recorded location" style={{ width: `${zoom * 100}%`, maxWidth: "none" }}/></div> : <EmptyState title="No imagery available" description="There is no map attached to this field."/>;
+  const renderMap = () => image && field ? <div className={s.fieldMapViewport}><FieldMap field={field} fields={data.filterOptions.fields} imageUrl={image} zoom={zoom} onSelect={selectField} /></div> : <EmptyState title="No imagery available" description="There is no map attached to this field."/>;
   return <div className={s.page}><PageHeader title="Map" description="Explore your fields and the work recorded on them"><Badge>{data.filterOptions.fields.length} fields</Badge></PageHeader>
-    <div className={s.split}><Panel><div className={s.panelBody}><label className={s.eyebrow} htmlFor="field-search">Your fields</label><input id="field-search" className={s.searchInput} style={{ marginTop: 12 }} type="search" placeholder="Search fields" value={search} onChange={event => setSearch(event.target.value)}/></div><div className={s.fieldList}>{data.filterOptions.fields.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} className={`${s.fieldButton} ${field?.id === item.id ? s.fieldSelected : ""}`} onClick={() => { setSelected(item.id); setZoom(1); }} aria-pressed={field?.id === item.id}><div><strong>{item.name}</strong><small>{data.logs.filter(log => log.field.id === item.id).length} activity log</small></div><ChevronRight size={15}/></button>)}</div>{!data.filterOptions.fields.some(item => item.name.toLowerCase().includes(search.toLowerCase())) && <EmptyState title="No matching fields"/>}</Panel>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}><Panel><div className={s.panelHeading}><div><h2>{field?.name ?? "Field map"}</h2><p>{data.farm.name} · Satellite preview</p></div>{image && <Button secondary onClick={() => setExpanded(true)}><Expand size={15}/>Expand map</Button>}</div>{map}<div className={s.mapCaption}><span className={s.demoNote}>Reference imagery shared across demo fields.</span>{zoomControls}</div></Panel>
+    <div className={s.split}><Panel><div className={s.panelBody}><label className={s.eyebrow} htmlFor="field-search">Your fields</label><input id="field-search" className={s.searchInput} style={{ marginTop: 12 }} type="search" placeholder="Search fields" value={search} onChange={event => setSearch(event.target.value)}/></div><div className={s.fieldList}>{data.filterOptions.fields.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} className={`${s.fieldButton} ${field?.id === item.id ? s.fieldSelected : ""}`} onClick={() => selectField(item.id)} aria-pressed={field?.id === item.id}><div><strong>{item.name}</strong><small>{data.logs.filter(log => log.field.id === item.id).length} activity log</small></div><ChevronRight size={15}/></button>)}</div>{!data.filterOptions.fields.some(item => item.name.toLowerCase().includes(search.toLowerCase())) && <EmptyState title="No matching fields"/>}</Panel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}><Panel><div className={s.panelHeading}><div><h2>{field?.name ?? "Field map"}</h2><p>{data.farm.name} · Satellite preview</p></div>{image && <Button secondary onClick={() => setExpanded(true)}><Expand size={15}/>Expand map</Button>}</div>{renderMap()}<div className={s.mapCaption}><span className={s.demoNote}>Click a field to view its activity.</span>{zoomControls}</div></Panel>
       <Panel><div className={s.detailsGrid}><div><span>ACTIVITY LOGS</span><strong>{logs.length}</strong></div><div><span>LOGGED HOURS</span><strong>{hours.toFixed(1)} h</strong></div><div><span>LATEST ACTIVITY</span><strong>{logs.at(-1)?.activity ?? "No activity"}</strong></div></div><div className={s.smallList}>{logs.map(log => <Link key={log.id} href={`/activity-logs?log=${log.id}`}><div><strong>{log.activity} · {log.employee.name}</strong><p>{formatDate(log.date)}</p></div><ArrowUpRight size={16}/></Link>)}</div></Panel></div>
-    </div>{expanded && <Modal wide title={`${field?.name} · Satellite preview`} onClose={() => setExpanded(false)}>{map}<div className={s.mapCaption}>{zoomControls}<span className={s.demoNote}>Original design reference imagery</span></div></Modal>}
+    </div>{expanded && <Modal wide title={`${field?.name} · Satellite preview`} onClose={() => setExpanded(false)}>{renderMap()}<div className={s.mapCaption}>{zoomControls}<span className={s.demoNote}>Click a field to view its activity.</span></div></Modal>}
   </div>;
 }
 

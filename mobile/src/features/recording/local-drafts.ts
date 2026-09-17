@@ -1,4 +1,4 @@
-/** Device-only prototype storage. This is not the dashboard's PostgreSQL backend. */
+/** Durable device drafts and audio. Synced drafts retain the server's commit receipt. */
 import { Directory, File, Paths } from "expo-file-system";
 
 export type RecordingAudio = { uri: string; mimeType: string; extension: string };

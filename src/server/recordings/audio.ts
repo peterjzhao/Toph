@@ -1,38 +1,22 @@
 import "server-only";
-import { timingSafeEqual } from "node:crypto";
 
-export const MAX_AUDIO_BYTES = 25_000_000;
-const MAX_BODY_BYTES = MAX_AUDIO_BYTES + 16_384;
+export const MAX_AUDIO_BYTES = 3_800_000;
+const MAX_BODY_BYTES = MAX_AUDIO_BYTES + 80_000;
 const MODEL = "gpt-4o-transcribe";
 
 export class TranscriptionError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
-/** Local prototype access only. Replace this token with user authentication before deployment. */
-export function authorizeTranscription(request: Request) {
-  const token = process.env.TOPH_TRANSCRIPTION_DEV_TOKEN?.trim();
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (process.env.NODE_ENV === "production" || !token || token.length < 32 || !key) {
-    throw new TranscriptionError(503, "NOT_CONFIGURED", "Transcription is not configured on the local server.");
-  }
-  const actual = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from(`Bearer ${token}`);
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-    throw new TranscriptionError(401, "UNAUTHORIZED", "Reconnect the app to the local transcription server.");
-  }
-  return key;
-}
-
 /** Bound the stream itself, including chunked requests with no Content-Length. */
-export async function readAudioUpload(request: Request): Promise<File> {
+export async function readAudioUpload(request: Request): Promise<{ file: File; context: unknown }> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!/^multipart\/form-data\s*;/i.test(contentType)) {
     throw new TranscriptionError(415, "UNSUPPORTED_MEDIA_TYPE", "Upload a recording as multipart form data.");
   }
   const declared = request.headers.get("content-length");
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > MAX_BODY_BYTES)) {
-    throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "The recording must be smaller than 25 MB.");
+    throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "The recording must be smaller than 3.8 MB.");
   }
   if (!request.body) throw new TranscriptionError(400, "INVALID_AUDIO", "Add a recording to transcribe.");
   const reader = request.body.getReader();
@@ -45,7 +29,7 @@ export async function readAudioUpload(request: Request): Promise<File> {
       length += value.byteLength;
       if (length > MAX_BODY_BYTES) {
         await reader.cancel().catch(() => undefined);
-        throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "The recording must be smaller than 25 MB.");
+        throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "The recording must be smaller than 3.8 MB.");
       }
       chunks.push(new Uint8Array(value));
     }
@@ -54,10 +38,10 @@ export async function readAudioUpload(request: Request): Promise<File> {
   try { form = await new Response(new Blob(chunks), { headers: { "Content-Type": contentType } }).formData(); }
   catch { throw new TranscriptionError(400, "INVALID_AUDIO", "The audio upload could not be read."); }
   const file = form.get("file");
-  if (!(file instanceof File) || form.getAll("file").length !== 1 || [...form.keys()].some(key => key !== "file") || !file.size) {
+  if (!(file instanceof File) || form.getAll("file").length !== 1 || [...form.keys()].some(key => key !== "file" && key !== "context") || !file.size) {
     throw new TranscriptionError(400, "INVALID_AUDIO", "Upload exactly one non-empty recording.");
   }
-  if (file.size > MAX_AUDIO_BYTES) throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "The recording must be smaller than 25 MB.");
+  if (file.size > MAX_AUDIO_BYTES) throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "The recording must be smaller than 3.8 MB.");
   const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
   const ascii = new TextDecoder().decode(header);
   const extension = file.name.split(".").pop()?.toLowerCase();
@@ -67,7 +51,13 @@ export async function readAudioUpload(request: Request): Promise<File> {
     (extension === "wav" && ["audio/wav", "audio/x-wav"].includes(mime) && ascii.startsWith("RIFF") && ascii.slice(8, 12) === "WAVE") ||
     (extension === "webm" && ["audio/webm", "video/webm"].includes(mime) && header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3);
   if (!valid) throw new TranscriptionError(415, "INVALID_AUDIO", "Use an M4A, MP3, WAV, or WebM audio recording.");
-  return file;
+  if (form.getAll("context").length !== 1 || typeof form.get("context") !== "string") {
+    throw new TranscriptionError(400, "INVALID_CONTEXT", "Include the account and recording date.");
+  }
+  let context: unknown;
+  try { context = JSON.parse(form.get("context") as string); }
+  catch { throw new TranscriptionError(400, "INVALID_CONTEXT", "The recording context could not be read."); }
+  return { file, context };
 }
 
 export async function transcribeAudio(file: File, apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<string> {

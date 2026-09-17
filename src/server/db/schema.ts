@@ -270,7 +270,7 @@ join toph.employees e on e.id = l.employee_id and e.farm_id = l.farm_id
 join toph.fields f on f.id = l.field_id and f.farm_id = l.farm_id`,
   );
 
-/** Opt-in shared mobile demo extension; see drizzle/0004_mobile_demo.sql. */
+/** Shared mobile profiles and persisted recordings. */
 export const mobileProfiles = toph.table("mobile_profiles", {
   farmId: uuid("farm_id").notNull().references(() => farms.id),
   employeeId: uuid("employee_id").notNull(),
@@ -303,3 +303,12 @@ export const mobileRecordings = toph.table("mobile_recordings", {
   check("mobile_recordings_position_check", sql`position >= 0 AND position < 8`),
   check("mobile_recordings_duration_seconds_check", sql`duration_seconds > 0 AND duration_seconds <= 1800`),
   check("mobile_recordings_bytes_check", sql`octet_length(bytes) > 0 AND octet_length(bytes) <= 3800000`)]);
+
+export const transcriptionUsage = toph.table("transcription_usage", {
+  farmId: uuid("farm_id").primaryKey().references(() => farms.id),
+  minuteStart: timestamp("minute_start", { withTimezone: true }).notNull(),
+  minuteCount: integer("minute_count").notNull(),
+  dayStart: date("day_start").notNull(),
+  dayCount: integer("day_count").notNull(),
+}, t => [check("transcription_usage_minute_count_check", sql`${t.minuteCount} > 0`),
+  check("transcription_usage_day_count_check", sql`${t.dayCount} > 0`)]);

@@ -28,7 +28,7 @@ export default function ReviewLog({ details, clips, isDemo, transcript, loading,
             title={clips.length > 1 ? `Recording ${index + 1}` : undefined} />
         </ReviewSkeleton>)}
         {loading && <View style={styles.loadingActions}>
-          <Text style={shared.muted} accessibilityLiveRegion="polite">{stopping ? "Finishing recording…" : "Transcribing recording…"}</Text>
+        <Text style={shared.muted} accessibilityLiveRegion="polite">{stopping ? "Finishing recording…" : "Transcribing and filling in details…"}</Text>
           <View style={styles.reviewActions}>
             <Press style={shared.quietButton} onPress={onCancel} disabled={stopping} accessibilityRole="button"><Text style={shared.quietText}>Cancel</Text></Press>
             <Press style={shared.primaryButton} onPress={onAppend} disabled={stopping} accessibilityRole="button"><Plus size={16} color={colors.white} /><Text style={shared.primaryText}>Append recording</Text></Press>
@@ -40,7 +40,8 @@ export default function ReviewLog({ details, clips, isDemo, transcript, loading,
             <Text style={shared.label}>Transcript</Text>
             <Text selectable style={shared.text}>{transcript.text || (loading ? "Your transcript will appear here." : "No transcript yet.")}</Text>
           </View>
-        </ReviewSkeleton>}
+      </ReviewSkeleton>}
+      {!loading && transcript.status === "done" && transcript.message ? <Text style={shared.muted}>{transcript.message}</Text> : null}
       </View>}
       {!loading && clips.length > 0 && transcript.status !== "done" && <View style={styles.transcriptError}>
         {transcript.message ? <View style={[shared.notice, styles.transcriptNotice]} accessibilityRole={transcript.status === "error" ? "alert" : undefined}>

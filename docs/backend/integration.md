@@ -200,6 +200,8 @@ Local prerequisites for the UI to see data: the Docker database is running (`npm
 
 ## Mobile
 
-Mobile submission is disabled and production transcription is guarded off, as described in
-the [deployment guide](../deployment.md). Sign-in, authorization, uploads, and submission
-persistence remain future work. Do not bypass the web write-origin check to connect a phone.
+The native app uses the canonical `/api/mobile/v1` routes for the shared farm's accounts,
+profile edits, recordings, and log sync. These write the same PostgreSQL records this
+dashboard reads. [Recording processing](transcription.md) returns speech and typed form
+suggestions; it saves no work log until the worker confirms Save. See the [mobile API](mobile.md)
+and [system map](../system-map.md). The web's existing write-origin check remains in place.

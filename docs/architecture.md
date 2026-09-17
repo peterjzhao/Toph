@@ -1,5 +1,8 @@
 # Toph architecture proposal
 
+Current implementation: see [system map](system-map.md), [mobile API](backend/mobile.md),
+and [recording processing](backend/transcription.md). The original proposal below is historical.
+
 Status: proposed for discussion, September 16, 2026. The user confirmed that the first version is an interview submission with persistent sample data. Frontend implementation and deployment have not started.
 
 **Recommendation:** one Next.js App Router application using React and TypeScript, custom CSS Modules, and PostgreSQL hosted by Supabase. Use Drizzle for database queries and versioned schema migrations. Vercel is the proposed application host; hosting accounts and plans are not provisioned by this proposal.
