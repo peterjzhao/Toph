@@ -17,7 +17,7 @@ import { Press } from "./fields";
 import { draftClips, listDrafts, saveDraft, type RecordingDraft } from "./local-drafts";
 import { defaultProfile, fields, readProfile } from "./recording-profile";
 import {
-  clock, dateLabel, emptyDetails, fieldLabel, isTreatment, localDate, sampleDetails, validateDetails, type WorkDetails,
+  clock, dateLabel, emptyDetails, fieldLabel, isTreatment, localDate, validateDetails, type WorkDetails,
 } from "./recording-utils";
 import { colors, fonts, shared, fontSize, lineHeight, spacing } from "./styles";
 import { useTranscription } from "./use-transcription";
@@ -203,15 +203,14 @@ export default function RecordingWorkspace() {
   }
 
   function finishRecording() {
-    if (recorder.isDemo) setDetails({ ...sampleDetails });
-    freshRecording.current = !recorder.isDemo;
+    freshRecording.current = true;
     void recorder.finish();
     setScreen("review");
   }
 
   function writeNote() {
     if (!clips.length) {
-      recorder.load(null, 0, false);
+      recorder.load(null, 0);
       clearTranscript();
     }
     setScreen("review");
@@ -232,7 +231,7 @@ export default function RecordingWorkspace() {
     setEditing(draft);
     draftId.current = draft.id;
     setError("");
-    recorder.load(draft.audio, draft.durationSeconds, draft.isDemo);
+    recorder.load(draft.audio, draft.durationSeconds);
     freshRecording.current = false;
     load(draftClips(draft));
     setScreen("review");
@@ -255,7 +254,7 @@ export default function RecordingWorkspace() {
     return { ...details, notes: details.notes.trim(), product: treatment ? details.product.trim() : "", amount: treatment ? details.amount : "",
       id: draftId.current, createdAt: editing?.createdAt ?? now, updatedAt: now,
       employee: editing?.employee ?? { id: profile.id, name: profile.name }, farmId: editing?.farmId ?? bootstrap?.farm.id ?? "00000000-0000-4000-8000-000000000001",
-      transcript: transcript.text, clips, audio: clips[0]?.audio ?? null, durationSeconds: clips.reduce((total, clip) => total + clip.durationSeconds, 0), isDemo: Boolean(editing?.isDemo || recorder.isDemo) };
+      transcript: transcript.text, clips, audio: clips[0]?.audio ?? null, durationSeconds: clips.reduce((total, clip) => total + clip.durationSeconds, 0) };
   }
 
   async function syncDraft(stored: RecordingDraft) {
@@ -288,12 +287,12 @@ export default function RecordingWorkspace() {
       const stored = await saveDraft(draft);
       rememberDraft(stored);
       setScreen("saved");
-      if (!stored.isDemo) await syncDraft(stored);
+      await syncDraft(stored);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The draft could not be saved. Please try again."); }
     finally { setSaving(false); saveInProgress.current = false; }
   }
 
-  const statusText = recorder.status === "requesting" ? "Connecting…" : recorder.status === "recording" ? (recorder.isDemo ? "Sample recording" : "Recording") : recorder.status === "paused" ? "Paused" : "";
+  const statusText = recorder.status === "requesting" ? "Connecting…" : recorder.status === "recording" ? "Recording" : recorder.status === "paused" ? "Paused" : "";
   const noticeMessage = error || recorder.error;
   const accountDrafts = drafts.filter(draft => draft.employee.id === profile.id && draft.farmId === (bootstrap?.farm.id ?? "00000000-0000-4000-8000-000000000001"));
   const visibleRemoteLogs = remoteLogs.filter(log => !accountDrafts.some(draft => draft.sync?.logId === log.id));
@@ -349,7 +348,7 @@ export default function RecordingWorkspace() {
             <Press style={[shared.quietButton, styles.noteButton]} onPress={writeNote} disabled={busy} accessibilityRole="button"><FileText size={17} color={colors.muted} /><Text style={shared.quietText}>Write a note</Text></Press>
           </View>}
 
-          {screen === "review" && <ReviewLog details={details} clips={clips} isDemo={recorder.isDemo} transcript={transcript}
+          {screen === "review" && <ReviewLog details={details} clips={clips} transcript={transcript}
             fieldOptions={bootstrap?.fields.map(field => field.name)}
             loading={recorder.status === "stopping" || transcript.status === "working"} stopping={recorder.status === "stopping"}
             saving={saving} editing={Boolean(editing)} onChange={change}
@@ -363,7 +362,7 @@ export default function RecordingWorkspace() {
               <Text style={[shared.muted, styles.centered]}>{dateLabel(saved.workDate)} · {saved.audio ? clock(saved.durationSeconds) : "Note"}</Text>
             </View>
             <Text style={[shared.muted, styles.centered]}>{saved.sync ? "Saved to Toph and available on the dashboard." : saving ? "Syncing to Toph…" : "Draft kept on this device."}</Text>
-            {!saved.sync && !saved.isDemo && <Press style={shared.primaryButton} onPress={() => void retrySync()} disabled={saving} accessibilityRole="button"><CloudUpload size={18} color={colors.white} /><Text style={shared.primaryText}>{saving ? "Syncing…" : "Sync log"}</Text></Press>}
+            {!saved.sync && <Press style={shared.primaryButton} onPress={() => void retrySync()} disabled={saving} accessibilityRole="button"><CloudUpload size={18} color={colors.white} /><Text style={shared.primaryText}>{saving ? "Syncing…" : "Sync log"}</Text></Press>}
             <Press style={shared.primaryButton} onPress={newRecording} disabled={saving} accessibilityRole="button"><Plus size={18} color={colors.white} /><Text style={shared.primaryText}>New recording</Text></Press>
             <Pressable style={shared.quietButton} onPress={openLibrary} accessibilityRole="button"><Text style={shared.quietText}>View logs</Text><ArrowRight size={16} color={colors.muted} /></Pressable>
           </View>}
@@ -376,7 +375,7 @@ export default function RecordingWorkspace() {
               <View style={styles.draftIcon}>{draft.audio ? <AudioLines size={21} color={colors.muted} /> : <FileText size={21} color={colors.muted} />}</View>
               <View style={styles.draftText}>
                 <Text style={styles.draftTitle}>{draft.activity} · {fieldLabel(draft.field)}</Text>
-                <Text style={styles.draftMeta}>{dateLabel(draft.workDate)} · {draft.isDemo ? "Sample" : draft.sync ? "Synced" : "On this device"} · {draft.audio ? clock(draft.durationSeconds) : "Note"}</Text>
+                <Text style={styles.draftMeta}>{dateLabel(draft.workDate)} · {draft.sync ? "Synced" : "On this device"} · {draft.audio ? clock(draft.durationSeconds) : "Note"}</Text>
               </View>
               <ArrowRight size={16} color={colors.ink} />
             </Pressable>)}{visibleRemoteLogs.map(log => <Pressable style={styles.draftRow} key={log.id} onPress={() => { setRemoteLog(log); setScreen("remote"); }} accessibilityRole="button">
@@ -393,7 +392,7 @@ export default function RecordingWorkspace() {
             <Text style={shared.text}>{remoteLog.notes}</Text>
             {remoteLog.treatment && <><Text style={shared.label}>Treatment</Text><Text style={shared.text}>{[remoteLog.treatment.product, remoteLog.treatment.amount, remoteLog.treatment.unit].filter(value => value !== null).join(" ")}</Text></>}
             {remoteLog.transcript && <><Text style={shared.label}>Transcript</Text><Text style={shared.text}>{remoteLog.transcript}</Text></>}
-            {(remoteLog.clips.length ? remoteLog.clips : remoteLog.recording ? [{ url: remoteLog.recording.url, durationSeconds: remoteLog.recording.durationSeconds ?? 0, mimeType: "audio/mpeg" }] : []).map((clip, index) => <AudioReview key={clip.url} title={`Recording ${index + 1}`} audio={{ uri: assetUrl(clip.url)!, mimeType: clip.mimeType, extension: clip.mimeType === "audio/mpeg" ? "mp3" : "m4a" }} seconds={clip.durationSeconds} isDemo={false} />)}
+            {(remoteLog.clips.length ? remoteLog.clips : remoteLog.recording ? [{ url: remoteLog.recording.url, durationSeconds: remoteLog.recording.durationSeconds ?? 0, mimeType: "audio/mpeg" }] : []).map((clip, index) => <AudioReview key={clip.url} title={`Recording ${index + 1}`} audio={{ uri: assetUrl(clip.url)!, mimeType: clip.mimeType, extension: clip.mimeType === "audio/mpeg" ? "mp3" : "m4a" }} seconds={clip.durationSeconds} />)}
             <Press style={shared.quietButton} onPress={openLibrary} accessibilityRole="button"><ArrowLeft size={16} color={colors.muted} /><Text style={shared.quietText}>Back to logs</Text></Press>
           </View>}
         </ScrollView>

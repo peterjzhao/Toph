@@ -27,6 +27,7 @@ server-only. Nothing may use a `NEXT_PUBLIC_` prefix.
 | `DATABASE_POOL_MAX` | App runtime | Pooled connections per server process (default 5). |
 | `TOPH_FARM_ID` | App runtime | UUID of the farm this deployment serves. Missing, malformed, or absent from the database answers 503 `NOT_CONFIGURED`. |
 | `APP_ORIGIN` | App runtime | Browser origin required on `POST`, `PATCH`, and `DELETE` requests, e.g. `http://127.0.0.1:3000`. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | App runtime (`/api/realtime`) | Optional [dashboard live updates](realtime.md). The only values meant for the browser: the project origin and its publishable (or legacy anon) key, served at request time without a `NEXT_PUBLIC_` prefix. Unset means off. |
 
 ## Option A: isolated local PostgreSQL in Docker
 
@@ -146,6 +147,8 @@ Schema source: `src/server/db/schema.ts`. Reviewed SQL under `drizzle/`:
 | `0003_employee_avatar.sql` | Adds `employees.avatar_path` and exposes it in the view |
 | `0004_mobile_demo.sql` | Adds shared mobile profile, submission, and recording storage |
 | `0005_remove_extra_worker.sql` | Removes the extra seeded Peter profile and its workspace references; refuses to delete recorded work |
+| `0006_recording_processing.sql` | Adds shared transcription/extraction usage counters |
+| `0007_realtime_notifications.sql` | Adds `toph.notify_farm_change()` and row triggers that send content-free live-update signals through Supabase Realtime; inert on PostgreSQL without it. Receiving is enabled separately with `npm run db:enable-realtime` ([live updates](realtime.md)) |
 
 Applied migrations are recorded in `drizzle.__drizzle_migrations`, outside the application
 schema. After changing the schema run `npm run db:generate`, review the SQL (hand-written

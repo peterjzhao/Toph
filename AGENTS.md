@@ -31,6 +31,6 @@ The ready-to-paste backend task is in `docs/fable-backend-prompt.md`. Preserve t
 - Live dashboard components are under `src/components/dashboard/`; development comparison data is under `src/fixtures/`.
 - Shared serializable DTOs belong in `src/contracts/`; React context types stay with their provider.
 - The native recording app is in `mobile/src/features/recording/`; read `mobile/AGENTS.md` before changing it. The earlier web `/record` prototype was removed.
-- `mobile/src/lib/api/mobile-client.ts` uses the canonical `/api/mobile/v1` API. The user authorized shared farm accounts, persisted log sync, and transcription with structured fields. Read `docs/backend/mobile.md` and `docs/backend/transcription.md`; keep old `/demo/` paths as compatibility aliases.
+- `mobile/src/lib/api/mobile-client.ts` uses the canonical `/api/mobile/v1` API. The user authorized shared farm accounts, persisted log sync, and transcription with structured fields. Read `docs/backend/mobile.md` and `docs/backend/transcription.md`. The user requested removal of the old demo routes and settings; do not add compatibility aliases.
 - Run root `npm run test:unit` for checks without PostgreSQL setup. `test:backend` still uses the separate guarded test database.
 - Shared visual values belong in `shared/design/tokens.ts` (`@toph/design` in both apps). Web CSS variables are provided by `src/lib/design-tokens.ts`; native aliases and styles are in `mobile/src/features/recording/styles.ts`. Keep platform layouts local and preserve Figma values; see `docs/design-tokens.md`.

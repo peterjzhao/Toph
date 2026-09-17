@@ -9,6 +9,7 @@ Start with the repository [README](../README.md) for the layout and local comman
 | Native recording app | [Mobile README](../mobile/README.md) |
 | Accounts, profiles, and log sync | [Mobile API](backend/mobile.md) |
 | Transcription and form filling | [Recording processing](backend/transcription.md) |
+| Live updates on open dashboards | [Dashboard live updates](backend/realtime.md) |
 | Backend, web, and mobile responsibilities | [System map](system-map.md) |
 | PostgreSQL and migrations | [Database setup](backend/setup.md) |
 | Dashboard contract v2 | [API integration](backend/integration.md) |

@@ -37,7 +37,6 @@ export function createMobileClient({ baseUrl, fetcher = fetch }: { baseUrl?: str
     updateAccount: (id: string, profile: MobileAccountEdit, expectedRevision: number) => request<MobileBootstrap>(`/api/mobile/v1/accounts/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, expectedRevision }) }),
     logs: (accountId: string) => request<MobileRemoteLog[]>(`/api/mobile/v1/logs?accountId=${encodeURIComponent(accountId)}`),
     async submit(draft: RecordingDraft, bootstrap: MobileBootstrap): Promise<MobileLogReceipt> {
-      if (draft.isDemo) throw new Error("Sample recordings stay on this device.");
       const clips = draftClips(draft);
       const problem = validateDetails(draft, clips.length > 0);
       if (problem) throw new Error(problem);

@@ -33,12 +33,17 @@ The phone uses `/api/mobile/v1/accounts`, `/logs`, `/recordings/:id`, and `/tran
 Both read and write the same farm, employees, fields and work logs. A phone log gets one
 stable database ID, used by the collapsed and expanded website row.
 
+An open dashboard also hears when that data changes: database triggers send a content-free
+signal through Supabase Realtime, and the browser answers by re-reading the routes above.
+No data travels over that channel and the phone is not involved; see
+[dashboard live updates](backend/realtime.md).
+
 A recording is processed into speech plus typed suggestions, reviewed on the phone, and
 then explicitly saved. The transcription step does not silently insert a log. Device
 storage retains drafts and audio during connection failures; it is not a second backend.
 
 “Demo” used to distinguish the shared-account API from an unused future sign-in prototype.
-That duplicate implementation is gone. Old URLs remain compatibility aliases and old
-migration filenames remain unchanged. Existing farm profiles still share access without
-sign-in; renaming code does not change that choice. The Figma fixture and synthesized sample
-recording remain clearly identified reference material.
+That duplicate implementation, its routes/settings, and the native sample-recording mode
+have been removed. Existing farm profiles share access without sign-in. Applied migration
+filenames remain unchanged to preserve the database ledger. The Figma fixture and synthesized
+sample recording remain clearly identified reference material.

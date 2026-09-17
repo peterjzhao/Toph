@@ -9,7 +9,7 @@ jest.mock("expo-network", () => ({ useNetworkState: () => ({ isConnected: true }
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 jest.mock("../AudioReview", () => ({ __esModule: true, default: () => null }));
 jest.mock("../transcribe", () => ({ transcribeRecording: jest.fn() }));
-jest.mock("../use-recorder", () => ({ useRecorder: () => ({ status: "idle", seconds: 0, audio: null, levels: [], isDemo: false, error: "", reset: jest.fn(), load: jest.fn() }) }));
+jest.mock("../use-recorder", () => ({ useRecorder: () => ({ status: "idle", seconds: 0, audio: null, levels: [], error: "", reset: jest.fn(), load: jest.fn() }) }));
 jest.mock("@/lib/api/mobile-client", () => ({ apiOrigin: () => "https://toph.example", assetUrl: (value: string) => value, createMobileClient: () => ({ accounts: async () => mockBootstrap, logs: async () => [] }) }));
 jest.mock("../AccountSheet", () => {
   const { Pressable, Text, View } = require("react-native");

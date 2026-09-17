@@ -21,7 +21,7 @@ implemented.
 | `/messages` | Employee conversations, persistent read state, saved messages, and per-conversation drafts; accepts `?employee=<UUID>`. |
 | `/settings` | Farm/admin details, display timezone, and stored notification preferences. |
 | `/support` | Searchable help articles plus saved requests that can be opened, closed, and reopened. |
-| `/switch-user`, `/login` | Select a shared-access demo profile; Log Out clears the selected browser session and opens the profile-entry page. |
+| `/switch-user`, `/login` | Select a shared farm account; Log Out clears the selected browser session and opens the profile-entry page. |
 
 The shared sidebar keeps the original design assets and links the profile to Settings and
 inbox to Messages. New destinations extend the dashboard's typography, spacing, rounded
@@ -57,15 +57,27 @@ not substitute fixture data if PostgreSQL is unavailable; they show an error wit
 - Employee names and farm settings are display overlays on original reference records. The
   provider applies those edits across pages. Display timezone affects rendered work times;
   original business dates and stored timestamps remain intact.
+- With [live updates](backend/realtime.md) configured, the provider also re-reads both APIs in
+  the background when the database signals a committed change (a phone log, a profile or
+  photo edit, another browser's save) and after every reconnect. These reads never show the
+  loading state, so filters, sort, the open row, scroll position, dialogs, and unsaved form
+  drafts stay as they are; a short notice names what arrived. Because the background read
+  also advances the known revision, a save made afterwards is accepted instead of answering
+  409: item-level updates merge into the latest roster, while a draft of the *same* item or
+  of Settings still replaces what was there (the notice is the warning in that case). The
+  409 path above remains for a save that races a change not yet received.
+- All logs are loaded by following `meta.pagination.hasMore` (100 per request). Employee
+  photos set in the mobile app come from `log.employee.avatarUrl` and replace initials on the
+  team pages.
 
 See [backend integration](backend/integration.md) and [workspace backend](backend/workspace.md)
 for validation limits, exact envelopes, configured farm scope, permissions, and schema decisions.
 Workspace JSONB state is a bounded aggregate with optimistic revision checking; the core
 activity logs and their employee/field/tag relationships remain normalized in PostgreSQL.
 
-## Demo boundaries
+## Shared workspace boundaries
 
-- Browser storage holds only the selected demo profile. All profiles share the farm's data
+- Browser storage holds only the selected farm account. All profiles share the farm's data
   and permissions. This is not authentication, authorization, an invitation flow, or a
   secure logout from a private account.
 - Messages and support requests save local records only. No email, SMS, external support

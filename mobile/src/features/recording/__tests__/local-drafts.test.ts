@@ -10,7 +10,7 @@ function draft(overrides: Partial<RecordingDraft> = {}): RecordingDraft {
     id: "draft-1", createdAt: "2026-04-19T10:00:00.000Z", updatedAt: "2026-04-19T10:00:00.000Z",
     employee: { id: "employee-1", name: "Isaac Wang" }, farmId: "farm-1",
     field: "FIELD A", activity: "Spraying", workDate: "2026-04-19", startTime: "06:00", endTime: "10:40",
-    notes: "Sprayed.", product: "", amount: "", unit: "L", tags: [], transcript: "", audio: null, durationSeconds: 0, isDemo: false,
+    notes: "Sprayed.", product: "", amount: "", unit: "L", tags: [], transcript: "", audio: null, durationSeconds: 0,
     ...overrides,
   };
 }

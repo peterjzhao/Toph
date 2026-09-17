@@ -26,7 +26,6 @@ export type RecordingDraft = {
   /** Ordered clips, including the first recording. Absent on older drafts. */
   clips?: RecordingClip[];
   durationSeconds: number;
-  isDemo: boolean;
   /** Written only after the server returns a verified committed receipt. */
   sync?: { logId: string; savedAt: string };
 };

@@ -14,6 +14,7 @@ import { FilterSelect } from "./filter-select";
 import { AnchoredPopover } from "./anchored-popover";
 import { DateFilterPanel } from "./date-filter-panel";
 import { dateRange, dateFilterLabel, initialDateFilter, rangeDescription, type DateFilter } from "./date-range";
+import { ScrollAnchor } from "./scroll-anchor";
 
 function DesignIcon({ name, size = 16 }: { name: string; size?: number }) {
   return <img src={`/assets/icons/${name}.svg`} alt="" aria-hidden="true" width={size} height={size} style={{ display: "block", flexShrink: 0 }} />;
@@ -149,6 +150,18 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const filterDatePanel = useRef<HTMLDivElement>(null);
   const logCard = useRef<HTMLElement>(null);
   useEffect(() => { setExpandedId(initialExpandedId); }, [initialExpandedId]);
+  // With a backend the logs themselves carry saved tags, including live updates from other
+  // sessions; local overrides only serve the fixture preview and must not mask newer data.
+  useEffect(() => { if (onAddTag) setTags(previous => Object.keys(previous).length ? {} : previous); }, [data.logs, onAddTag]);
+  // The automatic month is never a person's own choice, so it follows the data the way a reload
+  // would: when the first log of a newer month arrives and no row is open, the view moves to it.
+  const automaticDate = useMemo(() => initialDateFilter(data.logs.map(log => log.date), today), [data.logs, today]);
+  const lastAutomaticDate = useRef(automaticDate);
+  useEffect(() => {
+    const changed = JSON.stringify(lastAutomaticDate.current) !== JSON.stringify(automaticDate);
+    lastAutomaticDate.current = automaticDate;
+    if (changed && dateFilter.kind === "month" && !expandedId) setDateFilter(automaticDate);
+  }, [automaticDate, dateFilter, expandedId]);
   useEffect(() => {
     if (!activityPage || !initialExpandedId || expandedId !== initialExpandedId) return;
     // Run after the shared shell resets its scroll position on navigation.
@@ -297,7 +310,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
             </div>
           </div>
         </div>
-        <div className={styles.tableViewport}>
+        <ScrollAnchor className={styles.tableViewport} watch={data.logs}>
           <table className={styles.table} aria-label="Employee logs">
             <thead><tr className={styles.tableHeader}><th className={styles.checkCell}><SelectionBox label="Select all logs" checked={logs.length > 0 && selectedCount === logs.length} mixed={selectedCount > 0 && selectedCount < logs.length} onChange={selectAll} /></th><th>EMPLOYEE</th><th>ACTIVITY</th><th>DATE</th><th>FIELD</th><th>TIME</th><th aria-label="Actions" /></tr></thead>
             <tbody>
@@ -312,7 +325,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
               {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>No matching logs</h3><p>{range ? `No logs match your filters for ${rangeDescription(range)}.` : "Try another search or clear your filters."}</p><button type="button" onClick={() => { resetFilters(); setDateFilter({ kind: "all" }); }}>Clear filters</button></td></tr>}
             </tbody>
           </table>
-        </div>
+        </ScrollAnchor>
       </section>
     </div>
 

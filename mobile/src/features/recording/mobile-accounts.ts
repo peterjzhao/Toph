@@ -9,8 +9,8 @@ export function readAccounts(): SavedAccounts | null {
     const stored = file();
     if (!stored.exists) return null;
     const data = JSON.parse(stored.textSync()) as SavedAccounts;
-    if (data.origin !== apiOrigin() || !["shared", "demo"].includes(data.bootstrap?.mode) || !Array.isArray(data.bootstrap.accounts) || !data.bootstrap.accounts.some(item => item.id === data.activeId)) return null;
-    return { ...data, bootstrap: { ...data.bootstrap, mode: "shared" } };
+    if (data.origin !== apiOrigin() || data.bootstrap?.mode !== "shared" || !Array.isArray(data.bootstrap.accounts) || !data.bootstrap.accounts.some(item => item.id === data.activeId)) return null;
+    return data;
   } catch { return null; }
 }
 export function saveAccounts(bootstrap: MobileBootstrap, activeId: string) {

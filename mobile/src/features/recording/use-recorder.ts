@@ -27,7 +27,6 @@ export function useRecorder() {
   const [seconds, setSeconds] = useState(0);
   const [levels, setLevels] = useState<number[]>(idleLevels);
   const [audio, setAudio] = useState<RecordingAudio | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
   const [error, setError] = useState("");
   const statusRef = useRef<RecorderStatus>("idle");
   const accumulated = useRef(0);
@@ -50,7 +49,6 @@ export function useRecorder() {
     if (statusRef.current === "recording" || statusRef.current === "paused" || statusRef.current === "stopping") stopQuietly();
     accumulated.current = 0;
     setAudio(null);
-    setIsDemo(false);
     setSeconds(0);
     setLevels(idleLevels());
     update("idle");
@@ -166,13 +164,12 @@ export function useRecorder() {
     }
   }
 
-  function load(nextAudio: RecordingAudio | null, duration: number, demo: boolean) {
+  function load(nextAudio: RecordingAudio | null, duration: number) {
     reset();
     setAudio(nextAudio);
     setSeconds(duration);
-    setIsDemo(demo);
     update("ready");
   }
 
-  return { status, seconds, levels, audio, isDemo, error, start, pause, resume, finish, reset, load };
+  return { status, seconds, levels, audio, error, start, pause, resume, finish, reset, load };
 }

@@ -8,10 +8,6 @@ export const suggestedTags: string[] = [...workTags];
 export const unitOptions: string[] = [...treatmentUnits];
 export const treatmentActivities: string[] = [...sharedTreatmentActivities];
 export const emptyDetails: WorkDetails = { field: "FIELD A", activity: "Spraying", workDate: "", startTime: "", endTime: "", notes: "", product: "", amount: "", unit: "L", tags: [] };
-export const sampleDetails: WorkDetails = {
-  ...emptyDetails, workDate: "2026-04-19", startTime: "06:00", endTime: "10:40",
-  notes: "Completed the scheduled spraying in Field A from 6:00 AM to 10:40 AM. Checked the equipment and logged the work before leaving the field.",
-};
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad = (value: number) => String(value).padStart(2, "0");

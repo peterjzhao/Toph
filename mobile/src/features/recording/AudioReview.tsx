@@ -6,10 +6,10 @@ import type { RecordingAudio } from "./local-drafts";
 import { clock } from "./recording-utils";
 import { colors, fonts, fontSize, lineHeight, radius, spacing } from "./styles";
 
-type Props = { audio: RecordingAudio; seconds: number; isDemo: boolean; title?: string };
+type Props = { audio: RecordingAudio; seconds: number; title?: string };
 
 /** Recording title and playback controls for mobile review. */
-export default function AudioReview({ audio, seconds, isDemo, title }: Props) {
+export default function AudioReview({ audio, seconds, title }: Props) {
   const player = useAudioPlayer({ uri: audio.uri }, { updateInterval: 100 });
   const status = useAudioPlayerStatus(player);
   const [trackWidth, setTrackWidth] = useState(0);
@@ -35,7 +35,7 @@ export default function AudioReview({ audio, seconds, isDemo, title }: Props) {
   return <View style={styles.card}>
     <View style={styles.heading}>
       <AudioLines size={18} color={colors.ink} />
-      <Text style={styles.title}>{title ?? (isDemo ? "Sample recording" : "Recording")}</Text>
+      <Text style={styles.title}>{title ?? "Recording"}</Text>
     </View>
     <View style={styles.player} accessibilityLabel="Review recording">
       <Pressable style={styles.playButton} onPress={toggle} accessibilityRole="button" accessibilityLabel={status.playing ? "Pause" : "Play"}>

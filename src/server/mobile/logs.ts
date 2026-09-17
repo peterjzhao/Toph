@@ -17,7 +17,7 @@ import { MAX_MOBILE_AUDIO_BYTES } from "./accounts";
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const text = (max: number) => z.string().trim().max(max);
 const metadataSchema = z.object({
-  contractVersion: z.enum(["1", "demo-1"]).transform(() => "1" as const), clientDraftId: z.string().uuid(), accountId: z.string().uuid(), fieldId: z.string().uuid(),
+  contractVersion: z.literal("1"), clientDraftId: z.string().uuid(), accountId: z.string().uuid(), fieldId: z.string().uuid(),
   activity: text(80).min(1), workDate: z.string().refine(isValidCalendarDate), startTime: time, endTime: time,
   notes: text(16_000), transcript: text(40_000).nullable(),
   treatment: z.object({ product: text(200).nullable(), amount: z.number().positive().max(1e9).nullable(), unit: text(40).nullable() }).strict().nullable(),
@@ -95,12 +95,9 @@ function workInstant(date: string, time: string, zone: string): Date {
 export async function saveMobileLog(ctx: FarmContext, metadata: MobileLogSubmission, clips: UploadedClip[]): Promise<MobileLogReceipt> {
   const start = workInstant(metadata.workDate, metadata.startTime, ctx.farm.timezone);
   const end = workInstant(metadata.workDate, metadata.endTime, ctx.farm.timezone);
-  const hashFor = (contractVersion: string) => {
-    const hash = createHash("sha256").update(JSON.stringify({ ...metadata, contractVersion }));
-    for (const clip of clips) hash.update(clip.bytes);
-    return hash.digest("hex");
-  };
-  const contentHash = hashFor("1");
+  const hash = createHash("sha256").update(JSON.stringify(metadata));
+  for (const clip of clips) hash.update(clip.bytes);
+  const contentHash = hash.digest("hex");
   await getWorkspace(ctx);
   return ctx.sql.begin(async tx => {
     // The farm lock serializes quota checks, profile archiving, and duplicate submissions.
@@ -110,7 +107,7 @@ export async function saveMobileLog(ctx: FarmContext, metadata: MobileLogSubmiss
     if (!employee) throw notFound("Choose an active account from this farm.");
     const [existing] = await tx`select log_id, content_hash, saved_at from toph.mobile_submissions where farm_id = ${ctx.farmId} and employee_id = ${employee.id} and client_draft_id = ${metadata.clientDraftId}`;
     if (existing) {
-      if (existing.content_hash !== contentHash && existing.content_hash !== hashFor("demo-1")) throw new ApiError(409, "REVISION_CONFLICT", "This draft is already on the server with different details. Keep this copy and create a new log for changes.");
+      if (existing.content_hash !== contentHash) throw new ApiError(409, "REVISION_CONFLICT", "This draft is already on the server with different details. Keep this copy and create a new log for changes.");
       return { clientDraftId: metadata.clientDraftId, logId: existing.log_id as string, savedAt: new Date(existing.saved_at).toISOString() };
     }
     const fields = await tx`select id from toph.fields where farm_id = ${ctx.farmId} and id = ${metadata.fieldId}`;

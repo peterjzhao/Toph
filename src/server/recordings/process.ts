@@ -17,8 +17,8 @@ const retrySchema = z.object({ context: contextSchema, transcript: z.string().tr
 
 export function transcriptionKey() {
   const key = process.env.OPENAI_API_KEY?.trim();
-  if (process.env.TOPH_TRANSCRIPTION_ENABLED !== "true" || !key) {
-    throw new TranscriptionError(503, "NOT_CONFIGURED", "Transcription is not enabled on this server. Your recording can still be saved.");
+  if (!key) {
+    throw new TranscriptionError(503, "NOT_CONFIGURED", "Transcription needs a server API key. Your recording can still be saved.");
   }
   return key;
 }

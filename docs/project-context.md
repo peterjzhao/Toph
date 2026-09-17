@@ -6,7 +6,7 @@ Current-state note: the original handoff below is retained as history. The web w
 now connected to PostgreSQL, the dashboard contract is v2, and the native app lives in
 `mobile/src/features/recording/`. The superseded web `/record` prototype was removed. Mobile
 submission is connected to the canonical API; transcription and structured form filling are
-configured separately with a server-only OpenAI key and opt-in flag. Use [docs/README.md](README.md) for the
+available when a server-only OpenAI key is configured. Use [docs/README.md](README.md) for the
 current guides and [backend/mobile.md](backend/mobile.md) for the current API. Keep local
 drafts, migrations, design references, and active development processes intact.
 

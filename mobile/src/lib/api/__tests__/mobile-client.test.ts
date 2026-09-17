@@ -5,7 +5,7 @@ jest.mock("expo-file-system", () => require("@/features/recording/__tests__/fake
 const id = "10000000-0000-4000-8000-000000000001";
 const draftId = "30000000-0000-4000-8000-000000000001";
 const bootstrap: MobileBootstrap = { mode: "shared", revision: 0, maxAudioBytes: 3_800_000, farm: { id, name: "Farm", timezone: "UTC" }, fields: [{ id, name: "FIELD A" }], accounts: [{ id, name: "Isaac", role: "Worker", email: "", phone: "", avatarUrl: null, defaultField: "FIELD A", defaultActivity: "Monitoring" }] };
-const draft: RecordingDraft = { id: draftId, employee: { id, name: "Isaac" }, farmId: id, createdAt: "2026-09-16T00:00:00Z", updatedAt: "2026-09-16T00:00:00Z", field: "FIELD A", activity: "Monitoring", workDate: "2026-09-16", startTime: "06:00", endTime: "07:00", notes: "Water flowing", transcript: "", product: "", amount: "", unit: "L", tags: [], audio: null, clips: [], durationSeconds: 0, isDemo: false };
+const draft: RecordingDraft = { id: draftId, employee: { id, name: "Isaac" }, farmId: id, createdAt: "2026-09-16T00:00:00Z", updatedAt: "2026-09-16T00:00:00Z", field: "FIELD A", activity: "Monitoring", workDate: "2026-09-16", startTime: "06:00", endTime: "07:00", notes: "Water flowing", transcript: "", product: "", amount: "", unit: "L", tags: [], audio: null, clips: [], durationSeconds: 0 };
 
 test("rejects credentials, paths and insecure remote server addresses", () => {
   for (const value of ["http://farm.example", "https://user:password@farm.example", "https://farm.example/path", "https://farm.example?token=secret"]) expect(() => apiOrigin(value)).toThrow();

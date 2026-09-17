@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type postgres from "postgres";
@@ -102,13 +102,9 @@ describe("mobile persistence", () => {
     await expect(readMobileSubmission(new Request("https://toph.example", { method: "POST", headers: { "idempotency-key": input.clientDraftId }, body: form }))).rejects.toMatchObject({ status: 400 });
   });
 
-  it("accepts legacy submissions and committed hashes without duplicating a saved draft", async () => {
-    const input = parseMobileSubmission({ ...metadata(), contractVersion: "demo-1" });
-    expect(input.contractVersion).toBe("1");
-    const receipt = await saveMobileLog(ctx, input, []); ids.push(receipt.logId);
-    const oldHash = createHash("sha256").update(JSON.stringify({ ...input, contractVersion: "demo-1" })).digest("hex");
-    await owner`update toph.mobile_submissions set content_hash = ${oldHash} where log_id = ${receipt.logId}`;
-    expect(await saveMobileLog(ctx, input, [])).toEqual(receipt);
+  it("requires the current submission contract", () => {
+    expect(() => parseMobileSubmission({ ...metadata(), contractVersion: "demo-1" })).toThrow();
+    expect(() => parseMobileSubmission({ ...metadata(), contractVersion: "2" })).toThrow();
   });
 
   it("keeps account queries scoped and rejects invalid and ambiguous farm times", async () => {

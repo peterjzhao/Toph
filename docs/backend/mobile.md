@@ -21,14 +21,10 @@ the server's configured farm. The database and uploaded recordings are real pers
 
 `TOPH_MOBILE_ENABLED=true` enables mobile access. Writes require `X-Toph-Client: toph-mobile`
 and reject foreign browser origins. This is a deliberate-client check, not a secret or
-user authentication. The previous `TOPH_MOBILE_DEMO_ENABLED` setting is accepted only when
-the canonical setting is absent, to support the existing deployment.
-
-The old `/api/mobile/demo/v1/*` URLs are thin compatibility aliases for installed app builds
-and existing audio links. They call the same canonical handlers and database services.
-The legacy header and `demo-1` submission version remain readable, including retry receipts;
-new code sends version `1`. The duplicate disabled log route and unused native submission
-client have been removed. Applied SQL migrations retain their original filenames.
+user authentication. Submissions use contract version `1`. The old demo routes, environment
+setting, client header, submission version, and native sample-recording branches have been
+removed. Both client and server must use the current API. Applied SQL migrations retain
+their original filenames and contents so the migration ledger stays valid.
 
 ## Account and recording behavior
 
@@ -64,5 +60,5 @@ app JavaScript, or its bundled configuration changes. Server-only updates need n
 
 Unit tests exercise validation and client behavior. PostgreSQL integration tests exercise
 profile persistence, photos, field/account scoping, transactional multi-clip uploads,
-idempotent retries, legacy compatibility, and transcription quotas. Mocked provider tests
+idempotent retries, rejection of obsolete contracts, and transcription quotas. Mocked provider tests
 do not establish live OpenAI behavior; use the separate live check documented below.

@@ -16,10 +16,10 @@ type WorkspaceContextValue = {
   notify: (message: string) => void; reloadDashboard: () => Promise<void>;
 };
 
-type DemoSession = { id: string; name: string; role: string };
-type Context = WorkspaceContextValue & { session: DemoSession | null; switchUser: (id: string) => void; signOut: () => void; setLogTags: (id: string, tags: TagDto[]) => void };
+type AccountSession = { id: string; name: string; role: string };
+type Context = WorkspaceContextValue & { session: AccountSession | null; switchUser: (id: string) => void; signOut: () => void; setLogTags: (id: string, tags: TagDto[]) => void };
 const WorkspaceContext = createContext<Context | null>(null);
-const SESSION_KEY = "toph.demo-session.v1";
+const SESSION_KEY = "toph.account-session.v1";
 
 export async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...options, cache: "no-store", headers: { "Content-Type": "application/json", ...options?.headers } });
@@ -30,6 +30,7 @@ export async function requestJson<T>(url: string, options?: RequestInit): Promis
 
 // Background reads fail fast so a stalled request can never hold up the save queue.
 const LIVE_READ_TIMEOUT_MS = 15_000;
+const liveRead = (): RequestInit | undefined => typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(LIVE_READ_TIMEOUT_MS) } : undefined;
 const DASHBOARD_PAGE_SIZE = 100;
 
 /** Every log for the farm. The API returns at most 100 per request, so later pages are followed. */
@@ -59,7 +60,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [saveError, setSaveError] = useState("");
   const [pending, setPending] = useState(0);
   const [notice, setNotice] = useState("");
-  const [session, setSession] = useState<DemoSession | null>({ id: "admin", name: "Ranch Admin", role: "Admin" });
+  const [session, setSession] = useState<AccountSession | null>({ id: "admin", name: "Ranch Admin", role: "Admin" });
   const notify = useCallback((message: string) => setNotice(message), []);
   const setLogTags = useCallback((id: string, tags: TagDto[]) => {
     setData(previous => previous ? { ...previous, logs: previous.logs.map(log => log.id === id ? { ...log, tags } : log) } : previous);
@@ -114,8 +115,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       connect: connectSupabaseChannel,
       refresh: async kinds => {
         const [dashboard, roster] = await Promise.allSettled([
-          kinds.has("dashboard") ? readDashboard({ signal: AbortSignal.timeout(LIVE_READ_TIMEOUT_MS) }) : null,
-          kinds.has("workspace") ? readWorkspace({ signal: AbortSignal.timeout(LIVE_READ_TIMEOUT_MS) }) : null,
+          kinds.has("dashboard") ? readDashboard(liveRead()) : null,
+          kinds.has("workspace") ? readWorkspace(liveRead()) : null,
         ]);
         const logs = dashboard.status === "fulfilled" ? dashboard.value : null;
         const team = roster.status === "fulfilled" ? roster.value : null;
@@ -132,7 +133,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [ready, readDashboard, readWorkspace]);
 
   useEffect(() => { void load();
-    try { const stored = localStorage.getItem(SESSION_KEY); if (stored) setSession(JSON.parse(stored)); } catch { /* A fresh browser starts with the demo administrator. */ }
+    try { const stored = localStorage.getItem(SESSION_KEY); if (stored) setSession(JSON.parse(stored)); } catch { /* A fresh browser starts with the administrator. */ }
   }, [load]);
   useEffect(() => {
     if (!state || !session || session.id === "admin") return;
@@ -170,13 +171,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return operation;
   }, []);
 
-  function setDemoSession(next: DemoSession | null) {
+  function setAccountSession(next: AccountSession | null) {
     setSession(next);
     try { localStorage.setItem(SESSION_KEY, JSON.stringify(next)); } catch { /* Session remains usable in memory if browser storage is unavailable. */ }
   }
   function switchUser(id: string) {
     const employee = stateRef.current?.data.employees.find(person => person.id === id);
-    setDemoSession(employee ? { id: employee.id, name: employee.name, role: employee.role } : { id: "admin", name: stateRef.current?.data.settings.contactName || "Ranch Admin", role: "Admin" });
+    setAccountSession(employee ? { id: employee.id, name: employee.name, role: employee.role } : { id: "admin", name: stateRef.current?.data.settings.contactName || "Ranch Admin", role: "Admin" });
   }
 
   if (loading) return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "#777" }} role="status">Loading Bays Ranch…</div>;
@@ -189,7 +190,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return profile ? { ...log, employee: { ...log.employee, name: profile.name } } : log;
     }),
   };
-  return <WorkspaceContext.Provider value={{ data: displayData, workspace: state.data, avatars: employeeAvatars(data), saving: pending > 0, saveError, notice, update, notify, reloadDashboard, setLogTags, session, switchUser, signOut: () => setDemoSession(null) }}>{children}</WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ data: displayData, workspace: state.data, avatars: employeeAvatars(data), saving: pending > 0, saveError, notice, update, notify, reloadDashboard, setLogTags, session, switchUser, signOut: () => setAccountSession(null) }}>{children}</WorkspaceContext.Provider>;
 }
 
 export function useWorkspace() {

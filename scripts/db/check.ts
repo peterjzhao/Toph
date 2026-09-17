@@ -26,7 +26,7 @@ async function checkSchemaAndSeed(sql: postgres.Sql, label: string): Promise<voi
   report(exists, `${label}: toph schema and dashboard_logs view exist${exists ? "" : " (run npm run db:migrate)"}`);
   if (!exists) return;
 
-  if ((process.env.TOPH_MOBILE_ENABLED ?? process.env.TOPH_MOBILE_DEMO_ENABLED) === "true") {
+  if (process.env.TOPH_MOBILE_ENABLED === "true") {
     const [{ mobile_tables }] = await sql<{ mobile_tables: boolean }[]>`
       select to_regclass('toph.mobile_profiles') is not null
          and to_regclass('toph.mobile_submissions') is not null
@@ -49,7 +49,7 @@ async function checkSchemaAndSeed(sql: postgres.Sql, label: string): Promise<voi
 }
 
 async function checkRuntimePrivileges(sql: postgres.Sql): Promise<void> {
-  const mobileEnabled = (process.env.TOPH_MOBILE_ENABLED ?? process.env.TOPH_MOBILE_DEMO_ENABLED) === "true";
+  const mobileEnabled = process.env.TOPH_MOBILE_ENABLED === "true";
   const [{ user }] = await sql<{ user: string }[]>`select current_user as user`;
   const [p] = await sql<Record<string, boolean>[]>`
     select has_schema_privilege('toph', 'USAGE') as schema_usage,
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   if (role) {
     console.log(`INFO  Expected grants for ${role}:`);
     for (const line of describeRuntimeGrants(role)) console.log(`      ${line}`);
-    if ((process.env.TOPH_MOBILE_ENABLED ?? process.env.TOPH_MOBILE_DEMO_ENABLED) === "true") {
+    if (process.env.TOPH_MOBILE_ENABLED === "true") {
       console.log("      Mobile enabled: additional log/media inserts and employee/profile column updates.");
     }
   }

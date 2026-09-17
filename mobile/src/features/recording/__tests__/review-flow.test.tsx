@@ -27,7 +27,7 @@ const audio = { uri: "file:///cache/one.m4a", extension: "m4a", mimeType: "audio
 let mockBootstrap: MobileBootstrap | null = null;
 const mockRecorder = {
   status: "recording" as RecorderStatus, audio: null as RecordingAudio | null,
-  seconds: 3, levels: [3, 7, 9], isDemo: false, error: "",
+  seconds: 3, levels: [3, 7, 9], error: "",
   start: jest.fn(async () => { mockRecorder.status = "recording"; mockRecorder.audio = null; }),
   finish: jest.fn(async () => { mockRecorder.status = "stopping"; }),
   reset: jest.fn(() => { mockRecorder.status = "idle"; mockRecorder.audio = null; mockRecorder.seconds = 0; }),

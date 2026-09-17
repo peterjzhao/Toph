@@ -45,7 +45,7 @@ export function toLogDto(row: ViewRow): LogDto {
     isNew: row.isNew,
     recording: row.recordingPath
       ? {
-          url: row.recordingPath.replace("/api/mobile/demo/v1/", "/api/mobile/v1/"),
+          url: row.recordingPath,
           durationSeconds: row.recordingDurationSeconds === null ? null : Number(row.recordingDurationSeconds),
           waveformAssetUrl: row.waveformAssetPath,
           waveformPeaks: Array.isArray(row.waveformPeaks) ? row.waveformPeaks.map(Number) : null,

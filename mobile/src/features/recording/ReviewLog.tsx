@@ -10,7 +10,7 @@ import { colors, fonts, shared, fontSize, lineHeight, radius, spacing } from "./
 import type { Transcript } from "./use-transcription";
 
 type Props = {
-  details: WorkDetails; clips: RecordingClip[]; isDemo: boolean; transcript: Transcript;
+  details: WorkDetails; clips: RecordingClip[]; transcript: Transcript;
   loading: boolean; stopping: boolean; saving: boolean; editing: boolean;
   fieldOptions?: string[];
   onChange: <K extends keyof WorkDetails>(key: K, value: WorkDetails[K]) => void;
@@ -18,13 +18,13 @@ type Props = {
   onAppend: () => void; onBack: () => void; onSave: () => void;
 };
 
-export default function ReviewLog({ details, clips, isDemo, transcript, loading, stopping, saving, editing, fieldOptions = fields,
+export default function ReviewLog({ details, clips, transcript, loading, stopping, saving, editing, fieldOptions = fields,
   onChange, onRetry, onCancel, onAppend, onBack, onSave }: Props) {
   return <ReviewLoading.Provider value={loading}>
     <View style={styles.reviewCard} accessibilityState={{ busy: loading }}>
       {(clips.length > 0 || loading) && <View style={styles.recordingSection}>
         {clips.map((clip, index) => <ReviewSkeleton key={clip.audio.uri}>
-          <AudioReview audio={clip.audio} seconds={clip.durationSeconds} isDemo={isDemo}
+          <AudioReview audio={clip.audio} seconds={clip.durationSeconds}
             title={clips.length > 1 ? `Recording ${index + 1}` : undefined} />
         </ReviewSkeleton>)}
         {loading && <View style={styles.loadingActions}>

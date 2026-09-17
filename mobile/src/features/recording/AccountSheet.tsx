@@ -169,7 +169,7 @@ export default function AccountSheet({ profile, accounts, fields, farmName, conn
             <Text style={shared.muted}>{logCount}</Text>
             <ArrowRight size={17} color={colors.ink} />
           </Pressable>
-          <Text style={shared.muted}>Demo accounts share this farm workspace. Changes are saved to Toph.</Text>
+          <Text style={shared.muted}>Accounts share this farm workspace. Changes are saved to Toph.</Text>
           {!connected && <Press style={shared.quietButton} onPress={() => void act(onRefresh)} disabled={working} accessibilityRole="button"><RefreshCw size={16} color={colors.muted} /><Text style={shared.quietText}>Reconnect to Toph</Text></Press>}
           </>}
           {connectionError && !error ? <View style={shared.notice} accessibilityRole="alert"><Text style={shared.noticeText}>{connectionError}</Text></View> : null}

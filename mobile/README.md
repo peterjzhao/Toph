@@ -2,7 +2,7 @@
 
 React Native app for Toph, built with [Expo](https://expo.dev) SDK 57, React Native 0.86, Expo Router, and TypeScript. It lives in `mobile/` beside the Next.js dashboard at the repository root and has its own `package.json` and `node_modules`.
 
-The app is the worker-facing recording flow: record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. The app connects to the Vercel server using the shared farm accounts. See [mobile API setup](../docs/backend/mobile.md) for the required server deployment and opt-in flag. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when enabled on the server.
+The app is the worker-facing recording flow: record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. The app connects to the Vercel server using the shared farm accounts. See [mobile API setup](../docs/backend/mobile.md) for the required server deployment and configuration. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when the server OpenAI key is configured.
 
 ## Requirements
 
@@ -92,7 +92,7 @@ treatment and tags. The review form fills untouched fields with these suggestion
 facts stay unknown; manual edits win, including when audio is appended. Check the result
 before saving. A separate Save log request persists it to the shared PostgreSQL database.
 
-The root/server environment needs `OPENAI_API_KEY` and `TOPH_TRANSCRIPTION_ENABLED=true`;
+The root/server environment needs `OPENAI_API_KEY`;
 no key or transcription token belongs in the mobile bundle. If extraction fails after
 speech succeeds, the transcript stays available and retry only extracts details. Cancel
 retains the audio and completed text. See [backend setup and live tests](../docs/backend/transcription.md).

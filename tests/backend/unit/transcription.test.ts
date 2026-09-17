@@ -12,12 +12,13 @@ function upload(audio: File = file()) {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("recording transcription boundary", () => {
-  it("requires explicit configuration before uploads, and supports production when enabled", async () => {
-    vi.stubEnv("TOPH_MOBILE_ENABLED", "true"); vi.stubEnv("TOPH_TRANSCRIPTION_ENABLED", "false");
-    expect((await POST(upload())).status).toBe(503);
-    vi.stubEnv("TOPH_TRANSCRIPTION_ENABLED", "true"); vi.stubEnv("OPENAI_API_KEY", "");
-    expect((await POST(upload())).status).toBe(503);
-    vi.stubEnv("OPENAI_API_KEY", "server-key"); vi.stubEnv("NODE_ENV", "production");
+  it("requires a server key and works in production without a transcription flag", async () => {
+    vi.stubEnv("TOPH_MOBILE_ENABLED", "true");
+    for (const key of [undefined, "", "   "]) {
+      vi.stubEnv("OPENAI_API_KEY", key);
+      expect((await POST(upload())).status).toBe(503);
+    }
+    vi.stubEnv("OPENAI_API_KEY", " server-key "); vi.stubEnv("NODE_ENV", "production");
     expect(transcriptionKey()).toBe("server-key");
     expect((await POST(new Request("http://localhost", { method: "POST" }))).status).toBe(403);
   });

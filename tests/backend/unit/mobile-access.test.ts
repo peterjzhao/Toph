@@ -1,7 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { requireMobileAccess } from "@/server/mobile/access";
 import { GET } from "@/app/api/mobile/v1/accounts/route";
-import { legacyBootstrap } from "@/server/mobile/legacy";
 afterEach(() => vi.unstubAllEnvs());
 test("mobile API fails closed until explicitly enabled", async () => {
   vi.stubEnv("TOPH_MOBILE_ENABLED", "false");
@@ -14,11 +13,11 @@ test("mobile writes require a deliberate client header and reject a foreign brow
   expect(() => requireMobileAccess(new Request("https://toph.example"), true)).toThrow();
   expect(() => requireMobileAccess(new Request("https://toph.example", { headers: { "x-toph-client": "toph-mobile", origin: "https://elsewhere.example" } }), true)).toThrow();
   expect(() => requireMobileAccess(new Request("https://toph.example", { headers: { "x-toph-client": "toph-mobile" } }), true)).not.toThrow();
-  expect(() => requireMobileAccess(new Request("https://toph.example", { headers: { "x-toph-client": "mobile-demo" } }), true)).not.toThrow();
+  expect(() => requireMobileAccess(new Request("https://toph.example", { headers: { "x-toph-client": "mobile-demo" } }), true)).toThrow();
 });
-test("legacy aliases preserve the old bootstrap label while keeping the same account data", async () => {
-  const accounts = [{ id: "account-1", name: "Worker" }];
-  expect(await (await legacyBootstrap(Response.json({ data: { mode: "shared", accounts } }))).json()).toEqual({ data: { mode: "demo", accounts } });
-  const failed = new Response(null, { status: 503 });
-  expect(await legacyBootstrap(failed)).toBe(failed);
+test("an obsolete setting cannot enable the mobile API", async () => {
+  vi.stubEnv("TOPH_MOBILE_ENABLED", undefined);
+  vi.stubEnv("TOPH_MOBILE_DEMO_ENABLED", "true");
+  const response = await GET(new Request("https://toph.example/api/mobile/v1/accounts"));
+  expect(response.status).toBe(503);
 });
