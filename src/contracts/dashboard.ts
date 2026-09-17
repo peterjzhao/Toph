@@ -28,6 +28,8 @@ export type LogDto = {
     durationSeconds: number | null;
     waveformAssetUrl: string | null;
     waveformPeaks: number[] | null;
+    /** Present for mobile logs with appended recordings, in capture order. */
+    clips?: Array<{ url: string; durationSeconds: number }>;
   } | null;
   tags: TagDto[];
   updatedAt: string;

@@ -11,7 +11,7 @@ export function DashboardPage({ activityPage = false }: { activityPage?: boolean
   const adapted: DashboardData = {
     farm: { ...data.farm, role: "Admin", name: workspace.settings.farmName, avatarUrl: data.farm.avatarUrl ?? "/assets/avatar.jpg" },
     metrics: data.metrics,
-    logs: data.logs.map(log => ({ ...log, field: { ...log.field, mapImageUrl: log.field.mapImageUrl ?? "" }, tags: log.tags.map(tag => tag.label), recording: log.recording ? { url: log.recording.url, durationSeconds: log.recording.durationSeconds ?? 0 } : { url: "", durationSeconds: 0 } })),
+    logs: data.logs.map(log => ({ ...log, field: { ...log.field, mapImageUrl: log.field.mapImageUrl ?? "" }, tags: log.tags.map(tag => tag.label), recording: log.recording ? { url: log.recording.url, durationSeconds: log.recording.durationSeconds ?? 0, clips: log.recording.clips } : { url: "", durationSeconds: 0 } })),
   };
   async function addTag(logId: string, label: string) {
     const result = await requestJson<LogTagsResponse>(`/api/logs/${logId}/tags`, { method: "POST", body: JSON.stringify({ label }) });

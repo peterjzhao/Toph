@@ -7,7 +7,7 @@ export type EmployeeLog = {
   startAt: string;
   endAt: string;
   summary: string;
-  recording: { url: string; durationSeconds: number };
+  recording: { url: string; durationSeconds: number; clips?: Array<{ url: string; durationSeconds: number }> };
   tags: string[];
   isNew: boolean;
 };

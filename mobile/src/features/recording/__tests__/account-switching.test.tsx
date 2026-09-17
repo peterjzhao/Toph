@@ -1,0 +1,40 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import RecordingWorkspace from "../RecordingWorkspace";
+import { listDrafts } from "../local-drafts";
+import type { MobileBootstrap } from "@toph/contracts/mobile-demo";
+jest.mock("expo-file-system", () => require("./fake-file-system").createFakeFileSystem());
+jest.mock("expo-crypto", () => ({ randomUUID: () => "30000000-0000-4000-8000-000000000010" }));
+jest.mock("lucide-react-native", () => new Proxy({}, { get: () => () => null }));
+jest.mock("expo-network", () => ({ useNetworkState: () => ({ isConnected: true }) }));
+jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+jest.mock("../AudioReview", () => ({ __esModule: true, default: () => null }));
+jest.mock("../transcribe", () => ({ transcribeRecording: jest.fn() }));
+jest.mock("../use-recorder", () => ({ useRecorder: () => ({ status: "idle", seconds: 0, audio: null, levels: [], isDemo: false, error: "", reset: jest.fn(), load: jest.fn() }) }));
+jest.mock("@/lib/api/demo-client", () => ({ apiOrigin: () => "https://toph.example", assetUrl: (value: string) => value, createDemoClient: () => ({ accounts: async () => mockBootstrap, logs: async () => [] }) }));
+jest.mock("../AccountSheet", () => {
+  const { Pressable, Text, View } = require("react-native");
+  return { __esModule: true, default: ({ accounts, onSwitch, onClose }: { accounts: MobileBootstrap["accounts"]; onSwitch: (account: MobileBootstrap["accounts"][0]) => Promise<void>; onClose: () => void }) => <View>{accounts.map(account => <Pressable key={account.id} accessibilityRole="button" onPress={async () => { await onSwitch(account); onClose(); }}><Text>Choose {account.name}</Text></Pressable>)}</View> };
+});
+const isaac = "10000000-0000-4000-8000-000000000001";
+const maria = "10000000-0000-4000-8000-000000000002";
+const mockBootstrap: MobileBootstrap = { mode: "demo", revision: 0, maxAudioBytes: 3_800_000, farm: { id: "00000000-0000-4000-8000-000000000001", name: "Bays Ranch", timezone: "America/Los_Angeles" }, fields: [{ id: isaac, name: "FIELD A" }], accounts: [isaac, maria].map((id, index) => ({ id, name: index ? "Maria" : "Isaac", role: "Worker", email: "", phone: "", avatarUrl: null, defaultField: "FIELD A", defaultActivity: "Spraying" })) };
+beforeEach(() => jest.requireMock("expo-file-system").reset());
+
+test("switching saves incomplete work under its original author and isolates each account's library", async () => {
+  await render(<RecordingWorkspace />);
+  await fireEvent.press(screen.getByRole("button", { name: "Write a note" }));
+  await fireEvent.changeText(screen.getByLabelText("Notes"), "Unfinished work for Isaac");
+  await fireEvent.press(screen.getByRole("button", { name: "Open account" }));
+  await waitFor(() => expect(screen.getByText("Choose Maria")).toBeTruthy());
+  await fireEvent.press(screen.getByText("Choose Maria"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Open account" })).toBeTruthy());
+  const drafts = await listDrafts();
+  expect(drafts).toHaveLength(1);
+  expect(drafts[0]).toMatchObject({ employee: { id: isaac }, notes: "Unfinished work for Isaac", startTime: "" });
+  await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
+  expect(screen.getByText("No logs yet")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Open account" }));
+  await fireEvent.press(screen.getByText("Choose Isaac"));
+  await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
+  expect(screen.getByText(/On this device/)).toBeTruthy();
+});

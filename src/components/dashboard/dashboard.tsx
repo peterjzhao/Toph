@@ -74,6 +74,9 @@ function MapDialog({ log, onClose }: { log: EmployeeLog; onClose: () => void }) 
 function LogDetails({ log, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }: { log: EmployeeLog; tags: string[]; onAddTag: () => void; onRemoveTag?: (label: string) => Promise<void>; onExpandMap: () => void; onNotify: (text: string) => void }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [clipIndex, setClipIndex] = useState(0);
+  const clips = log.recording.clips;
+  const recordingUrl = clips?.[clipIndex]?.url ?? log.recording.url;
   const [removingTag, setRemovingTag] = useState<string | null>(null);
   const [progress, setProgress] = useState(55.7444);
   useEffect(() => { const element = audio.current; return () => element?.pause(); }, []);
@@ -93,7 +96,8 @@ function LogDetails({ log, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }:
         <img src="/assets/waveform.svg" alt="" className={styles.waveformPlayed} style={{ clipPath: `inset(0 ${100 - progress}% 0 0)` }} />
         <span className={styles.playhead} style={{ left: `${progress}%` }} />
       </div> : <div className={styles.noRecording}>No audio recording is attached to this log.</div>}
-      <audio ref={audio} src={log.recording.url || undefined} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setProgress(0); }} onTimeUpdate={() => { const element = audio.current; if (element && element.duration) setProgress(element.currentTime / element.duration * 100); }} />
+      <audio ref={audio} src={recordingUrl || undefined} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setProgress(0); }} onTimeUpdate={() => { const element = audio.current; if (element && element.duration) setProgress(element.currentTime / element.duration * 100); }} />
+      {clips && clips.length > 1 && <div className={styles.recordingActions} aria-label="Recording clips">{clips.map((clip, index) => <button type="button" key={clip.url} className={styles.detailButton} aria-pressed={clipIndex === index} onClick={() => { audio.current?.pause(); setPlaying(false); setClipIndex(index); setProgress(0); }}>Recording {index + 1}</button>)}</div>}
       <div className={styles.recordingActions}>
         <button type="button" className={styles.detailButton} disabled={!log.recording.url} onClick={togglePlayback}>{playing ? <Pause size={16} /> : <Play size={16} />}<span>{!log.recording.url ? "No Recording" : playing ? "Pause Recording" : "Play Recording"}</span></button>
         <button type="button" className={`${styles.detailButton} ${styles.tagButton}`} onClick={onAddTag}><Star size={16} /><span>Add Tag</span></button>
@@ -128,6 +132,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const [activity, setActivity] = useState("");
   const [field, setField] = useState("");
   const [popover, setPopover] = useState<"sort" | "filter" | "date" | null>(null);
+  const [filterDateOpen, setFilterDateOpen] = useState(false);
   const [mapLog, setMapLog] = useState<EmployeeLog | null>(null);
   const [tagLog, setTagLog] = useState<EmployeeLog | null>(null);
   const [tagDraft, setTagDraft] = useState("");
@@ -140,6 +145,8 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const tableBody = useRef<HTMLTableSectionElement>(null);
   const controls = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const filterDateTrigger = useRef<HTMLButtonElement>(null);
+  const filterDatePanel = useRef<HTMLDivElement>(null);
   const logCard = useRef<HTMLElement>(null);
   useEffect(() => { setExpandedId(initialExpandedId); }, [initialExpandedId]);
   useEffect(() => {
@@ -161,12 +168,19 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     function dismiss(event: Event) {
       if (!controls.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) setPopover(null);
     }
-    function escape(event: KeyboardEvent) { if (event.key === "Escape") { setPopover(null); trigger?.focus(); } }
+    function escape(event: KeyboardEvent) { if (event.key === "Escape" && !event.defaultPrevented) { setPopover(null); trigger?.focus(); } }
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("focusin", dismiss);
     document.addEventListener("keydown", escape);
     return () => { cancelAnimationFrame(focusFrame); document.removeEventListener("pointerdown", dismiss); document.removeEventListener("focusin", dismiss); document.removeEventListener("keydown", escape); };
   }, [popover]);
+
+  useEffect(() => {
+    if (popover !== "filter") { setFilterDateOpen(false); return; }
+    if (!filterDateOpen) return;
+    const frame = requestAnimationFrame(() => filterDatePanel.current?.querySelector<HTMLElement>("button")?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [popover, filterDateOpen]);
 
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 3500); return () => clearTimeout(timer); }, [notice]);
 
@@ -175,7 +189,16 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const historyMonth = latestMonth !== today.slice(0, 7) ? latestMonth : undefined;
   const activityOptions = [...new Set(data.logs.map(log => log.activity))].map(value => ({ value, label: value }));
   const fieldOptions = [...new Map(data.logs.map(log => [log.field.id, { value: log.field.id, label: log.field.name }])).values()];
-  function applyDate(value: DateFilter) { setDateFilter(value); setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="date"]')?.focus(); }
+  function applyDate(value: DateFilter) {
+    setDateFilter(value);
+    if (popover === "filter") {
+      setFilterDateOpen(false);
+      filterDateTrigger.current?.focus();
+    } else {
+      setPopover(null);
+      controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="date"]')?.focus();
+    }
+  }
 
   const logs = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -193,6 +216,9 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const newCount = logs.filter(log => log.isNew).length;
   const selectedCount = logs.filter(log => selected.has(log.id)).length;
   const filterCount = Number(Boolean(activity)) + Number(Boolean(field));
+  const hasFilters = Boolean(range || activity || field || search.trim());
+
+  useEffect(() => { if (tableBody.current) tableBody.current.scrollTop = 0; }, [search, activity, field, range, sort]);
 
   function toggleLog(id: string) {
     setExpandedId(current => current === id ? null : id);
@@ -233,7 +259,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
       </section>}
 
       <section ref={logCard} className={`${styles.logCard} ${isExpanded ? styles.expandedCard : ""}`} aria-label="Employee activity logs">
-        <div className={styles.toolbar}><h2><DesignIcon name="log-audio" /><span>{activityPage ? "All Employee Logs" : "New Employee Logs"} <span className={styles.logCount}>({activityPage ? logs.length : newCount})</span></span></h2>
+        <div className={styles.toolbar}><h2><DesignIcon name="log-audio" /><span>{activityPage ? "All Employee Logs" : "Employee Logs"} <span className={styles.logCount}>({logs.length})</span></span>{newCount > 0 && <span className={styles.newLogCount}>{newCount} new</span>}</h2>
           <div className={styles.controls} ref={controls}>
             {sort !== "none" && <button type="button" className={`${styles.pill} ${styles.darkPill}`} onClick={() => setSort("none")} aria-label="Remove current sort"><X size={16} /><span>{sort.startsWith("date") ? "Date" : sort === "employee" ? "Employee" : "Activity"}</span></button>}
             <div className={styles.popoverAnchor}><button type="button" className={styles.pill} data-popover-trigger="sort" aria-haspopup="menu" aria-expanded={popover === "sort"} onClick={() => setPopover(popover === "sort" ? null : "sort")}><ListFilter size={16} /><span>Sort</span></button>
@@ -249,7 +275,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
               <div className={`${styles.pill} ${styles.datePill} ${range ? styles.darkPill : ""} ${dateFilter.kind === "this-month" ? styles.monthPill : ""}`}>
                 {range && <button type="button" className={styles.clearDate} aria-label="Clear date filter" onClick={() => applyDate({ kind: "all" })}><X size={16}/></button>}
                 <button type="button" data-popover-trigger="date" className={styles.dateTrigger} aria-label={`Date range: ${dateFilterLabel(dateFilter)}`} title={rangeDescription(range)} aria-haspopup="dialog" aria-expanded={popover === "date"} onClick={() => setPopover(popover === "date" ? null : "date")}>
-                  {!range && <CalendarDays size={15}/>}<span>{dateFilterLabel(dateFilter)}{range && !isExpanded && ` (${newCount})`}</span>{!range && <ChevronDown size={14}/>}
+                  {!range && <CalendarDays size={15}/>}<span>{dateFilterLabel(dateFilter)}{range && ` (${logs.length})`}</span>{!range && <ChevronDown size={14}/>}
                 </button>
               </div>
               {popover === "date" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="date"]') ?? null} panelRef={panel} width={320} className={filterStyles.panel} role="dialog" aria-label="Choose date range">
@@ -257,12 +283,20 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
               </AnchoredPopover>}
             </div>
             <div className={styles.popoverAnchor}><button type="button" data-popover-trigger="filter" className={`${styles.pill} ${filterCount ? styles.appliedFilter : ""}`} aria-haspopup="dialog" aria-expanded={popover === "filter"} onClick={() => setPopover(popover === "filter" ? null : "filter")}><Funnel size={16} /><span>Filter{filterCount ? ` (${filterCount})` : ""}</span></button>
-              {popover === "filter" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="filter"]') ?? null} panelRef={panel} width={280} className={filterStyles.panel} role="dialog" aria-label="Filter logs">
+              {popover === "filter" && <AnchoredPopover anchor={controls.current?.querySelector('[data-popover-trigger="filter"]') ?? null} panelRef={panel} width={filterDateOpen ? 612 : 280} className={filterStyles.filterGroup} data-date-open={filterDateOpen} role="dialog" aria-label="Filter logs" onKeyDown={event => {
+                if (event.key === "Escape" && filterDateOpen) { event.preventDefault(); event.stopPropagation(); setFilterDateOpen(false); filterDateTrigger.current?.focus(); }
+              }}>
+                <div className={`${filterStyles.panel} ${filterStyles.filterColumn}`}>
                 <div className={filterStyles.panelHeading}><Funnel size={15}/><h3>Filter employee logs</h3></div>
                 <FilterSelect label="Activity" value={activity} onChange={setActivity} options={[{ value: "", label: "All activities" }, ...activityOptions]}/>
                 <FilterSelect label="Field" value={field} onChange={setField} options={[{ value: "", label: "All fields" }, ...fieldOptions]}/>
-                <button type="button" className={filterStyles.filterDate} onClick={() => setPopover("date")}><span>{dateFilterLabel(dateFilter)}<small>{rangeDescription(range)}</small></span><CalendarDays size={16}/></button>
+                <span id="filter-date-label" className={filterStyles.label}>Date range</span>
+                <button ref={filterDateTrigger} type="button" className={filterStyles.filterDate} aria-labelledby="filter-date-label filter-date-value" aria-expanded={filterDateOpen} aria-controls={filterDateOpen ? "filter-date-options" : undefined} onClick={() => setFilterDateOpen(!filterDateOpen)}><span id="filter-date-value">{dateFilterLabel(dateFilter)}<small>{rangeDescription(range)}</small></span><ChevronDown size={16} className={filterDateOpen ? filterStyles.rotated : undefined}/></button>
                 <div className={styles.filterFooter}><button type="button" onClick={resetFilters}>Reset</button><button type="button" className={styles.primaryButton} onClick={() => { setPopover(null); controls.current?.querySelector<HTMLButtonElement>('[data-popover-trigger="filter"]')?.focus(); }}>Done</button></div>
+                </div>
+                {filterDateOpen && <div ref={filterDatePanel} id="filter-date-options" className={`${filterStyles.panel} ${filterStyles.dateColumn}`} role="group" aria-label="Choose date range">
+                  <DateFilterPanel value={dateFilter} today={today} timezone={data.farm.timezone ?? "America/Los_Angeles"} historyMonth={historyMonth} onChange={applyDate}/>
+                </div>}
               </AnchoredPopover>}
             </div>
           </div>
@@ -270,7 +304,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
         <div className={styles.tableViewport}>
           <table className={styles.table} aria-label="Employee logs">
             <thead><tr className={styles.tableHeader}><th className={styles.checkCell}><SelectionBox label="Select all logs" checked={logs.length > 0 && selectedCount === logs.length} mixed={selectedCount > 0 && selectedCount < logs.length} onChange={selectAll} /></th><th>EMPLOYEE</th><th>ACTIVITY</th><th>DATE</th><th>FIELD</th><th>TIME</th><th aria-label="Actions" /></tr></thead>
-            <tbody ref={tableBody} className={`${styles.tableBody} ${!isExpanded && !activityPage ? styles.compactBody : ""}`}>
+            <tbody ref={tableBody} className={`${styles.tableBody} ${!isExpanded && !activityPage && hasFilters ? styles.compactBody : ""}`}>
               {logs.map(log => <Fragment key={log.id}>
                 <tr className={`${styles.logRow} ${log.id === data.logs[0]?.id || log.id === expandedId ? styles.highlightedRow : ""} ${selected.has(log.id) ? styles.selectedRow : ""}`} onClick={() => toggleLog(log.id)}>
                   <td className={styles.checkCell}><SelectionBox label={`Select ${log.employee.name}'s log`} checked={selected.has(log.id)} onChange={() => toggleSelected(log.id)} /></td>

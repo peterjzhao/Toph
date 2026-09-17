@@ -10,6 +10,7 @@ import type { WorkspaceState } from "@/contracts/workspace";
 import {
   boolean,
   check,
+  customType,
   date,
   doublePrecision,
   foreignKey,
@@ -268,3 +269,37 @@ from toph.work_logs l
 join toph.employees e on e.id = l.employee_id and e.farm_id = l.farm_id
 join toph.fields f on f.id = l.field_id and f.farm_id = l.farm_id`,
   );
+
+/** Opt-in shared mobile demo extension; see drizzle/0004_mobile_demo.sql. */
+export const mobileProfiles = toph.table("mobile_profiles", {
+  farmId: uuid("farm_id").notNull().references(() => farms.id),
+  employeeId: uuid("employee_id").notNull(),
+  avatarUrl: text("avatar_url"),
+  defaultField: text("default_field").notNull(),
+  defaultActivity: text("default_activity").notNull(),
+}, t => [primaryKey({ columns: [t.farmId, t.employeeId] }), check("mobile_profile_photo_size", sql`octet_length(avatar_url) <= 180000`)]);
+
+export const mobileSubmissions = toph.table("mobile_submissions", {
+  farmId: uuid("farm_id").notNull().references(() => farms.id),
+  employeeId: uuid("employee_id").notNull(),
+  clientDraftId: uuid("client_draft_id").notNull(),
+  logId: uuid("log_id").notNull().references(() => workLogs.id).unique(),
+  contentHash: text("content_hash").notNull(),
+  notes: text("notes").notNull(),
+  treatment: jsonb("treatment").$type<{ product: string | null; amount: number | null; unit: string | null }>(),
+  savedAt: timestamp("saved_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [primaryKey({ columns: [t.farmId, t.employeeId, t.clientDraftId] })]);
+
+const binary = customType<{ data: Buffer }>({ dataType: () => "bytea" });
+export const mobileRecordings = toph.table("mobile_recordings", {
+  id: uuid("id").primaryKey(),
+  farmId: uuid("farm_id").notNull().references(() => farms.id),
+  logId: uuid("log_id").notNull().references(() => workLogs.id),
+  position: integer("position").notNull(),
+  mimeType: text("mime_type").notNull(),
+  durationSeconds: doublePrecision("duration_seconds").notNull(),
+  bytes: binary("bytes").notNull(),
+}, t => [unique().on(t.logId, t.position),
+  check("mobile_recordings_position_check", sql`position >= 0 AND position < 8`),
+  check("mobile_recordings_duration_seconds_check", sql`duration_seconds > 0 AND duration_seconds <= 1800`),
+  check("mobile_recordings_bytes_check", sql`octet_length(bytes) > 0 AND octet_length(bytes) <= 3800000`)]);

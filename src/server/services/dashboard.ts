@@ -21,6 +21,16 @@ type DateRange = { from: string; to: string } | null;
 
 type ViewRow = typeof dashboardLogs.$inferSelect;
 
+async function attachMobileClips(ctx: FarmContext, logs: LogDto[]): Promise<LogDto[]> {
+  const ids = logs.filter(log => log.recording?.url.startsWith("/api/mobile/demo/v1/recordings/")).map(log => log.id);
+  if (!ids.length) return logs;
+  const clips = await ctx.sql`select id, log_id, duration_seconds from toph.mobile_recordings where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[]) order by position`;
+  return logs.map(log => {
+    const recordings = clips.filter(clip => clip.log_id === log.id).map(clip => ({ url: `/api/mobile/demo/v1/recordings/${clip.id}`, durationSeconds: Number(clip.duration_seconds) }));
+    return log.recording && recordings.length ? { ...log, recording: { ...log.recording, clips: recordings } } : log;
+  });
+}
+
 /** Maps a dashboard_logs row to the page-shaped DTO. Asset paths are application-relative URLs. */
 export function toLogDto(row: ViewRow): LogDto {
   return {
@@ -164,7 +174,7 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
       },
       metrics,
       newLogCount: counts[0]?.newCount ?? 0,
-      logs: rows.map(toLogDto),
+      logs: await attachMobileClips(ctx, rows.map(toLogDto)),
       filterOptions: {
         activities: activityRows.map((r) => r.activity),
         fields: fieldRows.map((r) => ({ id: r.id, name: r.name })),
@@ -199,7 +209,7 @@ export async function getLog(ctx: FarmContext, logId: string): Promise<LogDto> {
     .where(and(eq(dashboardLogs.farmId, ctx.farmId), eq(dashboardLogs.id, id)))
     .limit(1);
   if (!row) throw notFound("Log not found.");
-  return toLogDto(row);
+  return (await attachMobileClips(ctx, [toLogDto(row)]))[0];
 }
 
 /** The farm's tag catalog, sorted by normalized label then ID. */

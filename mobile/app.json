@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Toph",
+    "slug": "toph-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "toph",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#ffffff",
+    "ios": {
+      "bundleIdentifier": "com.toph.mobile",
+      "supportsTablet": true,
+      "icon": "./assets/toph.icon",
+      "buildNumber": "2",
+      "appleTeamId": "QW64TZKUAF"
+    },
+    "android": {
+      "package": "com.toph.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/images/splash-toph.png",
+          "imageWidth": 150,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Toph uses the microphone to record your voice notes about field work."
+        }
+      ],
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo for your Toph account.",
+          "cameraPermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

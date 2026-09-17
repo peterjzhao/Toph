@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Toph app icon</title>
+  <!-- The header's Geist SemiBold lowercase t, outlined and centered by its visible bounds. -->
+  <rect id="background" width="1024" height="1024" fill="#fff"/>
+  <path fill="#000" d="M566.628 800.000 Q496.704 800.000 463.927 768.097 Q431.150 736.194 431.150 666.270 L431.150 419.788 L357.730 419.788 L357.730 333.256 L431.150 333.256 L431.150 224.000 L543.029 224.000 L543.029 333.256 L666.270 333.256 L666.270 419.788 L543.029 419.788 L543.029 655.781 Q543.029 688.995 557.451 701.232 Q571.873 713.469 600.716 713.469 L666.270 713.469 L666.270 800.000 Z"/>
+</svg>

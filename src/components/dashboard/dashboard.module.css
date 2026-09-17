@@ -42,13 +42,13 @@
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 74px; padding: var(--toph-spacing-lg) 30px; box-shadow: inset 0 -1px var(--toph-color-divider); position: relative; z-index: 3; }
 .toolbar h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--toph-font-size-control); font-weight: var(--toph-font-weight-regular); line-height: var(--toph-line-height-control); white-space: nowrap; }
 .logCount { color: var(--toph-color-text-disabled); }
+.newLogCount { color:var(--toph-color-text-subtle); font-size:var(--toph-font-size-caption); }
 .controls { display: flex; align-items: center; gap: 10px; }
 .pill { display: flex; align-items: center; justify-content: center; gap: 10px; height: 34px; padding: var(--toph-spacing-xs) var(--toph-spacing-md); border: 0; border-radius: 80px; box-shadow: inset 0 0 0 1px var(--toph-color-border), 0 0 4px rgb(0 0 0 / 5%); background: var(--toph-color-surface); color: var(--toph-color-text-muted); font-size: var(--toph-font-size-body); line-height: var(--toph-line-height-body); white-space: nowrap; }
 .pill[aria-label="Remove current sort"] { min-width: 89px; }
 .pill[aria-haspopup="menu"] { width: 86px; }
 .datePill { padding:0 16px; gap:10px; }
-.monthPill { width:148px; }
-.expandedCard .monthPill { width:129px; }
+.monthPill { min-width:148px; }
 .dateTrigger,.clearDate { display:flex; align-items:center; justify-content:center; gap:8px; padding:0; align-self:stretch; border:0; background:transparent; color:inherit; font:inherit; border-radius:4px; white-space:nowrap; }
 .dateTrigger { flex:1; }
 .clearDate { flex-shrink:0; }

@@ -1,4 +1,13 @@
 .panel { padding:16px; border:1px solid var(--toph-color-border); border-radius:var(--toph-radius-popover); background:var(--toph-color-surface); box-shadow:0 8px 30px rgb(0 0 0 / 9%); color:var(--toph-color-text-muted); font-size:var(--toph-font-size-body); scrollbar-width:thin; }
+.filterGroup { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; gap:12px; border-radius:var(--toph-radius-popover); scrollbar-width:thin; }
+.filterGroup[data-date-open=true] { grid-template-columns:minmax(0,320px) minmax(0,280px); }
+.filterGroup[data-date-open=true] .filterColumn { grid-column:2; grid-row:1; }
+.dateColumn { grid-column:1; grid-row:1; }
+@media (max-width:650px) {
+  .filterGroup[data-date-open=true] { grid-template-columns:minmax(0,1fr); }
+  .filterGroup[data-date-open=true] .filterColumn { grid-column:1; }
+  .dateColumn { grid-row:2; }
+}
 .panelHeading { display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--toph-color-text-muted); }
 .panelHeading h3 { margin:0; font-size:14px; font-weight:500; }
 .label { display:block; font-size:12px; font-weight:500; color:var(--toph-color-text-subtle); margin-bottom:8px; }
@@ -27,4 +36,5 @@
 .applyButton:disabled { opacity:.4; }
 .error { color:#a52626; font-size:12px; line-height:18px; margin:10px 0 0; }
 .filterDate { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; border:0; background:var(--toph-color-surface-muted); border-radius:8px; padding:10px 12px; color:var(--toph-color-text-muted); text-align:left; font-size:12px; margin-bottom:16px; }
+.filterDate[aria-expanded=true] { box-shadow:inset 0 0 0 1px var(--toph-color-brand); }
 .filterDate small { display:block; margin-top:3px; color:var(--toph-color-text-subtle); font-size:11px; }

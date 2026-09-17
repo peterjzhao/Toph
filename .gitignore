@@ -6,3 +6,15 @@ out/
 *.tsbuildinfo
 .DS_Store
 .local/
+
+# Local deployment links, editor/agent settings, and test artifacts
+.vercel/
+.claude/
+.codex/
+.vscode/
+coverage/
+playwright-report/
+test-results/
+npm-debug.*
+yarn-debug.*
+yarn-error.*

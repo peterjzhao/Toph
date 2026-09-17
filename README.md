@@ -4,9 +4,10 @@ Toph is a Next.js management dashboard backed by Drizzle and PostgreSQL. The web
 one shared farm with persistent sample data. See [Vercel deployment](docs/deployment.md) for
 the existing project's settings and deployment checks.
 
-A separate Expo recording app may be present in the local workspace; its files are excluded
-from this website release. Mobile log submission remains **disabled**, and transcription is
-guarded off in production.
+The [Expo recording app](mobile/README.md) uses the same server and existing farm demo
+accounts. It supports account switching, profile/photo editing, and syncing recordings or
+written logs. See [mobile connection setup](docs/backend/mobile-demo.md). Hosted transcription
+is still disabled; recordings and written notes can be saved without it.
 
 ## Repository layout
 
@@ -21,6 +22,7 @@ src/
   server/                 Database access, services, validation, and HTTP helpers
 public/assets/            Web runtime assets
 shared/design/            Design tokens required by the website, also reusable by native apps
+mobile/                   Separate Expo app, native assets, and mobile tests
 certs/                    Public CA bundled with server API functions
 design/reference/         Original design material, retained for visual review
 drizzle/                  Versioned SQL migrations and metadata
@@ -29,7 +31,7 @@ tests/backend/            Backend unit and PostgreSQL integration tests
 docs/                     Website, API, database, design, and deployment guides
 ```
 
-The root package is the Next.js app. Any local `mobile/` package has independent dependencies
+The root package is the Next.js app. The `mobile/` package has independent dependencies
 and is not needed to build the website. Dashboard components are live UI; `/design-check` uses isolated fixtures
 for development-only Figma comparisons.
 
@@ -62,6 +64,7 @@ npm run test:unit         # no database connection
 npm run test:frontend     # date-filter boundaries, no database connection
 npm run build
 npm run test:backend      # requires the separate guarded PostgreSQL test database
+npm run check:mobile-server # read-only check of the Vercel connection after pushing
 ```
 
 See the [documentation map](docs/README.md), [frontend workspace](docs/frontend-workspace.md),

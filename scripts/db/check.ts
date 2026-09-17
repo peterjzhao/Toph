@@ -26,6 +26,14 @@ async function checkSchemaAndSeed(sql: postgres.Sql, label: string): Promise<voi
   report(exists, `${label}: toph schema and dashboard_logs view exist${exists ? "" : " (run npm run db:migrate)"}`);
   if (!exists) return;
 
+  if (process.env.TOPH_MOBILE_DEMO_ENABLED === "true") {
+    const [{ mobile_tables }] = await sql<{ mobile_tables: boolean }[]>`
+      select to_regclass('toph.mobile_profiles') is not null
+         and to_regclass('toph.mobile_submissions') is not null
+         and to_regclass('toph.mobile_recordings') is not null as mobile_tables`;
+    report(mobile_tables, `${label}: mobile demo tables exist${mobile_tables ? "" : " (run npm run db:migrate)"}`);
+  }
+
   const farmId = process.env.TOPH_FARM_ID?.trim() || FARM_ID;
   const [farm] = await sql<{ name: string }[]>`select name from toph.farms where id = ${farmId}`;
   report(Boolean(farm), `${label}: configured farm exists${farm ? ` (${farm.name})` : " (run npm run db:seed or fix TOPH_FARM_ID)"}`);
@@ -40,6 +48,7 @@ async function checkSchemaAndSeed(sql: postgres.Sql, label: string): Promise<voi
 }
 
 async function checkRuntimePrivileges(sql: postgres.Sql): Promise<void> {
+  const mobileDemoEnabled = process.env.TOPH_MOBILE_DEMO_ENABLED === "true";
   const [{ user }] = await sql<{ user: string }[]>`select current_user as user`;
   const [p] = await sql<Record<string, boolean>[]>`
     select has_schema_privilege('toph', 'USAGE') as schema_usage,
@@ -54,8 +63,35 @@ async function checkRuntimePrivileges(sql: postgres.Sql): Promise<void> {
            has_column_privilege('toph.work_logs', 'summary', 'UPDATE') as summary_update`;
   report(p.schema_usage && p.view_select, `runtime role ${user}: can read the toph schema`);
   report(p.tags_insert && p.links_insert && p.links_delete && p.updated_at_update, `runtime role ${user}: has the tag write path`);
-  const restricted = !p.logs_insert && !p.logs_delete && !p.tags_delete && !p.summary_update;
-  report(restricted, `runtime role ${user}: cannot modify records or delete tags${restricted ? "" : " (role is broader than intended)"}`);
+  const restricted = !p.logs_delete && !p.tags_delete && !p.summary_update && (mobileDemoEnabled || !p.logs_insert);
+  report(restricted, `runtime role ${user}: cannot rewrite/delete logs or delete tags${restricted ? "" : " (role is broader than intended)"}`);
+
+  if (mobileDemoEnabled) {
+    const [mobile] = await sql<Record<string, boolean>[]>`
+      select has_table_privilege('toph.employees', 'INSERT') as employees_insert,
+             has_column_privilege('toph.employees', 'display_name', 'UPDATE') as employee_name_update,
+             has_column_privilege('toph.employees', 'avatar_path', 'UPDATE') as employee_avatar_update,
+             has_column_privilege('toph.employees', 'farm_id', 'UPDATE') as employee_farm_update,
+             has_table_privilege('toph.employees', 'DELETE') as employees_delete,
+             has_table_privilege('toph.mobile_profiles', 'SELECT') as profiles_select,
+             has_table_privilege('toph.mobile_profiles', 'INSERT') as profiles_insert,
+             has_column_privilege('toph.mobile_profiles', 'avatar_url', 'UPDATE') as profile_avatar_update,
+             has_column_privilege('toph.mobile_profiles', 'default_field', 'UPDATE') as profile_field_update,
+             has_column_privilege('toph.mobile_profiles', 'default_activity', 'UPDATE') as profile_activity_update,
+             has_column_privilege('toph.mobile_profiles', 'employee_id', 'UPDATE') as profile_identity_update,
+             has_table_privilege('toph.mobile_profiles', 'DELETE') as profiles_delete,
+             has_table_privilege('toph.mobile_recordings', 'INSERT') as recordings_insert,
+             has_table_privilege('toph.mobile_recordings', 'UPDATE, DELETE') as recordings_mutate,
+             has_table_privilege('toph.mobile_submissions', 'INSERT') as submissions_insert,
+             has_table_privilege('toph.mobile_submissions', 'UPDATE, DELETE') as submissions_mutate`;
+    report(p.logs_insert && mobile.employees_insert && mobile.employee_name_update && mobile.employee_avatar_update
+      && mobile.profiles_select && mobile.profiles_insert && mobile.profile_avatar_update && mobile.profile_field_update && mobile.profile_activity_update
+      && mobile.recordings_insert && mobile.submissions_insert,
+    `runtime role ${user}: has the mobile demo save/profile path (npm run db:enable-mobile-demo)`);
+    report(!mobile.employee_farm_update && !mobile.employees_delete && !mobile.profile_identity_update
+      && !mobile.profiles_delete && !mobile.recordings_mutate && !mobile.submissions_mutate,
+    `runtime role ${user}: cannot reassign accounts or rewrite/delete saved mobile media and receipts`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -103,6 +139,9 @@ async function main(): Promise<void> {
   if (role) {
     console.log(`INFO  Expected grants for ${role}:`);
     for (const line of describeRuntimeGrants(role)) console.log(`      ${line}`);
+    if (process.env.TOPH_MOBILE_DEMO_ENABLED === "true") {
+      console.log("      Mobile demo enabled: additional log/media inserts and employee/profile column updates.");
+    }
   }
 
   console.log(failures === 0 ? "All checks passed." : `${failures} check(s) failed.`);
