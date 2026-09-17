@@ -68,3 +68,10 @@ export async function geocodeFarmLocation(input: string | null): Promise<Geocode
   if (typeof match?.coordinates?.x !== "number" || typeof match.coordinates.y !== "number") throw new ApiError(404, "NOT_FOUND", "We couldn’t find that address. Try a full street address with city and state, or paste coordinates.");
   return { lat: match.coordinates.y, lng: match.coordinates.x, label: match.matchedAddress ?? query };
 }
+
+/** Approximate location of the caller's network, from the headers Vercel adds at its edge. Null elsewhere (localhost). */
+export function approximateLocation(headers: Headers): { lat: number; lng: number } | null {
+  const lat = Number(headers.get("x-vercel-ip-latitude") ?? NaN), lng = Number(headers.get("x-vercel-ip-longitude") ?? NaN);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 85 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return null;
+  return { lat, lng };
+}

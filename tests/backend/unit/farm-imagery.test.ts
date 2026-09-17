@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geocodeFarmLocation, parseImageryBbox } from "@/server/accounts/farm-imagery";
+import { approximateLocation, geocodeFarmLocation, parseImageryBbox } from "@/server/accounts/farm-imagery";
 
 describe("parseImageryBbox", () => {
   it("sizes the export to the view's aspect ratio with a 1600px long side", () => {
@@ -25,5 +25,17 @@ describe("geocodeFarmLocation", () => {
   it("rejects empty input and out-of-range coordinates", async () => {
     await expect(geocodeFarmLocation(" ")).rejects.toThrow(/address or coordinates/);
     await expect(geocodeFarmLocation("95, -121")).rejects.toThrow(/out of range/);
+  });
+});
+
+describe("approximateLocation", () => {
+  it("reads the edge network's location headers", () => {
+    expect(approximateLocation(new Headers({ "x-vercel-ip-latitude": "36.67", "x-vercel-ip-longitude": "-121.65" }))).toEqual({ lat: 36.67, lng: -121.65 });
+  });
+
+  it("returns null when the headers are absent or unusable", () => {
+    expect(approximateLocation(new Headers())).toBeNull();
+    expect(approximateLocation(new Headers({ "x-vercel-ip-latitude": "abc", "x-vercel-ip-longitude": "-121" }))).toBeNull();
+    expect(approximateLocation(new Headers({ "x-vercel-ip-latitude": "0", "x-vercel-ip-longitude": "0" }))).toBeNull();
   });
 });
