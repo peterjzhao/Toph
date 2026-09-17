@@ -14,7 +14,7 @@
 .error button { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--toph-color-border); border-radius: 80px; background: var(--toph-color-surface); color: var(--toph-color-text-muted); font-size: var(--toph-font-size-compact); cursor: pointer; }
 .sources { margin-top: var(--toph-spacing-md); }
 .sourcesHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--toph-spacing-sm); color: var(--toph-color-text-subtle); font-size: var(--toph-font-size-caption); text-transform: uppercase; letter-spacing: 0.04em; }
-.filterToggle { border: 0; padding: 0; background: transparent; color: var(--toph-color-brand); font-size: var(--toph-font-size-caption); text-transform: none; letter-spacing: 0; cursor: pointer; }
+.filterToggle { border: 0; padding: 0; background: transparent; color: var(--toph-color-action); font-size: var(--toph-font-size-caption); text-transform: none; letter-spacing: 0; cursor: pointer; }
 .filterToggle:hover { text-decoration: underline; }
 .sources ul { display: flex; flex-wrap: wrap; gap: var(--toph-spacing-xs); margin: 10px 0 0; padding: 0; list-style: none; }
 .sources li button { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 12px; border: 0; border-radius: 80px; box-shadow: inset 0 0 0 1px var(--toph-color-border); background: var(--toph-color-surface); color: var(--toph-color-text-muted); font-size: var(--toph-font-size-compact); text-align: left; cursor: pointer; }

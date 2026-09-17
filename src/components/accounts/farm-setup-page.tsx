@@ -93,7 +93,7 @@ export function FarmSetupPage() {
     setBusy(true); setError("");
     try {
       await accountRequest<FarmSetupResponse>("/api/farm/setup", { method: "POST", body: JSON.stringify({ ...(image.dataUrl ? { image: { dataUrl: image.dataUrl, width: image.width, height: image.height } } : {}), fields }) });
-      window.location.assign("/account?created=1");
+      window.location.assign("/settings");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your fields couldn’t be saved. Please try again."); setBusy(false); setProgress(""); }
   }
   if (loading) return <main className={styles.loading} role="status">Loading your farm…</main>;

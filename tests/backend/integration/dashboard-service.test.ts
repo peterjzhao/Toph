@@ -20,6 +20,10 @@ describe("dashboard read services", () => {
     sql = openTestSql();
     await prepareTestDatabase(sql);
     await resetTags(sql);
+    // Ten approved, one flagged, plus a decision about a log that doesn't exist (ignored): 10 ÷ 11 → 90.
+    const reviews = [...Array.from({ length: 11 }, (_, index) => ({ logId: recordId("workLog", index + 1), status: index === 5 ? "Flagged" : "Approved", note: index === 5 ? "Follow up" : "", updatedAt: "2026-04-29T16:00:00.000Z" })),
+      { logId: "00000000-0000-4000-8000-00000000dead", status: "Flagged", note: "stale", updatedAt: "2026-04-29T16:00:00.000Z" }];
+    await sql`update toph.workspace_state set payload = jsonb_set(payload, '{reviews}', ${JSON.stringify(reviews)}::jsonb) where farm_id = ${FARM_ID}`;
     ctx = await createFarmContext({ databaseUrl: getTestDatabaseTarget().url, farmId: FARM_ID });
   });
 
@@ -43,7 +47,7 @@ describe("dashboard read services", () => {
       recordingsToday: 0,
       newRecordings: 0,
       activeWorkers: 12,
-      responseAccuracy: null,
+      responseAccuracy: 90,
       asOf: today,
     });
     expect(data.newLogCount).toBe(4);

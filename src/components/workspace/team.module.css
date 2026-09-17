@@ -6,7 +6,7 @@
 .primaryButton:hover, .sendButton:hover { background: #303030; }
 .button:disabled, .primaryButton:disabled, .sendButton:disabled { opacity: .4; cursor: not-allowed; }
 .iconButton { width: 34px; height: 34px; padding: 0; flex-shrink: 0; }
-.iconButton:hover { color: var(--toph-color-brand); border-color: #b9d0c3; background: #f3f8f5; }
+.iconButton:hover { color: var(--toph-color-action); border-color: #bbb; background: #f5f5f5; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--toph-spacing-sm); }
 .stat { border: 1px solid #efefef; border-radius: var(--toph-radius-card); padding: var(--toph-spacing-lg); }
 .statLabel { display: flex; align-items: center; gap: var(--toph-spacing-xs); font-size: var(--toph-font-size-body); }
@@ -30,7 +30,7 @@
 .table tbody tr:hover { background: #fcfcfc; }
 .person, .personButton { display: flex; align-items: center; gap: var(--toph-spacing-sm); text-align: left; color: #303030; }
 .personButton { padding: 0; border: 0; background: none; cursor: pointer; font-size: var(--toph-font-size-compact); }
-.personButton:hover > span:last-child { color: var(--toph-color-brand); }
+.personButton:hover > span:last-child { color: var(--toph-color-action); }
 .person small, .personButton small, .contact small { display: block; font-size: 11px; color: #a5a5a5; margin-top: 5px; font-weight: var(--toph-font-weight-regular); }
 .avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: #eef3ef; border: 1px solid #e5ebe6; color: #64816e; font-size: 11px; font-weight: var(--toph-font-weight-medium); letter-spacing: .025em; }
 .largeAvatar { width: 64px; height: 64px; font-size: var(--toph-font-size-heading); }
@@ -146,7 +146,7 @@
 .composer:focus-within { border-color: #a9c4b1; }
 .composer textarea { flex: 1 1 0%; min-width: 0; width: 100%; resize: none; field-sizing: content; min-height: 20px; max-height: 140px; background: transparent; color: #555; font-size: var(--toph-font-size-compact); line-height: 20px; border: 0; padding: 0; outline: none; }
 .composer textarea::placeholder { color: #b4b4b4; }
-.sendButton { flex-shrink: 0; border-radius: 7px; min-height: 32px; padding: 7px 11px; background: var(--toph-color-brand); border-color: var(--toph-color-brand); font-size: var(--toph-font-size-caption); }
+.sendButton { flex-shrink: 0; border-radius: 7px; min-height: 32px; padding: 7px 11px; background: var(--toph-color-action); border-color: var(--toph-color-action); font-size: var(--toph-font-size-caption); }
 .sendButton:hover { background: #1a7b4f; }
 .composerHint { font-size: 9px; color: #b4b4b4; display: flex; flex-wrap: wrap; gap: 6px var(--toph-spacing-sm); justify-content: flex-end; margin-top: var(--toph-spacing-xs); }
 .composerWrapper .error { margin-top: var(--toph-spacing-sm); }

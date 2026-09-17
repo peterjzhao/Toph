@@ -51,7 +51,7 @@ export type DashboardData = {
     recordingsToday: number; // logs dated today in the farm timezone
     newRecordings: number; // of those, logs still flagged new
     activeWorkers: number; // employees with is_active plus the farm's administrator account
-    responseAccuracy: number | null; // null until a source for this measure exists
+    responseAccuracy: number | null; // approved ÷ (approved + flagged) audit decisions, nearest 5; null with no decisions
     asOf: string; // YYYY-MM-DD, today in the farm timezone
   };
   newLogCount: number; // New records matching the current filters, before pagination

@@ -8,9 +8,10 @@ import { and, asc, between, desc, eq, inArray, or, sql, type SQL } from "drizzle
 import type { DashboardData, DashboardMeta, DashboardQuery, LogDto, TagDto } from "@/contracts/dashboard";
 import { DASHBOARD_CONTRACT_VERSION } from "@/contracts/dashboard";
 import type { FarmContext } from "@/server/farm-context";
-import { dashboardLogs, employees, fields, tags, workLogTags, workLogs } from "@/server/db/schema";
+import { dashboardLogs, employees, fields, tags, workLogTags, workLogs, workspaceState } from "@/server/db/schema";
 import { notFound } from "@/server/errors";
 import { treatmentSummary } from "@/contracts/log-form";
+import { responseAccuracy } from "@/contracts/response-accuracy";
 import { instantToLocalDate } from "@/server/time/zoned";
 import { validateDashboardQuery, type ParsedDashboardQuery } from "@/server/validation/dashboard-query";
 import { parseUuid } from "@/server/validation/ids";
@@ -114,7 +115,7 @@ function orderFor(sort: ParsedDashboardQuery["sort"]): SQL[] {
 
 /**
  * Metric cards computed from the farm's data as of today in the farm timezone. Response
- * accuracy has no measured source yet and is reported as null.
+ * accuracy comes from the farm's Audit Manager decisions (see `responseAccuracy`).
  */
 async function loadMetrics(ctx: FarmContext, today: string): Promise<DashboardData["metrics"]> {
   const [logCounts] = await ctx.db
@@ -129,12 +130,22 @@ async function loadMetrics(ctx: FarmContext, today: string): Promise<DashboardDa
     .from(employees)
     .where(and(eq(employees.farmId, ctx.farmId), eq(employees.isActive, true)));
 
+  // Reviews live in the workspace payload; only decisions about logs that still exist count.
+  const [reviewCounts] = await ctx.db
+    .select({
+      approved: sql<number>`count(*) filter (where review->>'status' = 'Approved')::int`,
+      flagged: sql<number>`count(*) filter (where review->>'status' = 'Flagged')::int`,
+    })
+    .from(sql`${workspaceState}, jsonb_array_elements(coalesce(${workspaceState.payload}->'reviews', '[]'::jsonb)) as review`)
+    .where(and(eq(workspaceState.farmId, ctx.farmId),
+      sql`exists (select 1 from ${workLogs} where ${workLogs.farmId} = ${ctx.farmId} and ${workLogs.id}::text = review->>'logId')`));
+
   return {
     recordingsToday: logCounts?.recordingsToday ?? 0,
     newRecordings: logCounts?.newRecordings ?? 0,
     // Every configured farm has one administrator account, separate from its employee roster.
     activeWorkers: (workerCounts?.activeWorkers ?? 0) + 1,
-    responseAccuracy: null,
+    responseAccuracy: responseAccuracy(reviewCounts?.approved ?? 0, reviewCounts?.flagged ?? 0),
     asOf: today,
   };
 }

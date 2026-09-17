@@ -1,7 +1,7 @@
 .authPage { min-height:100dvh; display:grid; grid-template-columns:1fr 1fr; background:#fff; color:#182b22; }
 .intro { padding:clamp(32px,5vw,90px); background:#edf3ed; display:flex; flex-direction:column; justify-content:space-between; gap:70px; min-height:100dvh; }
 .brand { display:flex; align-items:center; gap:10px; color:#000; text-decoration:none; font-size:34px; font-weight:600; letter-spacing:-1.5px; }
-.eyebrow { display:block; font-size:11px; font-weight:600; letter-spacing:1.7px; color:#64806c; }
+.eyebrow { display:block; font-size:11px; font-weight:600; letter-spacing:1.7px; color:#808080; }
 .intro h1 { font-size:clamp(38px,4vw,64px); font-weight:500; line-height:1.08; letter-spacing:-2.5px; margin:22px 0; }
 .intro p { color:#68776c; font-size:16px; line-height:1.7; max-width:350px; }
 .benefits { list-style:none; padding:0; margin:35px 0 0; display:grid; gap:18px; }
@@ -16,14 +16,14 @@
 .form input, .fieldRow select, .coordinates input { border:1px solid #dfe5df; padding:13px 14px; border-radius:9px; background:#fff; min-width:0; width:100%; color:#25382c; font:inherit; }
 .form input:focus-visible, .fieldRow select:focus-visible { outline:2px solid #65977a; outline-offset:2px; }
 .hint { margin:0; font-size:12px; line-height:1.6; color:#8b938d; }
-.primaryButton, .secondaryButton, .textButton { display:inline-flex; align-items:center; justify-content:center; gap:10px; border:1px solid #1b6546; border-radius:9px; padding:12px 20px; background:#1b6546; color:#fff; font-size:14px; text-decoration:none; cursor:pointer; }
-.primaryButton:hover { background:#154f37; }
+.primaryButton, .secondaryButton, .textButton { display:inline-flex; align-items:center; justify-content:center; gap:10px; border:1px solid #000; border-radius:9px; padding:12px 20px; background:#000; color:#fff; font-size:14px; text-decoration:none; cursor:pointer; }
+.primaryButton:hover { background:#333; }
 .primaryButton:disabled, .secondaryButton:disabled { opacity:.5; cursor:default; }
-.secondaryButton { background:#fff; color:#355b43; border-color:#dce5dd; }
+.secondaryButton { background:#fff; color:#000; border-color:#dce5dd; }
 .secondaryButton:hover { background:#f5f8f4; }
-.textButton { padding:7px 0; border:0; color:#326e4c; background:transparent; }
+.textButton { padding:7px 0; border:0; color:#000; background:transparent; }
 .authCard .switchLink { margin-top:23px; text-align:center; font-size:13px; }
-.switchLink a { color:#216944; text-decoration:none; font-weight:500; margin-left:4px; }
+.switchLink a { color:#000; text-decoration:none; font-weight:500; margin-left:4px; }
 .error { background:#fff4f0; border:1px solid #efd6cb; padding:12px 14px; color:#a74f34; border-radius:8px; font-size:13px; line-height:1.6; }
 .workerNotice { margin:24px 0; padding:20px; background:#f3f7f1; border-radius:12px; }
 .workerNotice h3 { font-size:18px; font-weight:500; margin:0 0 10px; }
@@ -54,7 +54,7 @@
 .fieldCard > p { font-size:12px; color:#7c897d; line-height:1.7; }
 .fieldRows { display:flex; flex-direction:column; gap:7px; max-height:350px; overflow:auto; margin:22px -4px 16px; padding:4px; }
 .fieldRow { display:flex; align-items:center; gap:8px; padding:8px; background:#f7f9f5; border:1px solid transparent; border-radius:9px; }
-.selectedField { border-color:#70a481; background:#f1f7ed; }
+.selectedField { border-color:#000; background:#f1f7ed; }
 .fieldRow select { padding:7px; font-size:12px; flex:1; }
 .fieldRow button { background:none; border:0; padding:5px; color:#6c7f70; display:flex; cursor:pointer; }
 .fieldRow .fieldNumber { background:#e6efe3; color:#487556; width:26px; height:26px; border-radius:7px; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; }
@@ -70,7 +70,7 @@
 .accountCard h2 { margin:0 0 8px; font-size:22px; font-weight:500; }
 .accountCard p { line-height:1.7; color:#7d877e; font-size:14px; }
 .joinCode { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:20px; background:#f4f8f0; border:1px solid #e2eadb; border-radius:12px; margin:20px 0; }
-.joinCode code { font-size:26px; letter-spacing:4px; color:#335a3c; flex:1; }
+.joinCode code { font-size:26px; letter-spacing:4px; color:#000; flex:1; }
 .accountActions { display:flex; gap:12px; flex-wrap:wrap; }
 @media (max-width:850px) { .authPage { grid-template-columns:1fr; }.intro { min-height:unset; padding:30px; gap:30px; }.intro > div, .introFoot { display:none; }.authFormWrap { padding:40px 24px; }.setupGrid { grid-template-columns:1fr; }.fieldRows { max-height:220px; }.upload { min-height:280px; }.setupTitle h1 { font-size:22px; } }
 
@@ -95,9 +95,9 @@
 .setupPage .primaryButton { background:#000; border-color:#000; color:#fff; }
 .setupPage .primaryButton:hover { background:#222; }
 .editor { user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; }
-.editor .candidatePolygon:hover, .editor .candidatePolygon:focus-visible, .editor .pendingPolygon, .editor .selectedPolygon { fill:rgb(27 101 70 / 35%); stroke:#1b6546; stroke-width:2px; outline:none; }
+.editor .candidatePolygon:hover, .editor .candidatePolygon:focus-visible, .editor .pendingPolygon, .editor .selectedPolygon { fill:rgb(27 101 70 / 35%); stroke:#000; stroke-width:2px; outline:none; }
 .editor polygon:focus { outline:none; }
-.editor polygon:focus-visible { stroke:#1b6546; stroke-width:3px; }
+.editor polygon:focus-visible { stroke:#000; stroke-width:3px; }
 .spinner { animation:fieldSpin 1s linear infinite; }
 @keyframes fieldSpin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion:reduce) { .spinner { animation:none; } }
@@ -109,15 +109,15 @@
 
 .picker { display:flex; flex-direction:column; gap:14px; padding:18px; }
 .pickerSearch { display:flex; align-items:center; gap:10px; padding:6px 6px 6px 14px; border:1px solid #d8e2d2; border-radius:11px; background:#fff; color:#7c897d; }
-.pickerSearch:focus-within { border-color:#70a481; }
+.pickerSearch:focus-within { border-color:#000; }
 .pickerSearch input { flex:1; min-width:0; border:0; outline:0; padding:8px 0; font:inherit; font-size:14px; color:#22352a; background:transparent; }
 .pickerSearch .secondaryButton { padding:8px 16px; min-width:64px; }
 .pickerMap { position:relative; aspect-ratio:16 / 10; max-height:620px; width:100%; overflow:hidden; border-radius:10px; background:#dfe6dc; cursor:grab; touch-action:none; user-select:none; }
 .pickerMap:active { cursor:grabbing; }
-.pickerMap:focus-visible { outline:2px solid #70a481; outline-offset:2px; }
+.pickerMap:focus-visible { outline:2px solid #000; outline-offset:2px; }
 .pickerMap img { position:absolute; top:0; left:0; max-width:none; pointer-events:none; }
 .pickerControls { position:absolute; top:12px; right:12px; display:flex; flex-direction:column; border-radius:9px; overflow:hidden; box-shadow:0 1px 6px rgb(0 0 0 / 25%); cursor:default; }
-.pickerControls button { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:0; border-bottom:1px solid #e6ece3; background:#fff; color:#2b5a3f; cursor:pointer; }
+.pickerControls button { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:0; border-bottom:1px solid #e6ece3; background:#fff; color:#000; cursor:pointer; }
 .pickerControls button:last-child { border-bottom:0; }
 .pickerControls button:hover { background:#f3f7f1; }
 .pickerControls button:disabled { color:#b5c0b3; cursor:default; }
@@ -126,6 +126,6 @@
 .pickerFooter { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
 .pickerFooter p { margin:0; color:#6f7f70; font-size:13px; line-height:1.6; }
 .pickerFooter > div { display:flex; align-items:center; flex-wrap:wrap; gap:18px; }
-.pickerLocate { position:absolute; left:12px; bottom:12px; display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border:0; border-radius:9px; background:#fff; color:#2b5a3f; font:inherit; font-size:13px; line-height:1.2; box-shadow:0 1px 6px rgb(0 0 0 / 25%); cursor:pointer; }
+.pickerLocate { position:absolute; left:12px; bottom:12px; display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border:0; border-radius:9px; background:#fff; color:#000; font:inherit; font-size:13px; line-height:1.2; box-shadow:0 1px 6px rgb(0 0 0 / 25%); cursor:pointer; }
 .pickerLocate:hover { background:#f3f7f1; }
 .pickerLocate:disabled { color:#9aa79a; cursor:default; }

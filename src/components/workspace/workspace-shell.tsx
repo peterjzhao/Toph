@@ -29,7 +29,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <Link href="/messages" className={d.inboxButton} aria-label={`Inbox${unread ? `, ${unread} unread messages` : ""}`}><Icon name="inbox"/></Link>
       </div>
       {groups.map(group => <nav key={group.label} aria-label={group.label} className={`${d.navGroup} ${group.label === "OTHER" ? d.otherGroup : ""}`}><div className={d.navGroupLabel}>{group.label}</div>{group.items.map(([name,href,icon]) => <Link href={href} key={href} aria-label={name} title={name} aria-current={path === href ? "page" : undefined} className={`${d.navItem} ${path === href ? d.activeNav : ""}`} style={{ textDecoration: "none", color: "inherit" }}><Icon name={icon}/><span>{name}</span>{name === "Dashboard" && <span className={d.navBadge}>1</span>}{name === "Messages" && unread > 0 && path !== "/" && <span className={d.navBadge}>{unread}</span>}</Link>)}</nav>)}
-      <Link href="/account" className={`${d.navItem} ${path === "/account" ? d.activeNav : ""}`} aria-label="Account" title="Account" style={{ color: "inherit", textDecoration: "none" }}><Icon name="arrow-right-left"/><span>Account</span></Link>
+      <Link href="/switch-user" aria-current={path === "/switch-user" ? "page" : undefined} className={`${d.navItem} ${path === "/switch-user" ? d.activeNav : ""}`} aria-label="Switch User" title="Switch User" style={{ color: "inherit", textDecoration: "none" }}><Icon name="arrow-right-left"/><span>Switch User</span></Link>
       <button type="button" className={d.navItem} aria-label="Log Out" title="Log Out" onClick={() => void signOut()}><Icon name="log-out"/><span>Log Out</span></button>
     </aside>
     <main id="dashboard-content" className={d.main}>

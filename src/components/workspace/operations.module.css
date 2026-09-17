@@ -23,8 +23,8 @@
 .actions { text-align: right; }
 .button, .primaryButton, .dangerButton { display: inline-flex; justify-content: center; align-items: center; gap: var(--toph-spacing-xs); padding: 9px 15px; border: 1px solid #e5e5e5; border-radius: var(--toph-radius-sheet); background: var(--toph-color-surface); color: var(--toph-color-text-muted); font-size: var(--toph-font-size-compact); line-height: 17px; white-space: nowrap; cursor: pointer; text-decoration: none; }
 .button:hover { border-color: var(--toph-color-handle); background: #fafafa; }
-.primaryButton { background: var(--toph-color-brand); border-color: var(--toph-color-brand); color: var(--toph-color-surface); }
-.primaryButton:hover { background: var(--toph-color-brand-hover); }
+.primaryButton { background: var(--toph-color-action); border-color: var(--toph-color-action); color: var(--toph-color-surface); }
+.primaryButton:hover { background: var(--toph-color-action-hover); }
 .button:disabled, .primaryButton:disabled, .iconButton:disabled, .dangerButton:disabled { cursor: wait; opacity: .5; }
 .iconButton { display: inline-grid; place-items: center; width: 33px; height: 33px; border: 1px solid #e9e9e9; background: var(--toph-color-surface); border-radius: 50%; color: #666; flex-shrink: 0; cursor: pointer; }
 .iconButton:hover { background: #f6f6f6; color: #222; }
@@ -49,13 +49,13 @@
 .summary { padding: 17px; border: 1px solid #eceeec; border-radius: 10px; background: #fafbfa; }
 .summary h3 { margin: 0 0 var(--toph-spacing-xs); font-size: var(--toph-font-size-compact); font-weight: var(--toph-font-weight-medium); }
 .summary p { color: #888; line-height: 1.6; font-size: var(--toph-font-size-compact); margin: 0 0 var(--toph-spacing-sm); max-height: 145px; overflow: auto; }
-.textLink { color: var(--toph-color-brand); font-size: var(--toph-font-size-caption); text-underline-offset: 3px; }
+.textLink { color: var(--toph-color-action); font-size: var(--toph-font-size-caption); text-underline-offset: 3px; }
 .reportLayout { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(360px, 1.1fr); gap: var(--toph-spacing-lg); align-items: start; }
 .padded { padding: 25px; }
 .reportTypes { padding: 0; margin: 0; border: 0; display: flex; flex-direction: column; gap: 10px; }
 .reportTypes legend { font-size: var(--toph-font-size-compact); font-weight: var(--toph-font-weight-medium); margin-bottom: 10px; }
 .reportType { display: flex; align-items: center; gap: var(--toph-spacing-sm); border: 1px solid #e9e9e9; border-radius: 9px; padding: 14px; cursor: pointer; }
-.reportType input { accent-color: var(--toph-color-brand); margin: 0; }
+.reportType input { accent-color: var(--toph-color-action); margin: 0; }
 .reportType strong { display: block; font-size: var(--toph-font-size-compact); font-weight: var(--toph-font-weight-medium); }
 .reportType small { display: block; margin-top: 5px; font-size: var(--toph-font-size-caption); color: #999; }
 .selectedType { border-color: #bfd7c9; background: #f8fbf9; }
@@ -89,7 +89,7 @@
 .otherMonth { background: #fafbfa; }
 .dayNumber { display: flex; align-items: center; gap: 6px; width: 100%; justify-content: space-between; margin-bottom: 9px; font-size: var(--toph-font-size-caption); color: #777; background: none; padding: 0 2px; border: 0; text-align: left; cursor: pointer; }
 .dayNumber svg { opacity: 0; }
-.dayNumber:hover { color: var(--toph-color-brand); }
+.dayNumber:hover { color: var(--toph-color-action); }
 .day:hover .dayNumber svg, .dayNumber:focus-visible svg { opacity: 1; }
 .otherMonth .dayNumber { color: var(--toph-color-handle); }
 .calendarEvent { display: block; text-align: left; width: 100%; margin: 0 0 6px; border: 1px solid #e6eae6; border-left: 2px solid #9aaa9c; background: #f5f7f5; color: #526155; border-radius: 5px; padding: 7px 7px var(--toph-spacing-xs); cursor: pointer; }
@@ -104,7 +104,7 @@
 .calendarHint { margin-left: auto; }
 .cellSub { display: block; font-size: 11px; color: #999; margin-top: 5px; }
 .form > .checkboxLabel { flex-direction: row; align-items: center; font-size: var(--toph-font-size-compact); font-weight: var(--toph-font-weight-regular); }
-.checkboxLabel input { accent-color: var(--toph-color-brand); margin: 0; }
+.checkboxLabel input { accent-color: var(--toph-color-action); margin: 0; }
 .deleteButton { margin-right: auto; }
 .deleteButton:hover { color: #aa4141; }
 .deletePrompt { background: #fdf7f6; border: 1px solid #efdfdc; border-radius: 9px; padding: var(--toph-spacing-md); }

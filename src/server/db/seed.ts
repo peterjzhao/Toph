@@ -137,6 +137,10 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
       .from(schema.fields).where(eq(schema.fields.farmId, FARM.id)).orderBy(schema.fields.id);
     const workspace = makeWorkspaceSeed({ id: FARM.id, name: FARM.name, timezone: FARM.timezone, avatarPath: FARM.avatarPath }, seededEmployees, seededFields);
     workspace.settings.adminAvatar = adminAvatar();
+    // Demo audit decisions: ten logs approved and one flagged, which the shared accuracy formula reads as 90.
+    workspace.reviews = INITIAL_ROWS.map(row => row.n === 6
+      ? { logId: recordId("workLog", row.n), status: "Flagged" as const, note: "North half still needs a pass; confirm before closing out.", updatedAt: "2026-04-29T16:00:00.000Z" }
+      : { logId: recordId("workLog", row.n), status: "Approved" as const, note: "", updatedAt: "2026-04-29T16:00:00.000Z" });
     await tx.execute(sql`insert into toph.workspace_state (farm_id, payload, revision)
       values (${FARM.id}, ${JSON.stringify(workspace)}::jsonb, 0) on conflict (farm_id) do nothing`);
 

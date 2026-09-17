@@ -8,6 +8,10 @@ export const tokens = {
     brand: "#146c44",
     brandHover: "#105b39",
     brandTint: "rgba(20,108,68,0.1)",
+    // Buttons, checkmarks and other controls are black like the Figma controls; brand green is kept for Figma's "Add Tag" and status badges.
+    action: "#000",
+    actionHover: "#333",
+    actionTint: "rgba(0,0,0,0.06)",
     warning: "#b85c00",
     text: "#000",
     textMuted: "#4d4d4d",
