@@ -78,6 +78,8 @@
 .table thead, .table tbody { display: block; }
 .tableHeader, .logRow { display: grid; grid-template-columns: 56px repeat(5, minmax(0, 1fr)) 92px; align-items: center; padding: 0 var(--toph-spacing-lg); width: 100%; height: 58px; }
 .tableHeader { box-shadow: inset 0 -.5px var(--toph-color-border); }
+/* Explicit block layout keeps cell text aligned with the grid in WebKit. */
+.tableHeader th, .logRow td { display: block; }
 .tableHeader th { min-width: 0; text-align: left; font-size: var(--toph-font-size-body); font-weight: var(--toph-font-weight-regular); line-height: var(--toph-line-height-body); color: var(--toph-color-handle); padding: var(--toph-spacing-lg) 10px; white-space: nowrap; }
 .logRow { cursor: pointer; box-shadow: inset 0 -1px var(--toph-color-divider); }
 .logRow:last-child { box-shadow: none; }

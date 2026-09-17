@@ -216,6 +216,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const newCount = logs.filter(log => log.isNew).length;
   const selectedCount = logs.filter(log => selected.has(log.id)).length;
   const filterCount = Number(Boolean(activity)) + Number(Boolean(field));
+  // Preserve the compact Figma view for filtered results; all logs use the page height.
   const hasFilters = Boolean(range || activity || field || search.trim());
 
   useEffect(() => { if (tableBody.current) tableBody.current.scrollTop = 0; }, [search, activity, field, range, sort]);
