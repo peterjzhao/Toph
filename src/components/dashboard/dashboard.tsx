@@ -4,8 +4,9 @@ import { FieldMap } from "./field-map";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays, Check, ChevronDown, Expand, Funnel, ListFilter, Minus, Pause, Play,
-  Plus, Search, Square, SquareCheck, Star, X,
+  Plus, Search, Sparkles, Square, SquareCheck, Star, X,
 } from "lucide-react";
+import type { AskFarmResult } from "@/contracts/ask";
 import { formatDate, formatTime } from "@/lib/format";
 import type { DashboardData, EmployeeLog } from "./types";
 import styles from "./dashboard.module.css";
@@ -15,6 +16,8 @@ import { AnchoredPopover } from "./anchored-popover";
 import { DateFilterPanel } from "./date-filter-panel";
 import { dateRange, dateFilterLabel, initialDateFilter, rangeDescription, type DateFilter } from "./date-range";
 import { ScrollAnchor } from "./scroll-anchor";
+import { AskPanel, type AskState } from "./ask-panel";
+import { isFarmQuestion, logSearchText, matchesSearch } from "./log-search";
 
 function DesignIcon({ name, size = 16 }: { name: string; size?: number }) {
   return <img src={`/assets/icons/${name}.svg`} alt="" aria-hidden="true" width={size} height={size} style={{ display: "block", flexShrink: 0 }} />;
@@ -64,7 +67,7 @@ function Modal({ title, children, onClose, wide = false }: { title: string; chil
 function MapDialog({ log, fields, onClose }: { log: EmployeeLog; fields: EmployeeLog["field"][]; onClose: () => void }) {
   const [zoom, setZoom] = useState(1);
   return <Modal title={log.field.name} onClose={onClose} wide>
-    <div className={styles.largeMapViewport}><FieldMap field={log.field} fields={fields} imageUrl={log.field.mapImageUrl} zoom={zoom} /></div>
+    <div className={styles.largeMapViewport}><FieldMap field={log.field} fields={fields} imageUrl={log.field.mapImageUrl} zoom={zoom} showLogMarker /></div>
     <div className={styles.mapFooter}><span>{log.employee.name} · {formatDate(log.date)}</span><div className={styles.zoomControls}>
       <button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoom(Math.max(1, zoom - .5))}><Minus size={16} /></button>
       <button type="button" aria-label="Reset map zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
@@ -111,25 +114,33 @@ function LogDetails({ log, fields, tags, onAddTag, onRemoveTag, onExpandMap, onN
       <div className={styles.summary}><h3>Summary</h3><p>{log.summary}</p></div>
     </div>
     <div className={styles.detailRight}>
-      {log.field.mapImageUrl ? <div className={styles.mapLink}><FieldMap field={log.field} fields={fields} imageUrl={log.field.mapImageUrl} /></div> : <div className={styles.noRecording}>No map is attached to this log.</div>}
+      {log.field.mapImageUrl ? <div className={styles.mapLink}><FieldMap field={log.field} fields={fields} imageUrl={log.field.mapImageUrl} showLogMarker /></div> : <div className={styles.noRecording}>No map is attached to this log.</div>}
       <button type="button" className={styles.detailButton} disabled={!log.field.mapImageUrl} onClick={onExpandMap}><Expand size={16} /><span>Expand Map</span></button>
     </div>
   </div>;
 }
 
-export function Dashboard({ data, initialExpandedId = null, embedded = false, activityPage = false, reviewMode = false, onReview, onAddTag, onRemoveTag, onNavigate }: {
+export function Dashboard({ data, initialExpandedId = null, embedded = false, activityPage = false, reviewMode = false, onReview, onAddTag, onRemoveTag, onNavigate, onAsk }: {
   data: DashboardData; initialExpandedId?: string | null; embedded?: boolean; activityPage?: boolean;
   reviewMode?: boolean;
   onReview?: (logId: string) => Promise<void>;
   onAddTag?: (logId: string, label: string) => Promise<string[]>;
   onRemoveTag?: (logId: string, label: string) => Promise<string[]>;
   onNavigate?: (path: string) => void;
+  /** Activity Logs only: answers a question from the farm's logs. */
+  onAsk?: (question: string, signal: AbortSignal) => Promise<AskFarmResult>;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId);
   const [reviewFilter, setReviewFilter] = useState<"new" | "all">(reviewMode && !activityPage ? "new" : "all");
   const reviewAttempts = useRef(new Set<string>());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [ask, setAsk] = useState<AskState | null>(null);
+  const [citedOnly, setCitedOnly] = useState(false);
+  const askRequest = useRef<AbortController | null>(null);
+  const canAsk = Boolean(onAsk && activityPage);
+  // A question is answered by Toph on request; it is not also used as keywords for the table.
+  const questionMode = canAsk && isFarmQuestion(search);
   const [sort, setSort] = useState<SortOrder>("date-asc");
   const today = data.metrics.asOf;
   const [dateFilter, setDateFilter] = useState<DateFilter>(() => initialDateFilter(
@@ -224,9 +235,13 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     }
   }
 
+  const keywordMatches = useMemo(() => {
+    const query = questionMode ? "" : search.trim();
+    return data.logs.filter(log => (!activity || log.activity === activity) && (!field || log.field.id === field) && (!query || matchesSearch(logSearchText(log, tags[log.id] ?? log.tags, data.farm.timezone), query)));
+  }, [data.logs, data.farm.timezone, search, questionMode, activity, field, tags]);
+  const citedIds = useMemo(() => new Set(ask?.status === "done" ? ask.result.citedLogIds : []), [ask]);
   const matchingLogs = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const filtered = data.logs.filter(log => (!range || (log.date >= range.from && log.date <= range.to)) && (!activity || log.activity === activity) && (!field || log.field.id === field) && (!query || [log.employee.name, log.activity, log.field.name, formatDate(log.date), ...(tags[log.id] ?? log.tags)].join(" ").toLowerCase().includes(query)));
+    const filtered = keywordMatches.filter(log => (!range || (log.date >= range.from && log.date <= range.to)) && (!citedOnly || citedIds.has(log.id)));
     return filtered.sort((a, b) => {
       if (sort === "date-asc") return a.date.localeCompare(b.date);
       if (sort === "date-desc") return b.date.localeCompare(a.date);
@@ -234,7 +249,9 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
       if (sort === "activity") return a.activity.localeCompare(b.activity);
       return 0;
     });
-  }, [data.logs, search, activity, field, range, sort, tags]);
+  }, [keywordMatches, range, sort, citedOnly, citedIds]);
+  // Searching should not silently miss logs outside the selected dates.
+  const outsideRangeMatches = search.trim() && !questionMode && range ? keywordMatches.length - keywordMatches.filter(log => log.date >= range.from && log.date <= range.to).length : 0;
 
   // Keep an opened row visible after its shared review flag clears.
   const logs = matchingLogs.filter(log => reviewFilter === "all" || log.isNew || log.id === expandedId);
@@ -255,7 +272,36 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     if (name === "Map") { setMapLog(data.logs.find(log => log.id === expandedId) ?? data.logs[0]); return; }
     setSection(name);
   }
-  function resetFilters() { setSearch(""); setActivity(""); setField(""); setDateFilter(initialDateFilter(data.logs.map(log => log.date), today)); setSort("date-asc"); }
+  function resetFilters() { setSearch(""); setActivity(""); setField(""); setCitedOnly(false); setDateFilter(initialDateFilter(data.logs.map(log => log.date), today)); setSort("date-asc"); }
+
+  useEffect(() => () => askRequest.current?.abort(), []);
+  async function askQuestion(question = search.trim()) {
+    if (!onAsk || question.length < 3) return;
+    askRequest.current?.abort();
+    const controller = new AbortController();
+    askRequest.current = controller;
+    setCitedOnly(false);
+    setAsk({ status: "loading", question });
+    try {
+      const result = await onAsk(question, controller.signal);
+      if (!controller.signal.aborted) setAsk({ status: "done", question, result });
+    } catch (cause) {
+      if (!controller.signal.aborted) setAsk({ status: "error", question, message: cause instanceof Error ? cause.message : "Toph couldn't answer that right now." });
+    }
+  }
+  function closeAsk() { askRequest.current?.abort(); setAsk(null); setCitedOnly(false); }
+  function openCitedLog(id: string) {
+    const log = data.logs.find(item => item.id === id);
+    if (!log) return;
+    // Make sure the table can show the row before opening it.
+    if (range && (log.date < range.from || log.date > range.to)) setDateFilter({ kind: "all" });
+    if (activity && log.activity !== activity) setActivity("");
+    if (field && log.field.id !== field) setField("");
+    if (!questionMode && search.trim() && !matchesSearch(logSearchText(log, tags[log.id] ?? log.tags, data.farm.timezone), search.trim())) setSearch("");
+    setReviewFilter("all");
+    setExpandedId(id);
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`details-${id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })));
+  }
 
   return <div className={embedded ? styles.embedded : styles.app}>
     {!embedded && <><a className={styles.skipLink} href="#dashboard-content">Skip to dashboard</a>
@@ -275,7 +321,10 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
     </aside></>}
 
     <div id={embedded ? undefined : "dashboard-content"} ref={main} className={embedded ? styles.embedded : styles.main}>
-      <header className={styles.header}><div><h1>{activityPage ? "Activity Logs" : "Dashboard"}</h1><p>{activityPage ? "Every field activity, recording, and detail in one place" : "An overview of your farm and employee activity"}</p></div><div className={styles.search}><Search size={16} /><input type="search" placeholder="Search" aria-label="Search employee logs" value={search} onChange={event => setSearch(event.target.value)} /></div></header>
+      <header className={styles.header}><div><h1>{activityPage ? "Activity Logs" : "Dashboard"}</h1><p>{activityPage ? "Every field activity, recording, and detail in one place" : "An overview of your farm and employee activity"}</p></div><div className={`${styles.search} ${canAsk ? styles.askSearch : ""}`}><Search size={16} /><input type="search" placeholder={canAsk ? "Search or ask a question" : "Search"} aria-label={canAsk ? "Search employee logs or ask Toph a question" : "Search employee logs"} aria-describedby={questionMode ? "ask-hint" : undefined} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && questionMode && !event.nativeEvent.isComposing) { event.preventDefault(); void askQuestion(); } }} />{canAsk && search.trim().length >= 3 && <button type="button" className={`${styles.askButton} ${questionMode ? styles.askButtonReady : ""}`} onClick={() => void askQuestion()} disabled={ask?.status === "loading"} title="Ask Toph about your logs"><Sparkles size={14} /><span>Ask</span></button>}</div></header>
+      {questionMode && ask?.question !== search.trim() && <p id="ask-hint" className={styles.askHint}>Press Enter to ask Toph. The table isn’t filtered by questions.</p>}
+
+      {canAsk && ask && <AskPanel state={ask} logs={data.logs} citedOnly={citedOnly} onOpenLog={openCitedLog} onToggleCitedOnly={() => { if (!citedOnly && range) setDateFilter({ kind: "all" }); setCitedOnly(!citedOnly); }} onRetry={() => void askQuestion(ask.question)} onClose={closeAsk} />}
 
       {!activityPage && <section className={styles.metrics} aria-label="Farm activity overview">
         {[{ icon: "recordings", title: "Todays Recordings", value: data.metrics.recordingsToday, note: `${data.metrics.newRecordings} New` }, { icon: "clipboard-pen", title: "Active Workers", value: data.metrics.activeWorkers }, { icon: "percent", title: "Response Accuracy", value: data.metrics.responseAccuracy }].map(({ icon, title, value, note }) => <button type="button" className={styles.metric} key={title} onClick={() => onNavigate?.(title === "Active Workers" ? "/employees" : title === "Response Accuracy" ? "/performance" : "/activity-logs")}><div className={styles.metricTitle}><DesignIcon name={icon} /><span>{title}</span></div><div className={styles.metricValue}><span>{value ?? "—"}</span>{note && <small>{note}</small>}</div></button>)}
@@ -325,6 +374,8 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
             </div>
           </div>
         </div>
+        {outsideRangeMatches > 0 && <div className={styles.outsideMatches} role="status"><span>{outsideRangeMatches} more {outsideRangeMatches === 1 ? "match" : "matches"} outside {dateFilterLabel(dateFilter)}</span><button type="button" onClick={() => setDateFilter({ kind: "all" })}>Show all dates</button></div>}
+        {citedOnly && <div className={styles.outsideMatches} role="status"><span>Showing only the logs cited in Toph’s answer</span><button type="button" onClick={() => setCitedOnly(false)}>Show all logs</button></div>}
         <ScrollAnchor className={styles.tableViewport} watch={data.logs}>
           <table className={styles.table} aria-label="Employee logs">
             <thead><tr className={styles.tableHeader}><th className={styles.checkCell}><SelectionBox label="Select all logs" checked={logs.length > 0 && selectedCount === logs.length} mixed={selectedCount > 0 && selectedCount < logs.length} onChange={selectAll} /></th><th>EMPLOYEE</th><th>ACTIVITY</th><th>DATE</th><th>FIELD</th><th>TIME</th><th aria-label="Actions" /></tr></thead>

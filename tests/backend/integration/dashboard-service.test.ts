@@ -112,7 +112,7 @@ describe("dashboard read services", () => {
       employee: { id: recordId("employee", 1), name: "Isaac Wang", avatarUrl: null },
       activity: "Spraying",
       date: "2026-04-19",
-      field: { id: recordId("field", 1), name: "FIELD A", mapImageUrl: "/assets/field-map.svg" },
+      field: { id: recordId("field", 1), name: "FIELD A", mapImageUrl: "/api/farm/image" },
       startAt: "2026-04-19T13:00:00.000Z",
       endAt: "2026-04-19T17:40:00.000Z",
       summary: ISAAC_SUMMARY,

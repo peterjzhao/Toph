@@ -27,6 +27,8 @@ export function useRecorder() {
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [seconds, setSeconds] = useState(0);
   const [levels, setLevels] = useState<number[]>(idleLevels);
+  // Latest input level in dB, or null when the platform reports none. Hands-free mode stops a clip on silence.
+  const [metering, setMetering] = useState<number | null>(null);
   const [audio, setAudio] = useState<RecordingAudio | null>(null);
   const [error, setError] = useState("");
   const statusRef = useRef<RecorderStatus>("idle");
@@ -69,6 +71,7 @@ export function useRecorder() {
     setAudio(null);
     setSeconds(0);
     setLevels(idleLevels());
+    setMetering(null);
     update("idle");
     setError("");
   }, [stopQuietly, update]);
@@ -83,8 +86,10 @@ export function useRecorder() {
     const interval = setInterval(() => {
       const elapsed = accumulated.current + Date.now() - started.current;
       setSeconds(elapsed / 1000);
-      let level: number | null = null;
-      try { level = meterToLevel(recorder.getStatus().metering); } catch { level = null; }
+      let decibels: number | undefined;
+      try { decibels = recorder.getStatus().metering; } catch { decibels = undefined; }
+      const level = meterToLevel(decibels);
+      setMetering(level === null ? null : decibels!);
       setLevels((current) => {
         const next = level ?? 5 + Math.abs(Math.sin(elapsed / 290) * Math.cos(elapsed / 900)) * 43;
         return [...current.slice(1), next];
@@ -195,5 +200,5 @@ export function useRecorder() {
     update("ready");
   }
 
-  return { status, seconds, levels, audio, error, start, pause, resume, finish, reset, load };
+  return { status, seconds, levels, metering, audio, error, start, pause, resume, finish, reset, load };
 }

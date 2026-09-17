@@ -153,6 +153,7 @@ test("a completed recording fills every category in the actual review form", asy
   jest.mocked(transcribeRecording).mockResolvedValue({ ...transcriptResult("Sprayed Field B."), fields: {
     fieldId, activity: "Fertilizing", workDate: "2026-09-16", startTime: "06:00", endTime: "08:00",
     notes: "Completed the work.", product: "Water", amount: 2, unit: "L", tags: ["Equipment"],
+    details: { product: "Water", amount: 2, unit: "L" },
   } });
   const view = await render(<RecordingWorkspace {...workspaceProps(mockBootstrap ?? undefined)} />);
   await fireEvent.press(screen.getByRole("button", { name: "Finish recording" }));
@@ -303,4 +304,35 @@ test("an oak-tree amendment fills and remembers a new crop while only missing fi
   expect(readActivityItems("Planting", catalogScope)).toEqual(["Oak trees"]);
   await fireEvent.press(screen.getByLabelText("Crop / variety"));
   expect(screen.getByRole("button", { name: "Oak trees" })).toBeTruthy();
+});
+
+test("Record starts a new recording after a saved log instead of reopening it", async () => {
+  const result = transcriptResult("Sprayed the north rows.");
+  result.fields = { ...result.fields!, activity: "Spraying", product: "Water", amount: 2, unit: "L", workDate: "2026-09-17", startTime: "06:00", endTime: "08:00" };
+  jest.mocked(transcribeRecording).mockResolvedValueOnce(result);
+  new File(audio.uri).write("AUDIO");
+  const view = await render(<RecordingWorkspace {...workspaceProps(mockBootstrap ?? undefined)} />);
+  await fireEvent.press(screen.getByRole("button", { name: "Finish recording" }));
+  mockRecorder.status = "ready"; mockRecorder.audio = audio;
+  await view.rerender(<RecordingWorkspace {...workspaceProps(mockBootstrap ?? undefined)} />);
+  await screen.findByText("Sprayed the north rows.");
+  await fireEvent.press(screen.getByRole("button", { name: "Save log" }));
+  expect(await listDrafts()).toHaveLength(1);
+
+  await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
+  await fireEvent.press(screen.getByRole("tab", { name: "Record" }));
+  expect(mockRecorder.reset).toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Start recording" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Save log" })).toBeNull();
+});
+
+test("Record still returns to an unsaved recording", async () => {
+  const view = await render(<RecordingWorkspace {...workspaceProps(mockBootstrap ?? undefined)} />);
+  await fireEvent.press(screen.getByRole("button", { name: "Finish recording" }));
+  mockRecorder.status = "ready"; mockRecorder.audio = audio;
+  await view.rerender(<RecordingWorkspace {...workspaceProps(mockBootstrap ?? undefined)} />);
+  await fireEvent.press(screen.getByRole("tab", { name: "Logs" }));
+  await fireEvent.press(screen.getByRole("tab", { name: "Record" }));
+  expect(mockRecorder.reset).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Save log" })).toBeTruthy();
 });

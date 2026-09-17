@@ -134,10 +134,12 @@ describe("initial dataset", () => {
     }
   });
 
-  it("gives every field its map", async () => {
-    const fields = await sql<{ map_image_path: string | null }[]>`select map_image_path from toph.fields where farm_id = ${FARM_ID}`;
-    expect(fields).toHaveLength(11);
-    expect(fields.every((f) => f.map_image_path === "/assets/field-map.svg")).toBe(true);
+  it("stores the reviewed A–K map exactly like a confirmed field setup", async () => {
+    const fields = await sql<{ label: string; map_image_path: string | null; points: number }[]>`select label, map_image_path, jsonb_array_length(boundary) as points from toph.fields where farm_id = ${FARM_ID} order by label`;
+    expect(fields.map((f) => f.label).join("")).toBe("ABCDEFGHIJK");
+    expect(fields.every((f) => f.map_image_path === "/api/farm/image" && f.points >= 3)).toBe(true);
+    expect(await sql`select mime_type, width, height from toph.farm_images where farm_id = ${FARM_ID}`).toEqual([{ mime_type: "image/jpeg", width: 1403, height: 896 }]);
+    expect(await sql`select setup_complete from toph.farm_access where farm_id = ${FARM_ID}`).toEqual([{ setup_complete: true }]);
   });
 
   it("is repeatable: a second run inserts nothing, overwrites nothing, and keeps user-added tags", async () => {

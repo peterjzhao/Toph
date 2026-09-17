@@ -10,7 +10,8 @@ import { applyMobileGrants } from "@/server/mobile/grants";
 import { getMobileBootstrap, updateMobileAccount } from "@/server/mobile/accounts";
 import { listMobileLogs, parseMobileSubmission, readMobileSubmission, saveMobileLog } from "@/server/mobile/logs";
 import { getWorkspace, patchWorkspace } from "@/server/workspace/service";
-import { getLog } from "@/server/services/dashboard";
+import { getDashboard, getLog } from "@/server/services/dashboard";
+import { updateLogDetails } from "@/server/services/log-details";
 import { openTestSql } from "../helpers/test-db";
 import { OTHER_FARM, prepareTestDatabase } from "../helpers/prepare-db";
 import { getTestDatabaseTarget } from "../helpers/test-env";
@@ -83,6 +84,53 @@ describe("mobile persistence", () => {
     expect(listed).toMatchObject({ notes: input.notes, transcript: input.transcript, treatment: input.treatment, clientDraftId: input.clientDraftId });
     await expect(saveMobileLog(ctx, { ...input, notes: "Changed after commit" }, [])).rejects.toMatchObject({ status: 409 });
     expect((await owner`select count(*)::int as n from toph.mobile_submissions where client_draft_id = ${input.clientDraftId}`)[0].n).toBe(1);
+  });
+
+  it("drives the phone form, saved details and dashboard corrections from the farm's one log form", async () => {
+    // An installed app's treatment lands in the same details object; the summary is composed on read.
+    const legacy = await saveMobileLog(ctx, metadata(), []);
+    ids.push(legacy.logId);
+    expect(await getLog(ctx, legacy.logId)).toMatchObject({ details: { product: "Test treatment", amount: 2, unit: "L" }, summary: "Checked irrigation.\n\nTreatment: Test treatment 2 L" });
+    expect((await owner`select summary from toph.work_logs where id = ${legacy.logId}`)[0].summary).toBe("Checked irrigation.");
+
+    // The farm switches on a suggestion and defines its own field; the phone receives both.
+    const initial = await getWorkspace(ctx);
+    const logForm = { enabled: { Spraying: ["applicationMethod"] }, hidden: {}, custom: [{ key: "custom_tank", label: "Tank", type: "select" as const, options: ["North", "South"], activities: ["Spraying"] }] };
+    const saved = await patchWorkspace(ctx, { expectedRevision: initial.revision, patch: { logForm } });
+    try {
+      expect((await getMobileBootstrap(ctx)).logForm.Spraying.fields.map(field => field.key)).toEqual(["product", "amount", "unit", "applicationMethod", "custom_tank"]);
+      const input = { ...metadata(), treatment: null, details: { product: "Neem oil", amount: 3, unit: "L", applicationMethod: "Plane", custom_tank: "North", targetPest: "Aphids" } };
+      await expect(saveMobileLog(ctx, { ...input, details: { ...input.details, applicationMethod: "Rocket" } }, [])).rejects.toMatchObject({ status: 400, fields: { "details.applicationMethod": expect.any(String) } });
+      await expect(saveMobileLog(ctx, { ...input, details: { product: "Neem oil", amount: 3 } }, [])).rejects.toMatchObject({ status: 400 });
+      const receipt = await saveMobileLog(ctx, input, []);
+      ids.push(receipt.logId);
+      // targetPest is not on this farm's form; a draft that carries it still syncs without losing it.
+      expect((await getLog(ctx, receipt.logId)).details).toEqual(input.details);
+      expect((await listMobileLogs(ctx, employeeId)).find(log => log.id === receipt.logId)).toMatchObject({ details: input.details, treatment: { product: "Neem oil", amount: 3, unit: "L" } });
+      expect((await getDashboard(ctx, { q: "plane" })).data.logs.map(log => log.id)).toEqual([receipt.logId]);
+
+      const edited = await updateLogDetails(ctx, receipt.logId, { details: { applicationMethod: "Truck", amount: 4, targetPest: null } });
+      expect(edited.details).toEqual({ product: "Neem oil", amount: 4, unit: "L", applicationMethod: "Truck", custom_tank: "North" });
+      expect(edited.summary).toBe("Checked irrigation.\n\nTreatment: Neem oil 4 L");
+      expect(new Date(edited.updatedAt).getTime()).toBeGreaterThan(new Date(receipt.savedAt).getTime() - 1);
+      for (const details of [{ applicationMethod: "Rocket" }, { unit: null }, { windSpeedMph: 4 }, { amount: "4" }]) {
+        await expect(updateLogDetails(ctx, receipt.logId, { details })).rejects.toMatchObject({ status: 400 });
+      }
+      await expect(updateLogDetails(ctx, receipt.logId, { details: {}, summary: "tampered" })).rejects.toMatchObject({ status: 400 });
+      await expect(updateLogDetails(ctx, randomUUID(), { details: {} })).rejects.toMatchObject({ status: 404 });
+      expect((await getLog(ctx, receipt.logId)).details).toEqual(edited.details);
+
+      // After the farm removes the custom field its saved value stays, and can only be cleared.
+      const current = await getWorkspace(ctx);
+      await patchWorkspace(ctx, { expectedRevision: current.revision, patch: { logForm: { ...logForm, custom: [] } } });
+      await expect(updateLogDetails(ctx, receipt.logId, { details: { custom_tank: "South" } })).rejects.toMatchObject({ status: 400 });
+      expect((await updateLogDetails(ctx, receipt.logId, { details: { amount: 5 } })).details).toMatchObject({ amount: 5, custom_tank: "North" });
+      expect((await updateLogDetails(ctx, receipt.logId, { details: { custom_tank: null } })).details).not.toHaveProperty("custom_tank");
+    } finally {
+      const current = await getWorkspace(ctx);
+      await patchWorkspace(ctx, { expectedRevision: current.revision, patch: { logForm: { enabled: {}, hidden: {}, custom: [] } } });
+    }
+    expect(saved.data.logForm).toEqual(logForm);
   });
 
   it("retains every appended clip and checks multipart bytes before committing", async () => {

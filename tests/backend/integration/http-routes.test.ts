@@ -8,7 +8,7 @@ import * as logRoute from "@/app/api/logs/[logId]/route";
 import * as logTagsRoute from "@/app/api/logs/[logId]/tags/route";
 import * as logTagRoute from "@/app/api/logs/[logId]/tags/[tagId]/route";
 import * as tagsRoute from "@/app/api/tags/route";
-import { enterSample } from "@/server/accounts/service";
+import { loginAccount } from "@/server/accounts/service";
 import { ISAAC_LOG_ID, recordId } from "@/server/db/initial-data";
 import { openTestSql } from "../helpers/test-db";
 import { OTHER_FARM, prepareTestDatabase, resetTags } from "../helpers/prepare-db";
@@ -52,7 +52,7 @@ describe("HTTP route handlers", () => {
     await prepareTestDatabase(sql);
     await resetTags(sql);
     restoreEnv = useRouteTestEnv();
-    cookie = `toph_session=${(await enterSample("web")).token}`;
+    cookie = `toph_session=${(await loginAccount({ name: "Ranch Admin", password: "ranch", client: "web" })).token}`;
   });
 
   afterEach(() => {
@@ -93,6 +93,24 @@ describe("HTTP route handlers", () => {
       expect(body).not.toHaveProperty("data");
       expect(body.error.code).toBe("VALIDATION_ERROR");
       expect(body.error.fields).toEqual({ farmId: "unknown parameter", limit: "must be between 1 and 100" });
+    });
+  });
+
+  describe("PATCH /api/logs/:logId", () => {
+    const patch = (logId: string, body: unknown, headers: Record<string, string> = WRITE_HEADERS) =>
+      logRoute.PATCH(new NextRequest(`${BASE}/api/logs/${logId}`, { method: "PATCH", body: JSON.stringify(body), headers: { cookie, ...headers } }), params({ logId }));
+    it("corrects a seeded log's details for an admin and refuses other farms, origins and fields", async () => {
+      const saved = await patch(ISAAC_LOG_ID, { details: { product: "Copper", amount: 2, unit: "L" } });
+      expect(saved.status).toBe(200);
+      const body = await json<LogResponse>(saved);
+      expect(body.data.details).toEqual({ product: "Copper", amount: 2, unit: "L" });
+      expect(body.data).toEqual((await json<LogResponse>(await logRoute.GET(get(`/api/logs/${ISAAC_LOG_ID}`), params({ logId: ISAAC_LOG_ID })))).data);
+      expect((await patch(ISAAC_LOG_ID, { details: { crewSize: 3 } })).status).toBe(400);
+      expect((await patch(OTHER_FARM.logId, { details: {} })).status).toBe(404);
+      expect((await patch(ISAAC_LOG_ID, { details: {} }, { "content-type": "application/json", origin: "https://evil.example" })).status).toBe(403);
+      const cleared = await json<LogResponse>(await patch(ISAAC_LOG_ID, { details: { product: null, amount: null, unit: null } }));
+      expect(cleared.data.details).toEqual({});
+      await sql`update toph.work_logs set updated_at = created_at where id = ${ISAAC_LOG_ID}`;
     });
   });
 

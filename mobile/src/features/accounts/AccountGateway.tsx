@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { AccountSession, AuthResponse } from "@toph/contracts/accounts";
+import { newPasswordProblem, PASSWORD_MAX_LENGTH, type AccountSession, type AuthResponse } from "@toph/contracts/accounts";
 import type { MobileBootstrap } from "@toph/contracts/mobile";
 import { apiOrigin, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
 import { clearSessionToken, restoreSessionToken, saveSessionToken } from "@/lib/api/session-token";
@@ -18,6 +18,8 @@ export default function AccountGateway() {
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [code, setCode] = useState("");
   const [session, setSession] = useState<AccountSession | null>(null);
   const [bootstrap, setBootstrap] = useState<MobileBootstrap | null>(null);
@@ -67,21 +69,24 @@ export default function AccountGateway() {
     await saveSessionToken(apiOrigin(), result.token ?? "");
     const { token: _token, ...accountSession } = result;
     setSession(accountSession);
-    setName(""); setCode("");
+    setName(""); setPassword(""); setConfirmation(""); setCode("");
     await loadWorkspace(accountSession);
   }
 
   async function submit() {
     if (!name.trim()) { setError("Enter your name."); return; }
+    if (!password) { setError("Enter your password."); return; }
+    const problem = mode === "join" ? newPasswordProblem(password, confirmation) : null;
+    if (problem) { setError(problem); return; }
     if (mode === "join" && !code.trim()) { setError("Enter the join code from your farm admin."); return; }
-    await act(async () => accept(mode === "join" ? await api.join(name, code) : await api.login(name)));
+    await act(async () => accept(mode === "join" ? await api.join(name, password, code) : await api.login(name, password)));
   }
 
   async function signOut() {
     // A local sign-out still works when the server is temporarily unreachable.
     try { await api.logout(); } catch { /* The device token is removed below. */ }
     await clearSessionToken();
-    setBootstrap(null); setSession(null); setName(""); setCode(""); setError(""); setMode("login");
+    setBootstrap(null); setSession(null); setName(""); setPassword(""); setConfirmation(""); setCode(""); setError(""); setMode("login");
   }
 
   if (session && bootstrap) return <RecordingWorkspace key={`${session.farm.id}:${session.account.id}`} session={session} initialBootstrap={bootstrap} onSignOut={signOut} />;
@@ -103,9 +108,11 @@ export default function AccountGateway() {
             <Text style={shared.heading}>{mode === "join" ? "Join your farm" : "Welcome back"}</Text>
           </View>
           <View style={styles.tabs} accessibilityRole="tablist">
-            {(["login", "join"] as const).map(value => <Press key={value} style={[styles.tab, mode === value ? styles.activeTab : null]} disabled={working} onPress={() => { setMode(value); setError(""); }} accessibilityRole="tab" accessibilityState={{ selected: mode === value }}><Text style={[shared.text, mode === value ? styles.activeText : null]}>{value === "login" ? "Log in" : "Join a farm"}</Text></Press>)}
+            {(["login", "join"] as const).map(value => <Press key={value} style={[styles.tab, mode === value ? styles.activeTab : null]} disabled={working} onPress={() => { setMode(value); setPassword(""); setConfirmation(""); setError(""); }} accessibilityRole="tab" accessibilityState={{ selected: mode === value }}><Text style={[shared.text, mode === value ? styles.activeText : null]}>{value === "login" ? "Log in" : "Join a farm"}</Text></Press>)}
           </View>
-          <TextField label="Your name" value={name} onChangeText={value => { setName(value); setError(""); }} maxLength={80} autoCapitalize="words" autoComplete="name" textContentType="username" autoCorrect={false} editable={!working} onSubmitEditing={() => { if (mode === "login") void submit(); }} />
+          <TextField label="Your name" value={name} onChangeText={value => { setName(value); setError(""); }} maxLength={80} autoCapitalize="words" autoComplete="username" textContentType="username" autoCorrect={false} editable={!working} />
+          <TextField label="Password" value={password} onChangeText={value => { setPassword(value); setError(""); }} maxLength={PASSWORD_MAX_LENGTH} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete={mode === "join" ? "new-password" : "current-password"} textContentType={mode === "join" ? "newPassword" : "password"} editable={!working} onSubmitEditing={() => { if (mode === "login") void submit(); }} />
+          {mode === "join" && <TextField label="Confirm password" value={confirmation} onChangeText={value => { setConfirmation(value); setError(""); }} maxLength={PASSWORD_MAX_LENGTH} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="new-password" textContentType="newPassword" editable={!working} />}
           {mode === "join" && <TextField label="Farm join code" value={code} onChangeText={value => { setCode(value); setError(""); }} maxLength={40} autoCapitalize="characters" autoCorrect={false} editable={!working} onSubmitEditing={() => void submit()} />}
           <Press style={shared.primaryButton} disabled={working} onPress={() => void submit()} accessibilityRole="button"><Text style={shared.primaryText}>{working ? "Connecting…" : mode === "join" ? "Create account & join farm" : "Log in"}</Text></Press>
 

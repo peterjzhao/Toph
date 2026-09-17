@@ -1,5 +1,6 @@
 /** Shared mobile API data. No database, React, or native imports. */
 import type { LogDto } from "./dashboard";
+import type { LogDetailValue, LogDetails, ResolvedLogForm } from "./log-form";
 
 export type MobileAccount = {
   id: string;
@@ -19,6 +20,9 @@ export type MobileBootstrap = {
   fields: { id: string; name: string }[];
   revision: number;
   maxAudioBytes: number;
+  /** The detail fields this farm collects for each activity; render the review form from it.
+   *  A bootstrap cached by an earlier app version lacks it: fall back to `resolveLogForm()`. */
+  logForm?: ResolvedLogForm;
 };
 export type MobileLogSubmission = {
   contractVersion: "1";
@@ -32,7 +36,10 @@ export type MobileLogSubmission = {
   endTime: string;
   notes: string;
   transcript: string | null;
+  /** Superseded by `details` (`product`, `amount`, `unit` keys); still accepted from installed apps. */
   treatment: { product: string | null; amount: number | null; unit: string | null } | null;
+  /** Values for the activity's log-form fields, keyed as in `MobileBootstrap.logForm`. */
+  details?: Record<string, LogDetailValue>;
   tags: string[];
   recordings: { mimeType: string; durationSeconds: number }[];
 };
@@ -43,5 +50,6 @@ export type MobileRemoteLog = LogDto & {
   notes: string;
   transcript: string | null;
   treatment: MobileLogSubmission["treatment"];
+  details: LogDetails;
   clips: { url: string; durationSeconds: number; mimeType: string }[];
 };

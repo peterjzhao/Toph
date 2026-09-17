@@ -7,7 +7,9 @@
  * v2 changes from v1: `recording` lost its sample-media flag and `waveformSource`; `metrics` lost `source`
  * and is computed from the farm's data; `meta` lost `mode` and its fixed reference date; periods
  * are `all` (default), `this-month`, and `custom`. v2.1 adds `employee.avatarUrl` (additive).
+ * v2.2 adds `LogDto.details` and `PATCH /api/logs/:logId` (additive).
  */
+import type { LogDetailValue, LogDetails } from "./log-form";
 
 export const DASHBOARD_CONTRACT_VERSION = "2" as const;
 
@@ -33,6 +35,8 @@ export type LogDto = {
     clips?: Array<{ url: string; durationSeconds: number }>;
   } | null;
   tags: TagDto[];
+  /** Activity-specific values keyed by the log form (`resolveLogForm` in ./log-form). */
+  details: LogDetails;
   updatedAt: string;
 };
 
@@ -102,6 +106,9 @@ export type DashboardResponse = { data: DashboardData; meta: DashboardMeta };
 
 /** GET /api/logs/:logId */
 export type LogResponse = { data: LogDto };
+
+/** PATCH /api/logs/:logId request body: listed keys are replaced, null clears one, others are kept. */
+export type UpdateLogRequest = { details: Record<string, LogDetailValue> };
 
 /** GET /api/tags */
 export type TagsResponse = { data: TagDto[] };

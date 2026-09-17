@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { FieldPoint, FarmSetup } from "@/contracts/accounts";
 import type { AccountContext } from "./service";
-import { ApiError, forbidden, validationError } from "@/server/errors";
+import { ApiError, validationError } from "@/server/errors";
 import { parseInput } from "./validation";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -80,7 +80,6 @@ export async function getFarmSetup(ctx: AccountContext): Promise<FarmSetup> {
 }
 
 export async function saveFarmSetup(ctx: AccountContext, body: unknown): Promise<FarmSetup> {
-  if (ctx.session.farm.isSample) throw forbidden("The sample farm's original map and fields are preserved.");
   const input = parseInput(setupSchema, body);
   if (new Set(input.fields.map(field => field.label)).size !== input.fields.length) throw validationError("Assign each field a different letter from A to Z.");
   for (const field of input.fields) validateBoundary(field.boundary);

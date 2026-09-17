@@ -1,0 +1,6 @@
+# The build downloads and verifies this static artifact after source upload.
+public/models/*.onnx
+public/models/*.download
+.local
+.env*
+!.env.example

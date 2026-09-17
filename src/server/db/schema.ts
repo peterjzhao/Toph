@@ -8,6 +8,7 @@
 import { sql } from "drizzle-orm";
 import type { WorkspaceState } from "@/contracts/workspace";
 import type { FieldPoint } from "@/contracts/accounts";
+import type { LogDetails } from "@/contracts/log-form";
 import {
   boolean,
   check,
@@ -123,6 +124,8 @@ export const workLogs = toph.table(
     endAt: timestamp("end_at", { withTimezone: true, mode: "date" }).notNull(),
     summary: text("summary").notNull(),
     transcript: text("transcript"),
+    /** Activity-specific values keyed by the shared log-form catalog (src/contracts/log-form.ts). */
+    details: jsonb("details").$type<LogDetails>().notNull().default({}),
     isNew: boolean("is_new").notNull().default(false),
     reviewedBy: uuid("reviewed_by"),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: "date" }),
@@ -160,6 +163,7 @@ export const workLogs = toph.table(
       "work_logs_recording_duration_valid",
       sql`recording_duration_seconds IS NULL OR (recording_path IS NOT NULL AND recording_duration_seconds > 0 AND recording_duration_seconds < 'Infinity'::double precision)`,
     ),
+    check("work_logs_details_object", sql`jsonb_typeof(details) = 'object' AND octet_length(details::text) <= 16384`),
     check("work_logs_waveform_peaks_valid", sql`waveform_peaks IS NULL OR toph.waveform_peaks_valid(waveform_peaks)`),
   ],
 );
@@ -241,6 +245,7 @@ export const dashboardLogs = toph
     tags: jsonb("tags").$type<{ id: string; label: string }[]>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
+    details: jsonb("details").$type<LogDetails>().notNull(),
   })
   .as(
     sql`select
@@ -269,7 +274,8 @@ export const dashboardLogs = toph
     where wt.work_log_id = l.id
   ) as tags,
   l.created_at,
-  l.updated_at
+  l.updated_at,
+  l.details
 from toph.work_logs l
 join toph.employees e on e.id = l.employee_id and e.farm_id = l.farm_id
 join toph.fields f on f.id = l.field_id and f.farm_id = l.farm_id`,
@@ -331,6 +337,7 @@ export const accounts = toph.table("accounts", {
   employeeId: uuid("employee_id").unique(),
   name: text("name").notNull(),
   normalizedName: text("normalized_name").notNull().unique(),
+  passwordHash: text("password_hash"),
   role: text("role").$type<"admin" | "worker">().notNull(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: createdAt(),

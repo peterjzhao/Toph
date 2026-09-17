@@ -4,20 +4,25 @@
  * application startup.
  */
 import { eq, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
-import { FARM, FIELD_MAP_PATH, INITIAL_EMPLOYEES, INITIAL_ROWS, RECORDING, recordId } from "./initial-data";
+import { BAYS_AERIAL, BAYS_FIELD_BOUNDARIES } from "./bays-field-map";
+import { FARM, INITIAL_EMPLOYEES, INITIAL_ROWS, RECORDING, recordId } from "./initial-data";
 import * as schema from "./schema";
+import { hashPassword, initialPassword } from "@/server/accounts/password";
 import { instantToLocalDate, localDateTimeToInstant } from "@/server/time/zoned";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { makeWorkspaceSeed } from "@/server/workspace/seed";
 
+function publicAsset(path: string): Buffer {
+  return readFileSync(fileURLToPath(new URL(`../../../public${path}`, import.meta.url)));
+}
+
 /** The Figma admin photo, stored in the farm's workspace settings like an uploaded photo. */
-function sampleAdminAvatar(): string {
-  const file = fileURLToPath(new URL("../../../public/assets/avatar.jpg", import.meta.url));
-  return `data:image/jpeg;base64,${readFileSync(file).toString("base64")}`;
+function adminAvatar(): string {
+  return `data:image/jpeg;base64,${publicAsset("/assets/avatar.jpg").toString("base64")}`;
 }
 
 export type SeedCounts = { inserted: number; existing: number };
@@ -66,7 +71,11 @@ export function buildInitialWorkLogs(): (typeof schema.workLogs.$inferInsert)[] 
 export async function seedInitialData(client: postgres.Sql): Promise<SeedReport> {
   const db = drizzle(client, { schema });
 
-  return db.transaction(async (tx) => {
+  return db.transaction(seedInitialDataRows);
+}
+
+/** Also used by the sample reset so removal and restoration commit together. */
+export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof schema>, "select" | "insert" | "execute">): Promise<SeedReport> {
     const [existingFarm] = await tx.select({ id: schema.farms.id }).from(schema.farms).where(eq(schema.farms.id, FARM.id));
     await tx
       .insert(schema.farms)
@@ -85,12 +94,22 @@ export async function seedInitialData(client: postgres.Sql): Promise<SeedReport>
       .onConflictDoNothing({ target: schema.employees.id })
       .returning({ id: schema.employees.id });
 
-    const fieldValues = INITIAL_ROWS.map((row) => ({
-      id: recordId("field", row.n),
-      farmId: FARM.id,
-      name: row.field,
-      mapImagePath: FIELD_MAP_PATH,
-    }));
+    // The reviewed map is stored exactly as Field Setup stores any farm's confirmed fields.
+    const fieldValues = INITIAL_ROWS.map((row) => {
+      const label = row.field.slice(-1);
+      return {
+        id: recordId("field", row.n),
+        farmId: FARM.id,
+        name: row.field,
+        label,
+        boundary: BAYS_FIELD_BOUNDARIES[label].map(([x, y]) => ({ x, y })),
+        mapImagePath: "/api/farm/image",
+      };
+    });
+    await tx
+      .insert(schema.farmImages)
+      .values({ farmId: FARM.id, mimeType: BAYS_AERIAL.mimeType, bytes: publicAsset(BAYS_AERIAL.assetPath), width: BAYS_AERIAL.width, height: BAYS_AERIAL.height })
+      .onConflictDoNothing({ target: schema.farmImages.farmId });
     const fieldRows = await tx
       .insert(schema.fields)
       .values(fieldValues)
@@ -104,12 +123,12 @@ export async function seedInitialData(client: postgres.Sql): Promise<SeedReport>
       .onConflictDoNothing({ target: schema.workLogs.id })
       .returning({ id: schema.workLogs.id });
 
-    // Explicit sample identities; this does not change any original employee or log.
-    await tx.insert(schema.farmAccess).values({ farmId: FARM.id, joinCode: randomBytes(6).toString("hex").toUpperCase(), isSample: true, setupComplete: true }).onConflictDoNothing({ target: schema.farmAccess.farmId });
-    await tx.insert(schema.accounts).values([
+    // Accounts for the administrator and each employee; each password is the lowercased first name.
+    await tx.insert(schema.farmAccess).values({ farmId: FARM.id, joinCode: randomBytes(6).toString("hex").toUpperCase(), setupComplete: true }).onConflictDoNothing({ target: schema.farmAccess.farmId });
+    await tx.insert(schema.accounts).values(await Promise.all([
       { id: "90000000-0000-4000-8000-000000000001", farmId: FARM.id, employeeId: null, name: "Ranch Admin", normalizedName: "ranch admin", role: "admin" as const },
       ...INITIAL_EMPLOYEES.map(row => ({ id: recordId("employee", row.n), farmId: FARM.id, employeeId: recordId("employee", row.n), name: row.name, normalizedName: row.name.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase(), role: "worker" as const })),
-    ]).onConflictDoNothing({ target: schema.accounts.id });
+    ].map(async row => ({ ...row, passwordHash: await hashPassword(initialPassword(row.name)) })))).onConflictDoNothing({ target: schema.accounts.id });
 
     // The workspace a first dashboard read would create, plus the admin's Figma photo.
     const seededEmployees = await tx.select({ id: schema.employees.id, display_name: schema.employees.displayName, is_active: schema.employees.isActive })
@@ -117,7 +136,7 @@ export async function seedInitialData(client: postgres.Sql): Promise<SeedReport>
     const seededFields = await tx.select({ id: schema.fields.id, name: schema.fields.name })
       .from(schema.fields).where(eq(schema.fields.farmId, FARM.id)).orderBy(schema.fields.id);
     const workspace = makeWorkspaceSeed({ id: FARM.id, name: FARM.name, timezone: FARM.timezone, avatarPath: FARM.avatarPath }, seededEmployees, seededFields);
-    workspace.settings.adminAvatar = sampleAdminAvatar();
+    workspace.settings.adminAvatar = adminAvatar();
     await tx.execute(sql`insert into toph.workspace_state (farm_id, payload, revision)
       values (${FARM.id}, ${JSON.stringify(workspace)}::jsonb, 0) on conflict (farm_id) do nothing`);
 
@@ -127,5 +146,4 @@ export async function seedInitialData(client: postgres.Sql): Promise<SeedReport>
       fields: counts(fieldValues.length, fieldRows.length),
       workLogs: counts(logValues.length, logRows.length),
     };
-  });
 }

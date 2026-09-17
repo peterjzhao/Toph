@@ -13,6 +13,8 @@ import { applyRuntimeGrants } from "@/server/db/grants";
 import { openTestSql } from "../helpers/test-db";
 import { prepareTestDatabase } from "../helpers/prepare-db";
 import { getTestDatabaseTarget } from "../helpers/test-env";
+
+const PASSWORD = "correct horse battery";
 import { TEST_APP_ORIGIN, useRouteTestEnv } from "../helpers/route-env";
 
 type Identity = Awaited<ReturnType<typeof signupFarm>>;
@@ -40,12 +42,12 @@ describe("private persisted worker inboxes", () => {
     restore = useRouteTestEnv({ DATABASE_URL: target.appUrl ?? target.url });
     process.env.TOPH_MOBILE_ENABLED = "true";
     const suffix = randomUUID();
-    admin = await signupFarm({ name: `Message admin ${suffix}`, farmName: "Inbox farm", timezone: "UTC", client: "web" });
-    otherAdmin = await signupFarm({ name: `Other admin ${suffix}`, farmName: "Other inbox farm", timezone: "UTC", client: "web" });
+    admin = await signupFarm({ name: `Message admin ${suffix}`, password: PASSWORD, farmName: "Inbox farm", timezone: "UTC", client: "web" });
+    otherAdmin = await signupFarm({ name: `Other admin ${suffix}`, password: PASSWORD, farmName: "Other inbox farm", timezone: "UTC", client: "web" });
     farms.push(admin.session.farm.id, otherAdmin.session.farm.id);
-    worker = await joinFarm({ name: `Message worker ${suffix}`, code: admin.session.joinCode!, client: "mobile" });
-    coworker = await joinFarm({ name: `Coworker ${suffix}`, code: admin.session.joinCode!, client: "mobile" });
-    stranger = await joinFarm({ name: `Stranger ${suffix}`, code: otherAdmin.session.joinCode!, client: "mobile" });
+    worker = await joinFarm({ name: `Message worker ${suffix}`, password: PASSWORD, code: admin.session.joinCode!, client: "mobile" });
+    coworker = await joinFarm({ name: `Coworker ${suffix}`, password: PASSWORD, code: admin.session.joinCode!, client: "mobile" });
+    stranger = await joinFarm({ name: `Stranger ${suffix}`, password: PASSWORD, code: otherAdmin.session.joinCode!, client: "mobile" });
   });
   afterAll(async () => {
     for (const farmId of farms) {

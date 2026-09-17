@@ -21,3 +21,9 @@ yarn-error.*
 
 # Downloaded/exported client segmentation models; see docs/backend/browser-segmentation.md
 /public/models/*.onnx
+
+# Internal docs and agent instructions stay local; only READMEs and the model notice are published
+*.md
+!README.md
+/docs/README.md
+!/public/models/NOTICE.md

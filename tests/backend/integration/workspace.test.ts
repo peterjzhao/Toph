@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import type postgres from "postgres";
 import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import * as route from "@/app/api/workspace/route";
-import { enterSample } from "@/server/accounts/service";
+import { loginAccount } from "@/server/accounts/service";
 import { createFarmContext, type FarmContext } from "@/server/farm-context";
 import { FARM_ID, ISAAC_LOG_ID } from "@/server/db/initial-data";
 import { applyRuntimeGrants } from "@/server/db/grants";
@@ -34,11 +34,14 @@ describe("persistent workspace pages", () => {
     await applyRuntimeGrants(owner, process.env.DATABASE_APP_ROLE?.trim() || "toph_app");
     ctx = await createFarmContext({ databaseUrl: target.appUrl ?? target.url, farmId: FARM_ID });
     restoreEnv = useRouteTestEnv({ DATABASE_URL: target.appUrl ?? target.url });
-    cookie = `toph_session=${(await enterSample("web")).token}`;
+    cookie = `toph_session=${(await loginAccount({ name: "Ranch Admin", password: "ranch", client: "web" })).token}`;
   });
   beforeEach(async () => {
     getTestDatabaseTarget(); // fail closed before clearing ONLY the isolated test workspace.
     await owner`delete from toph.workspace_state`;
+    // Archiving syncs to the roster on every farm, so restore it with the workspace.
+    await owner`update toph.employees set is_active = true where farm_id = ${FARM_ID}`;
+    await owner`update toph.accounts set is_active = true where farm_id = ${FARM_ID}`;
   });
   afterAll(async () => { restoreEnv(); await ctx.close(); await owner.end(); });
 
@@ -84,15 +87,14 @@ describe("persistent workspace pages", () => {
     expect((await getWorkspace(ctx)).revision).toBe(1);
   });
 
-  it("accepts new workspace employees and their assignments atomically", async () => {
+  it("rejects workspace-only employee profiles; workers join with the farm code", async () => {
     const initial = await getWorkspace(ctx);
     const employee = { id: randomUUID(), name: "Sample new employee", role: "Field lead", email: "", phone: "", status: "Active" as const, joinedAt: "2026-04-29" };
-    const result = await patchWorkspace(ctx, { expectedRevision: 0, patch: {
+    await expect(patchWorkspace(ctx, { expectedRevision: 0, patch: {
       employees: [...initial.data.employees, employee],
       schedule: [...initial.data.schedule, { ...initial.data.schedule[0], id: randomUUID(), employeeId: employee.id }],
-    } });
-    expect(result.data.employees).toHaveLength(12);
-    expect(result.data.messages).toEqual(initial.data.messages);
+    } })).rejects.toMatchObject({ status: 400 });
+    expect((await getWorkspace(ctx)).revision).toBe(0);
     expect((await owner`select count(*)::int as n from toph.employees where farm_id = ${FARM_ID}`)[0].n).toBe(11);
   });
 
@@ -137,6 +139,8 @@ describe("persistent workspace pages", () => {
       settings: { ...data.settings, notifications: { recordings: false, weekly: false, reminders: false } },
     } });
     expect(saved.data.employees[0].status).toBe("Inactive");
+    const [archived] = await owner`select e.is_active as employee, a.is_active as account from toph.employees e join toph.accounts a on a.employee_id = e.id where e.id = ${data.employees[0].id}`;
+    expect(archived).toEqual({ employee: false, account: false });
     expect(saved.data.schedule.every((item) => item.status === "Completed")).toBe(true);
     expect(saved.data.reports).toHaveLength(1);
     expect(saved.data.tickets).toHaveLength(1);

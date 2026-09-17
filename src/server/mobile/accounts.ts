@@ -8,6 +8,7 @@ import { parseWorkspaceState } from "@/server/workspace/validation";
 import { parseUuid } from "@/server/validation/ids";
 import { normalizeAccountName } from "@/server/accounts/validation";
 import { nameTaken } from "@/server/accounts/service";
+import { resolveLogForm, type ResolvedLogForm } from "@/contracts/log-form";
 
 export const MAX_MOBILE_AUDIO_BYTES = 3_800_000;
 const avatar = z.string().max(180_000).nullable().refine(value => {
@@ -34,7 +35,10 @@ export function parseAccountEdit(body: unknown): { expectedRevision: number; pro
   return parsed.data;
 }
 
-export async function getMobileBootstrap(ctx: FarmContext): Promise<MobileBootstrap> {
+/** The server always sends the log form; only a phone's cached copy can lack it. */
+export type ServerBootstrap = MobileBootstrap & { logForm: ResolvedLogForm };
+
+export async function getMobileBootstrap(ctx: FarmContext): Promise<ServerBootstrap> {
   const workspace = await getWorkspace(ctx);
   const [fields, profiles, originals] = await Promise.all([
     ctx.sql<{ id: string; name: string }[]>`select id, name from toph.fields where farm_id = ${ctx.farmId} order by name`,
@@ -48,10 +52,11 @@ export async function getMobileBootstrap(ctx: FarmContext): Promise<MobileBootst
       defaultField: fields.some(field => field.name === profile?.default_field) ? profile!.default_field : fields[0]?.name ?? "",
       defaultActivity: profile?.default_activity ?? "Spraying" };
   });
-  return { mode: "shared", farm: { id: ctx.farmId, name: workspace.data.settings.farmName, timezone: ctx.farm.timezone }, accounts, fields, revision: workspace.revision, maxAudioBytes: MAX_MOBILE_AUDIO_BYTES };
+  return { mode: "shared", farm: { id: ctx.farmId, name: workspace.data.settings.farmName, timezone: ctx.farm.timezone }, accounts, fields, revision: workspace.revision, maxAudioBytes: MAX_MOBILE_AUDIO_BYTES,
+    logForm: resolveLogForm(workspace.data.logForm) };
 }
 
-export async function updateMobileAccount(ctx: FarmContext, accountId: string, body: unknown): Promise<MobileBootstrap> {
+export async function updateMobileAccount(ctx: FarmContext, accountId: string, body: unknown): Promise<ServerBootstrap> {
   const id = parseUuid(accountId, "accountId");
   const { expectedRevision, profile } = parseAccountEdit(body);
   const normalized = normalizeAccountName(profile.name);

@@ -13,7 +13,7 @@ export const workerBootstrap: MobileBootstrap = {
 export function workspaceProps(initialBootstrap = workerBootstrap) {
   const session: AccountSession = {
     account: { id: `account-${initialBootstrap.accounts[0].id}`, name: initialBootstrap.accounts[0].name, role: "worker", employeeId: initialBootstrap.accounts[0].id },
-    farm: { ...initialBootstrap.farm, isSample: initialBootstrap.farm.id === farmId, setupComplete: initialBootstrap.fields.length > 0 },
+    farm: { ...initialBootstrap.farm, setupComplete: initialBootstrap.fields.length > 0 },
   };
   return { session, initialBootstrap, onSignOut: jest.fn(async () => {}) };
 }

@@ -21,6 +21,8 @@ export const tokens = {
     backdrop: "rgba(0,0,0,0.28)",
     focus: "#087c57",
     selection: "#dceddf",
+    fieldOutline: "#0065F0",
+    fieldMarkerEnd: "#00D4F0",
   },
   spacing: { xxs: 4, xs: 8, sm: 12, md: 16, lg: 20, xl: 24, xxl: 32 },
   radius: { small: 4, control: 8, popover: 12, card: 14, panel: 16, section: 20, sheet: 24 },

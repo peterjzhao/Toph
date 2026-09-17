@@ -23,7 +23,7 @@ export function InviteCode({ compact = false }: { compact?: boolean }) {
 export function AccountPage() {
   const { account, signOut } = useWorkspace();
   return <div className={s.page}><PageHeader title="Your account" description={`${account.account.name} · Farm administrator`} />
-    <section className={styles.accountCard}><span className={styles.eyebrow}>YOUR FARM</span><h2 style={{ marginTop:12 }}>{account.farm.name}</h2><div className={styles.accountActions}>{!account.farm.isSample && <Link className={styles.secondaryButton} href="/onboarding">Manage fields</Link>}<Link className={styles.primaryButton} href="/">Open dashboard<ArrowRight size={15}/></Link><button className={styles.textButton} onClick={() => void signOut()}>Sign out</button></div></section>
-    {!account.farm.isSample && <InviteCode />}
+    <section className={styles.accountCard}><span className={styles.eyebrow}>YOUR FARM</span><h2 style={{ marginTop:12 }}>{account.farm.name}</h2><div className={styles.accountActions}><Link className={styles.secondaryButton} href="/onboarding">Manage fields</Link><Link className={styles.primaryButton} href="/">Open dashboard<ArrowRight size={15}/></Link><button className={styles.textButton} onClick={() => void signOut()}>Sign out</button></div></section>
+    <InviteCode />
   </div>;
 }

@@ -13,8 +13,6 @@ export const FARM = {
   timezone: "America/Los_Angeles",
 } as const;
 
-export const FIELD_MAP_PATH = "/assets/field-map.svg";
-
 export const RECORDING = {
   path: "/assets/sample-recording.mp3",
   /** Container duration read with `ffprobe -show_entries format=duration`. */

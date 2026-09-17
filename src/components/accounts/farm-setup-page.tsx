@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { ArrowRight, ImagePlus, Plus, Trash2, Sparkles, LoaderCircle } from "lucide-react";
+import { ArrowRight, Trash2, Sparkles, LoaderCircle } from "lucide-react";
 import type { AccountSession, FarmSetupResponse } from "@/contracts/accounts";
 import { accountRequest, currentAccount, AccountRequestError } from "@/lib/account-client";
 import { FIELD_LABELS, nextFieldLabel, prepareFarmImage, validFieldBoundary, type DraftField, type FieldPoint } from "@/lib/farm-fields";
 import { FilterSelect } from "@/components/dashboard/filter-select";
+import { FarmMapPicker, type CapturedFarmImage } from "./farm-map-picker";
 import styles from "./accounts.module.css";
 
 type SetupImage = { url: string; width: number; height: number; dataUrl?: string };
@@ -34,7 +35,6 @@ export function FarmSetupPage() {
     let alive = true;
     void currentAccount().then(async account => {
       if (account.account.role !== "admin") { window.location.replace("/login?worker=1"); return; }
-      if (account.farm.isSample) { window.location.replace("/"); return; }
       const setup = await accountRequest<FarmSetupResponse>("/api/farm/setup");
       if (!alive) return;
       setSession(account); setImage(setup.data.image); setFields(setup.data.fields); setSelected(setup.data.fields[0]?.label ?? "");
@@ -56,6 +56,11 @@ export function FarmSetupPage() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "We couldn’t open the image."); }
     finally { setBusy(false); event.target.value = ""; }
   }
+  function applyCapturedImage(captured: CapturedFarmImage) {
+    detectAfterUpload.current = true;
+    setImage({ ...captured, url: captured.dataUrl }); setFields([]); setCandidates([]); setPendingBoundary(null); setSelected("");
+    setProgress(""); setDetected(false); setError("");
+  }
   function addField(boundary: FieldPoint[], chosenLabel?: string) {
     const label = chosenLabel ?? nextFieldLabel(fields);
     if (!label) { setError("You can add up to 26 fields, A–Z."); return; }
@@ -64,7 +69,7 @@ export function FarmSetupPage() {
     setFields(previous => [...previous, { label, boundary }]); setSelected(label); setError("");
   }
   function chooseRegion(boundary: FieldPoint[]) {
-    if (busy || fields.length >= 26) return;
+    if (busy || fields.length >= FIELD_LABELS.length) return;
     setPendingBoundary(boundary); setPendingLabel(nextFieldLabel(fields) ?? "A"); setSelected("");
   }
   async function detect() {
@@ -76,7 +81,7 @@ export function FarmSetupPage() {
       const candidates = await detectFields(imageElement.current, { signal: controller.signal, onProgress: () => {} });
       const valid = candidates.filter(validFieldBoundary);
       setCandidates(valid); setPendingBoundary(null); setDetected(true);
-      setProgress(`${valid.length} fields detected`);
+      setProgress(`${valid.length} candidate regions. Select a field to assign its letter.`);
     } catch (cause) {
       if (controller.signal.aborted) setProgress("");
       else { setError(cause instanceof Error ? cause.message : "Detection could not run. Please try again."); setProgress(""); }
@@ -97,7 +102,7 @@ export function FarmSetupPage() {
       try { await accountRequest("/api/auth/logout", { method: "POST", body: "{}" }); window.location.assign("/login"); }
       catch (cause) { setError(cause instanceof Error ? cause.message : "Could not sign out."); }
     }}>Sign out</button></header>
-    <div className={styles.setupTitle}><h1>Field Setup</h1></div>
+    <div className={styles.setupTitle}><h1>Field Setup</h1>{session?.farm.setupComplete && <p>Your saved map stays unchanged until you confirm. Fields with recorded work keep their letters.</p>}</div>
     <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => void upload(event)} />
     <div className={`${styles.setupGrid} ${!detected && !fields.length ? styles.setupGridSingle : ""}`}>
       <section className={styles.mapCard} aria-label="Farm image and field boundaries">
@@ -107,21 +112,22 @@ export function FarmSetupPage() {
             {candidates.map((boundary, index) => <polygon key={`candidate-${index}`} className={`${styles.candidatePolygon} ${pendingBoundary === boundary ? styles.pendingPolygon : ""}`} points={boundary.map(point => `${point.x},${point.y}`).join(" ")} role="button" tabIndex={0} aria-label={`Label detected field ${index + 1}`} onClick={() => chooseRegion(boundary)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); chooseRegion(boundary); } }} />)}
             {fields.map(field => <g key={field.label}><polygon points={field.boundary.map(point => `${point.x},${point.y}`).join(" ")} className={selected === field.label ? styles.selectedPolygon : undefined} role="button" tabIndex={0} aria-label={`Select Field ${field.label}`} aria-pressed={selected === field.label} onClick={() => { setSelected(field.label); setPendingBoundary(null); }} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(field.label); setPendingBoundary(null); } }} /><text x={field.boundary.reduce((sum, point) => sum + point.x, 0) / field.boundary.length} y={field.boundary.reduce((sum, point) => sum + point.y, 0) / field.boundary.length} dominantBaseline="middle" textAnchor="middle">FIELD {field.label}</text></g>)}
           </svg>
-        </div> : <div className={styles.upload}><ImagePlus size={38} strokeWidth={1.2} /><p>Choose an aerial satellite image with your farm, with your fields in view.</p><button className={styles.primaryButton} disabled={busy || !session} onClick={() => input.current?.click()}><Plus size={17} />Upload farm image</button></div>}
+        </div> : <FarmMapPicker disabled={busy || !session} onCapture={applyCapturedImage} onUpload={() => input.current?.click()} />}
         {image && <div className={styles.mapToolbar}>
           {detecting ? <><LoaderCircle className={styles.spinner} size={18} role="status" aria-label="Detecting fields" /><button className={styles.textButton} onClick={() => detection.current?.abort()}>Cancel</button></> : <>
             {!fields.length && <button className={styles.textButton} disabled={busy} onClick={() => void detect()}><Sparkles size={16} />Detect fields</button>}
-            {!fields.some(field => field.id) && <button className={styles.textButton} disabled={busy} onClick={() => input.current?.click()}>Replace image</button>}
+            {fields.length > 0 && <button className={styles.textButton} disabled={busy} onClick={() => { setFields([]); setCandidates([]); setPendingBoundary(null); setSelected(""); setDetected(false); setProgress(""); }}>Start over</button>}
+            {!fields.some(field => field.id) && <button className={styles.textButton} disabled={busy} onClick={() => { setImage(null); setCandidates([]); setPendingBoundary(null); setDetected(false); setProgress(""); setError(""); }}>Choose a different view</button>}
           </>}
         </div>}
         {progress && <p className={styles.progress} role="status">{progress}</p>}
         {error && <p className={styles.error} role="alert">{error}</p>}
       </section>
       {(detected || fields.length > 0) && <aside className={styles.fieldCard} aria-label="Field assignments">
-        {pendingBoundary && <div className={styles.assignField}><FilterSelect label="Field letter" value={pendingLabel} options={FIELD_LABELS.filter(label => !fields.some(field => field.label === label)).map(label => ({ value: label, label: `Field ${label}` }))} onChange={setPendingLabel} /><button className={styles.primaryButton} onClick={() => { addField(pendingBoundary, pendingLabel); setCandidates(previous => previous.filter(boundary => boundary !== pendingBoundary)); setPendingBoundary(null); }}>Assign Field {pendingLabel}</button><button className={styles.textButton} onClick={() => setPendingBoundary(null)}>Cancel</button></div>}
+        {pendingBoundary && <div className={styles.assignField}><FilterSelect label="Field letter" value={pendingLabel} options={FIELD_LABELS.filter(label => !fields.some(field => field.label === label)).map(label => ({ value: label, label: `Field ${label}` }))} onChange={setPendingLabel} /><button className={styles.primaryButton} disabled={busy} onClick={() => { addField(pendingBoundary, pendingLabel); setCandidates(previous => previous.filter(boundary => boundary !== pendingBoundary)); setPendingBoundary(null); }}>Assign Field {pendingLabel}</button><button className={styles.textButton} onClick={() => setPendingBoundary(null)}>Cancel</button></div>}
         <div className={styles.fieldRows}>{fields.map(field => <div className={`${styles.fieldRow} ${selected === field.label ? styles.selectedField : ""}`} key={field.id ?? field.label}>
           <button className={styles.fieldNumber} aria-label={`Select Field ${field.label}`} onClick={() => setSelected(field.label)}>{field.label}</button>
-          <FilterSelect label={`Field ${field.label}`} value={field.label} disabled={busy} options={FIELD_LABELS.filter(label => label === field.label || !fields.some(item => item.label === label)).map(label => ({ value: label, label: `Field ${label}` }))} onChange={label => { setFields(previous => previous.map(item => item === field ? { ...item, label } : item)); setSelected(label); }} /><button aria-label={`Remove Field ${field.label}`} disabled={busy || Boolean(field.id)} title={field.id ? "Saved fields are preserved for recorded work" : "Remove field"} onClick={() => { setFields(previous => previous.filter(item => item !== field)); if (selected === field.label) setSelected(""); }}><Trash2 size={15} /></button>
+          <FilterSelect label={`Field ${field.label}`} value={field.label} disabled={busy} options={FIELD_LABELS.filter(label => label === field.label || !fields.some(item => item.label === label)).map(label => ({ value: label, label: `Field ${label}` }))} onChange={label => { setFields(previous => previous.map(item => item === field ? { ...item, label } : item)); setSelected(label); }} /><button aria-label={`Remove Field ${field.label}`} disabled={busy} title="Remove assignment" onClick={() => { setFields(previous => previous.filter(item => item !== field)); setCandidates(previous => [...previous, field.boundary]); if (selected === field.label) setSelected(""); }}><Trash2 size={15} /></button>
         </div>)}</div>
         <button className={styles.primaryButton} disabled={busy || !image || !fields.length || Boolean(pendingBoundary)} onClick={() => void save()}>{busy ? "Please wait…" : "Confirm fields"}<ArrowRight size={16} /></button>
         {session?.farm.setupComplete && <Link className={styles.textButton} href="/">Back to dashboard</Link>}

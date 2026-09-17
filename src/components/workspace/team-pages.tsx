@@ -30,7 +30,7 @@ function EmptyState({ title, description }: { title: string; description: string
 }
 
 function EmployeeForm({ employee, onClose }: { employee: Employee | null; onClose: () => void }) {
-  const { workspace, update, saving, notify, account } = useWorkspace();
+  const { workspace, update, saving, notify } = useWorkspace();
   const [name, setName] = useState(employee?.name ?? "");
   const [role, setRole] = useState(employee?.role ?? "Farm worker");
   const [email, setEmail] = useState(employee?.email ?? "");
@@ -55,11 +55,11 @@ function EmployeeForm({ employee, onClose }: { employee: Employee | null; onClos
   return <Modal title={employee ? "Edit employee" : "Add employee"} onClose={onClose}>
     <form className={styles.form} onSubmit={submit}>
       <p className={styles.formIntro}>Keep the people behind your farm&apos;s activity up to date.</p>
-      <label>Full name<input autoFocus required disabled={saving || !account.farm.isSample} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>
+      <label>Full name<input autoFocus required disabled maxLength={120} value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>
       <label>Role<input required disabled={saving} maxLength={80} value={role} onChange={(event) => setRole(event.target.value)} /></label>
       <div className={styles.formGrid}><label>Email <span className={styles.optional}>(optional)</span><input type="email" disabled={saving} maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="alex@example.com" autoComplete="email" /></label><label>Phone <span className={styles.optional}>(optional)</span><input type="tel" disabled={saving} maxLength={60} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Phone number" autoComplete="tel" /></label></div>
       <label>Status<select disabled={saving} value={status} onChange={(event) => setStatus(event.target.value as Employee["status"])}><option>Active</option><option>Inactive</option></select></label>
-      <p className={styles.caption}>{account.farm.isSample ? "This creates a profile in the sample farm workspace." : "Set a worker to Inactive to remove access. Their recorded work is preserved."}</p>
+      <p className={styles.caption}>Set a worker to Inactive to remove access. Their recorded work is preserved.</p>
       {error && <p role="alert" className={styles.error}>{error}</p>}
       <div className={styles.formActions}><button className={styles.button} type="button" onClick={onClose}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={saving}>{saving ? "Saving…" : employee ? "Save changes" : "Add employee"}</button></div>
     </form>
@@ -67,7 +67,7 @@ function EmployeeForm({ employee, onClose }: { employee: Employee | null; onClos
 }
 
 export function EmployeesPage() {
-  const { workspace, data, avatars, account } = useWorkspace();
+  const { workspace, data, avatars } = useWorkspace();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
@@ -82,7 +82,7 @@ export function EmployeesPage() {
   const loggedEmployees = new Set(data.logs.map((log) => log.employee.id)).size;
 
   return <div className={styles.page}>
-    <PageHeader title="Employees"><button className={styles.primaryButton} onClick={() => account.farm.isSample ? setEditing(null) : setInviting(true)}><Plus size={16} />{account.farm.isSample ? "Add employee" : "Invite workers"}</button></PageHeader>
+    <PageHeader title="Employees"><button className={styles.primaryButton} onClick={() => setInviting(true)}><Plus size={16} />Invite workers</button></PageHeader>
     {inviting && <Modal title="Invite workers" onClose={() => setInviting(false)}><InviteCode compact /></Modal>}
     <div className={styles.stats}>
       <StatCard label="Team members" value={workspace.employees.length} detail="Profiles in your farm workspace" icon={<Users size={16} />} />

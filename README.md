@@ -43,8 +43,9 @@ settings.
 An open dashboard checks the API every two seconds, so a log saved on a phone appears
 without a page reload. Messages are checked every five seconds on both sides.
 
-Bays Ranch is a sample farm seeded from the original Figma design. It keeps the design's
-eleven workers, logs and card values, and it can't be edited like a real farm.
+Bays Ranch is seeded from the original Figma design: eleven workers, eleven April logs, and
+the reviewed A–K field map. It is otherwise a regular farm. Sign in as `Ranch Admin`; it uses
+the same field setup, invites, review flags and computed cards as every other farm.
 
 ## How it fits together
 
@@ -56,8 +57,8 @@ web dashboard ─────> /api/*            ─┘                         
 
 The phone never talks to the database or to OpenAI directly. Every request goes through the
 Next.js API, which checks the session and scopes the query to that account's farm. Admins
-use a cookie session and workers use a bearer token. Accounts are name-only by design (no
-passwords), so this is not meant as real identity verification.
+use a cookie session and workers use a bearer token. Accounts sign in with a unique name and
+a password, stored only as a salted scrypt hash.
 
 | Path | What's there |
 | --- | --- |
@@ -70,7 +71,6 @@ passwords), so this is not meant as real identity verification.
 | `drizzle/` | SQL migrations |
 | `scripts/db/` | Migrate, seed and check the database |
 | `tests/` | Backend and frontend tests |
-| `docs/` | Longer notes on the API, database and deployment |
 | `design/reference/` | The original Figma exports |
 
 ## Running it locally
@@ -89,9 +89,8 @@ Schema changes go through `npm run db:migrate`.
 
 The dashboard runs at http://127.0.0.1:3000. Log in as `Ranch Admin` to open the sample
 farm, or create a new farm. For the phone app, see [mobile/README.md](mobile/README.md).
-[Database setup](docs/backend/setup.md) has more detail on the database roles.
 
-If the sample farm gets messed up, `npm run db:reset-sample -- --yes` puts Bays Ranch back to
+If Bays Ranch gets messed up, `npm run db:reset-sample -- --yes` puts it back to
 its seeded state. It deletes every change made to that farm and signs out its sessions, and
 leaves other farms alone. It runs against production through `DATABASE_MIGRATION_URL`.
 
@@ -106,5 +105,3 @@ npm run test:backend
 ```
 
 The phone app has its own tests: `cd mobile && npx jest`.
-
-More documentation is listed in [docs/README.md](docs/README.md).

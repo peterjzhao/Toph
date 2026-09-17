@@ -7,10 +7,9 @@ import type { FarmContext } from "@/server/farm-context";
 import { getRuntimeDatabase } from "@/server/db/client";
 import { ApiError, forbidden, notFound, validationError } from "@/server/errors";
 import { assertWriteOrigin, normalizeOrigin } from "@/server/http/origin";
+import { hashPassword, verifyPassword } from "./password";
 import { normalizeAccountName } from "./validation";
 
-export const SAMPLE_FARM_ID = "00000000-0000-4000-8000-000000000001";
-export const SAMPLE_ADMIN_ID = "90000000-0000-4000-8000-000000000001";
 export const SESSION_COOKIE = "toph_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 type Queryable = postgres.Sql | postgres.TransactionSql;
@@ -52,11 +51,11 @@ export function sessionCookie(token: string, request: Request, clear = false): s
 }
 
 async function sessionData(sql: Queryable, account: AccountRow): Promise<AccountSession> {
-  const [farm] = await sql`select f.id, f.name, f.timezone, a.is_sample, a.setup_complete, a.join_code
+  const [farm] = await sql`select f.id, f.name, f.timezone, a.setup_complete, a.join_code
     from toph.farms f join toph.farm_access a on a.farm_id = f.id where f.id = ${account.farm_id}`;
   if (!farm) throw unauthorized();
   return { account: { id: account.id, name: account.name, role: account.role, employeeId: account.employee_id },
-    farm: { id: farm.id, name: farm.name, timezone: farm.timezone, isSample: farm.is_sample, setupComplete: farm.setup_complete },
+    farm: { id: farm.id, name: farm.name, timezone: farm.timezone, setupComplete: farm.setup_complete },
     ...(account.role === "admin" ? { joinCode: farm.join_code } : {}) };
 }
 
@@ -92,9 +91,10 @@ function emptyWorkspace(name: string, farmName: string, timezone: string): Works
     settings: { farmName, contactName: name, email: "", timezone, notifications: { recordings: true, weekly: true, reminders: true } } };
 }
 
-export async function signupFarm(input: { name: string; farmName: string; timezone: string; client: AuthClient }) {
+export async function signupFarm(input: { name: string; password: string; farmName: string; timezone: string; client: AuthClient }) {
   if (input.client !== "web") throw forbidden("Create a farm using the web signup page.");
   const name = normalizeAccountName(input.name);
+  const passwordHash = await hashPassword(input.password);
   const { sql } = getRuntimeDatabase();
   try {
     return await sql.begin(async tx => {
@@ -102,29 +102,30 @@ export async function signupFarm(input: { name: string; farmName: string; timezo
       const id = randomUUID();
       await tx`insert into toph.farms (id, name, timezone) values (${farmId}, ${input.farmName}, ${input.timezone})`;
       await tx`insert into toph.farm_access (farm_id, join_code) values (${farmId}, ${joinCode()})`;
-      const [account] = await tx<AccountRow[]>`insert into toph.accounts (id, farm_id, name, normalized_name, role)
-        values (${id}, ${farmId}, ${name.name}, ${name.normalizedName}, 'admin') returning *`;
+      const [account] = await tx<AccountRow[]>`insert into toph.accounts (id, farm_id, name, normalized_name, password_hash, role)
+        values (${id}, ${farmId}, ${name.name}, ${name.normalizedName}, ${passwordHash}, 'admin') returning *`;
       await tx`insert into toph.workspace_state (farm_id, payload) values (${farmId}, ${JSON.stringify(emptyWorkspace(name.name, input.farmName, input.timezone))}::jsonb)`;
       return createSession(tx, account, input.client);
     });
   } catch (error) { return nameTaken(error); }
 }
 
-export async function joinFarm(input: { name: string; code: string; client: AuthClient }) {
+export async function joinFarm(input: { name: string; password: string; code: string; client: AuthClient }) {
   if (input.client !== "mobile") throw forbidden("Join a farm through the mobile app.");
   const name = normalizeAccountName(input.name);
+  const passwordHash = await hashPassword(input.password);
   const { sql } = getRuntimeDatabase();
   try {
     return await sql.begin(async tx => {
-      const [farm] = await tx`select farm_id, is_sample from toph.farm_access where join_code = ${input.code} for update`;
-      if (!farm || farm.is_sample) throw validationError("That farm code is not available.", { code: "Check the code with your farm administrator." });
+      const [farm] = await tx`select farm_id from toph.farm_access where join_code = ${input.code} for update`;
+      if (!farm) throw validationError("That farm code is not available.", { code: "Check the code with your farm administrator." });
       const [workspace] = await tx`select payload from toph.workspace_state where farm_id = ${farm.farm_id} for update`;
       if (!workspace) throw notFound("Farm not found.");
       const state: WorkspaceState = typeof workspace.payload === "string" ? JSON.parse(workspace.payload) : workspace.payload;
       const id = randomUUID(); const employeeId = randomUUID();
       await tx`insert into toph.employees (id, farm_id, display_name) values (${employeeId}, ${farm.farm_id}, ${name.name})`;
-      const [account] = await tx<AccountRow[]>`insert into toph.accounts (id, farm_id, employee_id, name, normalized_name, role)
-        values (${id}, ${farm.farm_id}, ${employeeId}, ${name.name}, ${name.normalizedName}, 'worker') returning *`;
+      const [account] = await tx<AccountRow[]>`insert into toph.accounts (id, farm_id, employee_id, name, normalized_name, password_hash, role)
+        values (${id}, ${farm.farm_id}, ${employeeId}, ${name.name}, ${name.normalizedName}, ${passwordHash}, 'worker') returning *`;
       state.employees.push({ id: employeeId, name: name.name, role: "Farm worker", email: "", phone: "", status: "Active", joinedAt: new Date().toISOString().slice(0, 10) });
       await tx`update toph.workspace_state set payload = ${JSON.stringify(state)}::jsonb, revision = revision + 1, updated_at = now() where farm_id = ${farm.farm_id}`;
       return createSession(tx, account, input.client);
@@ -132,25 +133,16 @@ export async function joinFarm(input: { name: string; code: string; client: Auth
   } catch (error) { return nameTaken(error); }
 }
 
-export async function loginAccount(input: { name: string; client: AuthClient }) {
+export async function loginAccount(input: { name: string; password: string; client: AuthClient }) {
   const { normalizedName } = normalizeAccountName(input.name);
   const { sql } = getRuntimeDatabase();
   return sql.begin(async tx => {
-    const [account] = await tx<AccountRow[]>`select a.id, a.farm_id, a.employee_id, a.name, a.role
+    const [account] = await tx<(AccountRow & { password_hash: string | null })[]>`select a.id, a.farm_id, a.employee_id, a.name, a.role, a.password_hash
       from toph.accounts a left join toph.employees e on e.id = a.employee_id and e.farm_id = a.farm_id
       where a.normalized_name = ${normalizedName} and a.is_active and (a.role = 'admin' or e.is_active) for update of a`;
-    if (!account) throw new ApiError(401, "UNAUTHORIZED", "No active account has that name. Check your name or sign up.");
+    // One message for an unknown name and a wrong password, so names cannot be probed.
+    if (!await verifyPassword(input.password, account?.password_hash) || !account) throw new ApiError(401, "UNAUTHORIZED", "That name and password don’t match an active account.");
     return createSession(tx, account, input.client);
-  });
-}
-
-export async function enterSample(client: AuthClient) {
-  const { sql } = getRuntimeDatabase();
-  return sql.begin(async tx => {
-    const id = client === "mobile" ? "10000000-0000-4000-8000-000000000001" : SAMPLE_ADMIN_ID;
-    const [account] = await tx<AccountRow[]>`select * from toph.accounts where id = ${id} and farm_id = ${SAMPLE_FARM_ID} and is_active`;
-    if (!account) throw notFound("The sample farm is not installed. Ask the operator to seed it.");
-    return createSession(tx, account, client);
   });
 }
 
@@ -167,14 +159,12 @@ export async function listFarmMembers(ctx: AccountContext): Promise<FarmMemberDt
 }
 
 export async function rotateJoinCode(ctx: AccountContext): Promise<string> {
-  if (ctx.session.farm.isSample) throw forbidden("The sample farm's membership is fixed.");
   const code = joinCode();
   await ctx.sql`update toph.farm_access set join_code = ${code} where farm_id = ${ctx.farmId}`;
   return code;
 }
 
 export async function deactivateMember(ctx: AccountContext, accountId: string): Promise<void> {
-  if (ctx.session.farm.isSample) throw forbidden("The sample farm's membership is fixed.");
   await ctx.sql.begin(async tx => {
     // Lock the workspace before changing membership; log saving uses the same lock.
     const [workspace] = await tx`select payload from toph.workspace_state where farm_id = ${ctx.farmId} for update`;

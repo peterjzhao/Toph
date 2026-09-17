@@ -214,3 +214,16 @@
 .reviewSwitch { display:flex; padding:3px; border:1px solid #e8ece6; border-radius:24px; background:#f4f7f2; gap:2px; }
 .reviewSwitch button { border:0; border-radius:20px; padding:6px 11px; font-size:12px; color:#788274; background:transparent; }
 .reviewSwitch button[aria-pressed="true"] { background:white; color:#22543a; box-shadow:0 1px 3px #0001; }
+
+/* Activity Logs: search that can also ask Toph (not part of the Figma dashboard frames). */
+.askSearch { padding-right: 4px; }
+.askButton { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; height: 26px; padding: 0 10px; border: 0; border-radius: 80px; background: var(--toph-color-surface-muted); color: var(--toph-color-text-muted); font-size: var(--toph-font-size-caption); font-weight: var(--toph-font-weight-medium); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.askButton:hover { background: var(--toph-color-brand-tint); color: var(--toph-color-brand); }
+.askButtonReady { background: var(--toph-color-brand); color: var(--toph-color-surface); }
+.askButtonReady:hover { background: var(--toph-color-brand-hover); color: var(--toph-color-surface); }
+.askButton:disabled { opacity: 0.6; cursor: progress; }
+.askHint { margin: -12px 0 var(--toph-spacing-sm); text-align: right; color: var(--toph-color-text-subtle); font-size: var(--toph-font-size-caption); }
+.outsideMatches { display: flex; align-items: center; justify-content: space-between; gap: var(--toph-spacing-sm); padding: 10px 30px; background: var(--toph-color-surface-muted); box-shadow: inset 0 -1px var(--toph-color-divider); color: var(--toph-color-text-muted); font-size: var(--toph-font-size-compact); }
+.outsideMatches button { flex-shrink: 0; border: 0; padding: 0; background: transparent; color: var(--toph-color-brand); font-size: var(--toph-font-size-compact); cursor: pointer; }
+.outsideMatches button:hover { text-decoration: underline; }
+@media (max-width: 700px) { .askHint { text-align: left; margin-top: 0; } .outsideMatches { padding: 10px var(--toph-spacing-md); } }

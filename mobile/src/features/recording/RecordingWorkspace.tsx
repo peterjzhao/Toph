@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, AudioLines, CheckCheck, CircleHelp, CloudUpload, FileText, MessageSquare, Mic, Pause, Play, Plus, RefreshCw, Square, WifiOff,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import type { MobileAccount, MobileAccountEdit, MobileBootstrap, MobileRemoteLog } from "@toph/contracts/mobile";
 import type { AccountSession } from "@toph/contracts/accounts";
 import { assetHeaders, assetUrl, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
@@ -26,6 +26,10 @@ import { applyExtractedDetails } from "./extracted-details";
 import { activityDetailSummary, activityForm } from "./activity-forms";
 import { saveActivityItem } from "./activity-catalog";
 import type { ExtractedLogFields } from "@toph/contracts/transcription";
+import HandsFreeScreen from "./hands-free/HandsFreeScreen";
+import { readHandsFreePreference, saveHandsFreePreference } from "./hands-free/preference";
+import type { SaveOutcome } from "./hands-free/turn-loop";
+import { useHandsFree } from "./hands-free/use-hands-free";
 import InboxSheet from "../messages/InboxSheet";
 import { useInbox } from "../messages/use-inbox";
 
@@ -41,6 +45,8 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const insets = useSafeAreaInsets();
   const network = useNetworkState();
   const [screen, setScreen] = useState<Screen>("capture");
+  // True once the form on screen has been saved as a log; Record then starts over instead of reopening it.
+  const workSaved = useRef(false);
   const [details, setDetails] = useState<WorkDetails>(() => ({ ...emptyDetails, workDate: localDate(), field: initialAccount.defaultField, activity: initialAccount.defaultActivity, unit: activityForm(initialAccount.defaultActivity).units?.[0] ?? "" }));
   const [drafts, setDrafts] = useState<RecordingDraft[]>([]);
   const [editing, setEditing] = useState<RecordingDraft | null>(null);
@@ -63,19 +69,27 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const [inboxOpen, setInboxOpen] = useState(false);
   const editedFields = useRef(new Set<keyof WorkDetails>());
   const previousSuggestions = useRef<ExtractedLogFields | null>(null);
-  const transcription = useTranscription({
-    context: { accountId: profile.id, referenceDate: details.workDate || localDate() },
-    onFields: fields => {
-      const previous = previousSuggestions.current;
-      previousSuggestions.current = fields;
-      setDetails(current => applyExtractedDetails(current, fields, bootstrap?.fields ?? [], editedFields.current, previous));
-      if (fields.activity && fields.product && activityForm(fields.activity).itemLabel) {
-        try { saveActivityItem(fields.activity, fields.product, catalogScope); }
-        catch (cause) { setError(cause instanceof Error ? cause.message : "This choice could not be saved on your device."); }
-      }
-    },
-  });
+  function applyFields(fields: ExtractedLogFields) {
+    const previous = previousSuggestions.current;
+    previousSuggestions.current = fields;
+    setDetails(current => applyExtractedDetails(current, fields, bootstrap?.fields ?? [], editedFields.current, previous));
+    if (fields.activity && fields.product && activityForm(fields.activity).itemLabel) {
+      try { saveActivityItem(fields.activity, fields.product, catalogScope); }
+      catch (cause) { setError(cause instanceof Error ? cause.message : "This choice could not be saved on your device."); }
+    }
+  }
+  const voiceContext = { accountId: profile.id, referenceDate: details.workDate || localDate() };
+  const transcription = useTranscription({ context: voiceContext, onFields: applyFields });
   const { clips, transcript, append, load } = transcription;
+  const [handsFreeOn, setHandsFreeOn] = useState(readHandsFreePreference);
+  // A spoken "save" waits here until the form has rendered the last extracted details, then runs Save log.
+  const [voiceSave, setVoiceSave] = useState<{ done: (outcome: SaveOutcome) => void } | null>(null);
+  const handsFree = useHandsFree({
+    context: voiceContext, recorder, appendClip: transcription.appendClip, loadTranscript: load, applyFields,
+    save: () => new Promise<SaveOutcome>(done => setVoiceSave({ done })),
+    onReset: newRecording,
+    onReview: message => { setScreen("review"); if (message) setError(message); },
+  });
   const freshRecording = useRef(false);
   const closeAccount = useCallback(() => setAccountOpen(false), []);
   const scrollArea = useRef<ScrollView>(null);
@@ -156,6 +170,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   }
 
   function newRecording() {
+    workSaved.current = false;
     recorder.reset();
     clearTranscript();
     setEditing(null);
@@ -224,9 +239,15 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
     draftId.current = draft.id;
     setError("");
     recorder.load(draft.audio, draft.durationSeconds);
+    workSaved.current = false;
     freshRecording.current = false;
     load(draftClips(draft));
     setScreen("review");
+  }
+
+  function openRecord() {
+    if (workSaved.current) { newRecording(); return; }
+    setScreen(clips.length > 0 || recorder.status === "ready" ? "review" : "capture");
   }
 
   function openLibrary() {
@@ -269,22 +290,41 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
     finally { saveInProgress.current = false; setSaving(false); }
   }
 
-  async function submit() {
-    if (saveInProgress.current || saving || busy || transcript.status === "working") return;
+  /** Save log. The outcome is what hands-free mode tells the worker; the form itself shows the same message. */
+  async function submit(): Promise<SaveOutcome> {
+    if (saveInProgress.current || saving || busy || transcript.status === "working") return { stored: false, synced: false, error: "The log is still being prepared." };
     const problem = bootstrap.fields.length ? validateDetails(details, clips.length > 0) : (!clips.length && !details.notes.trim() ? "Add a note or recording to keep a device draft." : "");
-    if (problem) { setError(problem); return; }
+    if (problem) { setError(problem); return { stored: false, synced: false, error: problem }; }
     setSaving(true);
     saveInProgress.current = true;
     setError("");
     const draft = currentDraft();
+    let kept = false;
     try {
       if (draft.product) saveActivityItem(draft.activity, draft.product, catalogScope);
       const stored = await saveDraft(draft);
       rememberDraft(stored);
+      workSaved.current = true;
+      kept = true;
       setScreen("saved");
       if (bootstrap.fields.length) await syncDraft(stored);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "The draft could not be saved. Please try again."); }
-    finally { setSaving(false); saveInProgress.current = false; }
+      return { stored: true, synced: bootstrap.fields.length > 0, error: "" };
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "The draft could not be saved. Please try again.";
+      setError(message);
+      return { stored: kept, synced: false, error: message };
+    } finally { setSaving(false); saveInProgress.current = false; }
+  }
+
+  useEffect(() => {
+    if (!voiceSave) return;
+    setVoiceSave(null);
+    void submit().then(voiceSave.done);
+  });
+
+  function toggleHandsFree(next: boolean) {
+    setHandsFreeOn(next);
+    saveHandsFreePreference(next);
   }
 
   const statusText = recorder.status === "requesting" ? "Starting microphone…" : recorder.status === "recording" ? "Recording" : recorder.status === "paused" ? "Paused" : "";
@@ -292,9 +332,13 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const accountDrafts = drafts.filter(draft => draft.employee.id === profile.id && draft.farmId === session.farm.id);
   const visibleRemoteLogs = remoteLogs.filter(log => !accountDrafts.some(draft => draft.sync?.logId === log.id));
   const localRemoteDraft = remoteLog ? accountDrafts.find(draft => draft.sync?.logId === remoteLog.id) : undefined;
+  const handsFreeOpen = handsFree.phase !== "idle";
+  // Hands-free starts an empty log, so it is offered only while there is nothing to lose.
+  const handsFreeReady = handsFreeOn && !handsFreeOpen && !busy && clips.length === 0 && !editing;
+  const covered = accountOpen || handsFreeOpen;
 
   return <View style={styles.app}>
-    <View style={styles.appContent} pointerEvents={accountOpen ? "none" : "auto"} accessibilityElementsHidden={accountOpen} importantForAccessibility={accountOpen ? "no-hide-descendants" : "auto"}>
+    <View style={styles.appContent} pointerEvents={covered ? "none" : "auto"} accessibilityElementsHidden={covered} importantForAccessibility={covered ? "no-hide-descendants" : "auto"}>
       <View style={[styles.header, { paddingTop: 18 + insets.top, height: 80 + insets.top }]}>
         <Press onPress={newRecording} disabled={busy || saving} accessibilityRole="button" accessibilityLabel="Toph, new recording"><Text style={styles.brand}>toph</Text></Press>
         <Text style={styles.farmName} numberOfLines={1}>{session.farm.name}</Text>
@@ -321,7 +365,11 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
               <SelectField style={styles.half} label="Field" value={details.field} values={fields} onChange={(value) => change("field", value)} disabled={busy} />
               <SelectField style={styles.half} label="Activity" value={details.activity} values={activities} onChange={(value) => change("activity", value)} disabled={busy} />
             </View> */}
-            <View style={styles.recorder}>
+            <View style={styles.handsFreeRow}>
+              <Text style={shared.text}>Hands-free</Text>
+              <Switch value={handsFreeOn} onValueChange={toggleHandsFree} disabled={busy} trackColor={{ true: colors.green, false: colors.border }} accessibilityLabel="Hands-free" accessibilityHint="Record and save a log by voice, without touching the screen" />
+            </View>
+            {handsFreeReady ? <HandsFreeScreen {...handsFree} fullScreen={false} onPress={() => void handsFree.start()} onReview={() => handsFree.stop(true)} /> : <View style={styles.recorder}>
               <View style={styles.recorderStatus} accessibilityLiveRegion="polite">
                 <Text style={shared.quietText}>{statusText}</Text>
               </View>
@@ -344,7 +392,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
                   {(active || recorder.status === "requesting") && <Press style={shared.quietButton} onPress={newRecording} accessibilityRole="button" accessibilityLabel="Cancel recording"><Text style={shared.quietText}>Cancel</Text></Press>}
                 </View>
               </View>
-            </View>
+            </View>}
             {clips.length > 0 && !busy && <Press style={shared.quietButton} onPress={() => setScreen("review")} accessibilityRole="button"><Text style={shared.quietText}>Return to review</Text></Press>}
             <Press style={[shared.quietButton, styles.noteButton]} onPress={writeNote} disabled={busy} accessibilityRole="button"><FileText size={17} color={colors.muted} /><Text style={shared.quietText}>Write a note</Text></Press>
           </View>}
@@ -402,7 +450,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
       </KeyboardAvoidingView>
 
       <View style={[styles.navigation, { paddingBottom: Math.max(5, insets.bottom) }]} accessibilityRole="tablist">
-        <Press style={styles.navButton} onPress={() => setScreen(clips.length > 0 || recorder.status === "ready" ? "review" : "capture")} disabled={busy || saving} accessibilityRole="tab" accessibilityState={{ selected: screen !== "library" }}>
+        <Press style={styles.navButton} onPress={openRecord} disabled={busy || saving} accessibilityRole="tab" accessibilityState={{ selected: screen !== "library" }}>
           <Mic size={22} color={screen !== "library" ? colors.ink : colors.soft} strokeWidth={1.6} />
           <Text style={[styles.navLabel, screen !== "library" ? styles.navActive : null]}>Record</Text>
         </Press>
@@ -417,6 +465,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
       </View>
     </View>
     {accountOpen && <AccountSheet profile={profile} fields={bootstrap.fields.map(field => field.name)} farmName={session.farm.name} connected={connected} connectionError={connectionError} onRefresh={refreshAccounts} onSignOut={signOut} logCount={accountDrafts.length + visibleRemoteLogs.length} onClose={closeAccount} onSave={updateProfile} onViewLogs={() => { setAccountOpen(false); openLibrary(); }} />}
+    {handsFreeOpen && <HandsFreeScreen {...handsFree} fullScreen onPress={() => handsFree.stop()} onReview={() => handsFree.stop(true)} />}
     <InboxSheet visible={inboxOpen} onClose={() => setInboxOpen(false)} employeeId={profile.id} farmName={session.farm.name} online={online} inbox={inbox} />
   </View>;
 }
@@ -436,6 +485,7 @@ const styles = StyleSheet.create({
   captureContent: { flexGrow: 1 },
   pageHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 28, marginBottom: spacing.xl },
   recordCard: { flex: 1, minHeight: 385 },
+  handsFreeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44, marginBottom: spacing.sm },
   contextFields: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-end" },
   half: { flex: 1 },
   recorder: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 295, paddingTop: 22, paddingBottom: 134 },

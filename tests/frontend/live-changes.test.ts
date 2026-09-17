@@ -5,7 +5,7 @@ import { diffDashboard, diffRoster, employeeAvatars, liveUpdateNotice } from "..
 
 const log = (id: string, employeeId: string, name: string, avatarUrl: string | null = null): LogDto => ({
   id, employee: { id: employeeId, name, avatarUrl }, activity: "Spraying", date: "2026-09-16", field: { id: "f1", name: "FIELD A", mapImageUrl: null },
-  startAt: "2026-09-16T13:00:00.000Z", endAt: "2026-09-16T15:00:00.000Z", summary: "", isNew: true, recording: null, tags: [], updatedAt: "2026-09-16T15:00:00.000Z",
+  startAt: "2026-09-16T13:00:00.000Z", endAt: "2026-09-16T15:00:00.000Z", summary: "", isNew: true, recording: null, tags: [], details: {}, updatedAt: "2026-09-16T15:00:00.000Z",
 });
 const dashboard = (logs: LogDto[]): DashboardData => ({
   farm: { id: "farm", name: "Bays Ranch", avatarUrl: null, timezone: "America/Los_Angeles" },

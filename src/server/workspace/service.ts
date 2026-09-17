@@ -99,8 +99,8 @@ export async function patchWorkspace(ctx: FarmContext, body: unknown): Promise<W
       }
       const state = parseWorkspaceState({ ...parseWorkspaceState(decodePayload(row.payload)), ...patch });
       await validateRelationships(tx, ctx, state);
-      const [access] = await tx`select is_sample from toph.farm_access where farm_id = ${ctx.farmId}`;
-      if (access && !access.is_sample) {
+      const [access] = await tx`select farm_id from toph.farm_access where farm_id = ${ctx.farmId}`;
+      if (access) {
         const memberships = await tx`select id, employee_id, name from toph.accounts where farm_id = ${ctx.farmId} and role = 'worker'`;
         if (state.employees.length !== memberships.length || state.employees.some(employee => !memberships.some(member => member.employee_id === employee.id && member.name === employee.name))) {
           throw validationError("Invite workers with the farm code. Account names are changed by the signed-in worker.", { employees: "Keep the existing farm memberships and names." });

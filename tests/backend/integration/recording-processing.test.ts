@@ -33,8 +33,10 @@ describe("recording processing with real PostgreSQL and a fake provider", () => 
     await owner`revoke update (display_name, avatar_path, updated_at) on toph.employees from toph_app`;
     await ctx?.close(); await owner?.end();
   });
-  const fields = () => ({ fieldId, activity: "Spraying", workDate: "2026-09-16", startTime: "06:00", endTime: "08:00", notes: "Sprayed Field A with two liters of water.", product: "Water", amount: 2, unit: "L", tags: [] });
-  const result = () => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(fields()) }] }] });
+  const core = () => ({ fieldId, activity: "Spraying", workDate: "2026-09-16", startTime: "06:00", endTime: "08:00", notes: "Sprayed Field A with two liters of water.", tags: [] });
+  const treatment = { product: "Water", amount: 2, unit: "L" };
+  const fields = () => ({ ...core(), details: treatment, ...treatment });
+  const result = () => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ ...core(), details: treatment }) }] }] });
   function upload(id = accountId) {
     const form = new FormData();
     form.append("file", new Blob([readFileSync("public/assets/sample-recording.mp3")], { type: "audio/mpeg" }), "test.mp3");
@@ -46,7 +48,8 @@ describe("recording processing with real PostgreSQL and a fake provider", () => 
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ text: "Sprayed Field A." })).mockImplementationOnce(result);
     vi.stubGlobal("fetch", fetcher);
     const output = await processRecording(upload(), ctx, "test-key");
-    expect(output).toEqual({ text: "Sprayed Field A.", transcript: "Earlier clip.\n\nSprayed Field A.", fields: fields(), missingFields: [], extractionError: null });
+    expect(output).toEqual({ text: "Sprayed Field A.", transcript: "Earlier clip.\n\nSprayed Field A.", fields: fields(), missingFields: [], extractionError: null,
+      voice: { status: "ready_to_confirm", prompt: expect.stringContaining("Say save, or tell me what to change."), missingFields: [] } });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect((await owner`select count(*)::int as n from toph.work_logs`)[0].n).toBe(before.n);
     expect((await owner`select day_count from toph.transcription_usage where farm_id = ${FARM_ID}`)[0].day_count).toBe(1);

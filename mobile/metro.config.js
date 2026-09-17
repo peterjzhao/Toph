@@ -7,4 +7,8 @@ const config = getDefaultConfig(__dirname);
 // editing a token also triggers Fast Refresh in the native app.
 config.watchFolders = [...config.watchFolders, path.resolve(__dirname, "../shared"), path.resolve(__dirname, "../src/contracts")];
 
+// Shared contract files live outside this package and may import each other; their Babel
+// runtime helpers and any packages resolve from this app's own node_modules.
+config.resolver.nodeModulesPaths = [path.resolve(__dirname, "node_modules")];
+
 module.exports = config;

@@ -42,9 +42,8 @@ export function createMobileClient({ baseUrl, fetcher = fetch, headers = session
   }
   return {
     session: () => request<AccountSession>("/api/auth/session"),
-    login: (name: string) => request<AuthResponse["data"]>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), client: "mobile" }) }),
-    join: (name: string, code: string) => request<AuthResponse["data"]>("/api/auth/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), code: code.trim(), client: "mobile" }) }),
-    sample: () => request<AuthResponse["data"]>("/api/auth/sample", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client: "mobile" }) }),
+    login: (name: string, password: string) => request<AuthResponse["data"]>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), password, client: "mobile" }) }),
+    join: (name: string, password: string, code: string) => request<AuthResponse["data"]>("/api/auth/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), password, code: code.trim(), client: "mobile" }) }),
     logout: () => request<unknown>("/api/auth/logout", { method: "POST" }),
     accounts: () => request<MobileBootstrap>("/api/mobile/v1/accounts"),
     messages: () => request<MessageInbox>("/api/mobile/v1/messages", {}, 15_000),

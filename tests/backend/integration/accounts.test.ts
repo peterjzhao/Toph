@@ -7,7 +7,6 @@ import type { AccountSession } from "@/contracts/accounts";
 import * as signup from "@/app/api/auth/signup/route";
 import * as login from "@/app/api/auth/login/route";
 import * as join from "@/app/api/auth/join/route";
-import * as sample from "@/app/api/auth/sample/route";
 import * as session from "@/app/api/auth/session/route";
 import * as logout from "@/app/api/auth/logout/route";
 import * as dashboard from "@/app/api/dashboard/route";
@@ -31,6 +30,7 @@ import { prepareTestDatabase } from "../helpers/prepare-db";
 import { TEST_APP_ORIGIN, useRouteTestEnv } from "../helpers/route-env";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZSkAAAAASUVORK5CYII=";
+const PASSWORD = "correct horse battery";
 const boundary = [{ x: .1, y: .1 }, { x: .9, y: .1 }, { x: .9, y: .9 }, { x: .1, y: .9 }];
 const params = <T extends Record<string, string>>(value: T) => ({ params: Promise.resolve(value) });
 function req(path: string, method = "GET", data?: unknown, credential = "", mobile = false) {
@@ -77,21 +77,21 @@ describe("account-scoped signup, farm setup and review", () => {
     await sql.end();
   });
 
-  it("requires an actual session; empty or forged credentials never select the sample farm", async () => {
+  it("requires an actual session; empty or forged credentials never select a farm", async () => {
     expect((await dashboard.GET(req("/api/dashboard"))).status).toBe(401);
     expect((await workspace.GET(req("/api/workspace"))).status).toBe(401);
     expect((await session.GET(req("/api/auth/session", "GET", undefined, "toph_session=" + "a".repeat(43)))).status).toBe(401);
-    const foreign = new NextRequest(`${TEST_APP_ORIGIN}/api/auth/signup`, { method: "POST", headers: { "content-type": "application/json", origin: "https://foreign.example" }, body: JSON.stringify({ name: "Nope", farmName: "Nope" }) });
+    const foreign = new NextRequest(`${TEST_APP_ORIGIN}/api/auth/signup`, { method: "POST", headers: { "content-type": "application/json", origin: "https://foreign.example" }, body: JSON.stringify({ name: "Nope", password: PASSWORD, farmName: "Nope" }) });
     expect((await signup.POST(foreign)).status).toBe(403);
   });
 
   it("creates an empty farm and counts its administrator once", async () => {
-    const response = await signup.POST(req("/api/auth/signup", "POST", { name: `  New   Farmer ${suffix}  `, farmName: "My own farm" }));
+    const response = await signup.POST(req("/api/auth/signup", "POST", { name: `  New   Farmer ${suffix}  `, password: PASSWORD, farmName: "My own farm" }));
     expect(response.status).toBe(201);
     const body = await response.json(); admin = body.data; farms.push(admin.farm.id);
     cookie = response.headers.get("set-cookie")!.split(";")[0];
     expect(response.headers.get("set-cookie")).toMatch(/HttpOnly; SameSite=Lax/);
-    expect(body.data.token).toBeUndefined(); expect(admin.account.name).toBe(`New Farmer ${suffix}`); expect(admin.farm).toMatchObject({ isSample: false, setupComplete: false });
+    expect(body.data.token).toBeUndefined(); expect(admin.account.name).toBe(`New Farmer ${suffix}`); expect(admin.farm).toMatchObject({ setupComplete: false });
     const result = await (await dashboard.GET(req("/api/dashboard", "GET", undefined, cookie))).json();
     expect(result.data.metrics.activeWorkers).toBe(1); expect(result.data.logs).toEqual([]); expect(result.data.filterOptions.fields).toEqual([]);
     const state = await (await workspace.GET(req("/api/workspace", "GET", undefined, cookie))).json();
@@ -100,12 +100,19 @@ describe("account-scoped signup, farm setup and review", () => {
 
   it("resolves normalized names and rolls back duplicate signup atomically", async () => {
     const [{ count: before }] = await sql`select count(*)::int as count from toph.farms`;
-    const collision = await signup.POST(req("/api/auth/signup", "POST", { name: `NEW FARMER ${suffix.toUpperCase()}`, farmName: "Must not persist" }));
+    const collision = await signup.POST(req("/api/auth/signup", "POST", { name: `NEW FARMER ${suffix.toUpperCase()}`, password: PASSWORD, farmName: "Must not persist" }));
     expect(collision.status).toBe(409); expect((await collision.json()).error.code).toBe("NAME_TAKEN");
     expect((await sql`select count(*)::int as count from toph.farms`)[0].count).toBe(before);
-    const signed = await login.POST(req("/api/auth/login", "POST", { name: `new farmer ${suffix}` })); expect(signed.status).toBe(200);
+    const signed = await login.POST(req("/api/auth/login", "POST", { name: `new farmer ${suffix}`, password: PASSWORD })); expect(signed.status).toBe(200);
     expect((await signed.json()).data.account.id).toBe(admin.account.id);
-    const results = await Promise.all([1, 2].map(() => signup.POST(req("/api/auth/signup", "POST", { name: `Concurrent ${suffix}`, farmName: "Atomic farm" }))));
+    const [stored] = await sql`select password_hash from toph.accounts where id = ${admin.account.id}`;
+    expect(stored.password_hash).toMatch(/^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/); expect(stored.password_hash).not.toContain(PASSWORD);
+    const wrong = await login.POST(req("/api/auth/login", "POST", { name: `new farmer ${suffix}`, password: "wrong password" }));
+    const unknown = await login.POST(req("/api/auth/login", "POST", { name: `nobody ${suffix}`, password: PASSWORD }));
+    expect(wrong.status).toBe(401); expect(unknown.status).toBe(401); expect((await wrong.json()).error.message).toBe((await unknown.json()).error.message);
+    expect((await login.POST(req("/api/auth/login", "POST", { name: `new farmer ${suffix}` }))).status).toBe(400);
+    expect((await signup.POST(req("/api/auth/signup", "POST", { name: `Short ${suffix}`, password: "short", farmName: "Weak farm" }))).status).toBe(400);
+    const results = await Promise.all([1, 2].map(() => signup.POST(req("/api/auth/signup", "POST", { name: `Concurrent ${suffix}`, password: PASSWORD, farmName: "Atomic farm" }))));
     expect(results.map(r => r.status).sort()).toEqual([201, 409]);
     for (const r of results) if (r.status === 201) farms.push((await r.json()).data.farm.id);
     expect((await sql`select count(*)::int as count from toph.farms`)[0].count).toBe(before + 1);
@@ -130,13 +137,13 @@ describe("account-scoped signup, farm setup and review", () => {
   });
 
   it("joins by code and confines workers to their own mobile identity", async () => {
-    expect((await join.POST(req("/api/auth/join", "POST", { name: `Worker ${suffix}`, code: "000000000000", client: "mobile" }, "", true))).status).toBe(400);
-    const response = await join.POST(req("/api/auth/join", "POST", { name: `Worker ${suffix}`, code: admin.joinCode, client: "mobile" }, "", true));
+    expect((await join.POST(req("/api/auth/join", "POST", { name: `Worker ${suffix}`, password: PASSWORD, code: "000000000000", client: "mobile" }, "", true))).status).toBe(400);
+    const response = await join.POST(req("/api/auth/join", "POST", { name: `Worker ${suffix}`, password: PASSWORD, code: admin.joinCode, client: "mobile" }, "", true));
     expect(response.status).toBe(201); const data = (await response.json()).data; worker = data; token = data.token;
     expect(worker.account.role).toBe("worker"); expect(worker.farm.id).toBe(admin.farm.id); expect(worker.joinCode).toBeUndefined();
     expect((await dashboard.GET(req("/api/dashboard", "GET", undefined, token, true))).status).toBe(403);
     expect((await members.GET(req("/api/farm/members", "GET", undefined, token, true))).status).toBe(403);
-    expect((await login.POST(req("/api/auth/login", "POST", { name: worker.account.name }))).status).toBe(403);
+    expect((await login.POST(req("/api/auth/login", "POST", { name: worker.account.name, password: PASSWORD }))).status).toBe(403);
     const dataResponse = await bootstrap.GET(req("/api/mobile/v1/accounts", "GET", undefined, token, true));
     const dataBody = (await dataResponse.json()).data;
     expect(dataBody.accounts).toHaveLength(1); expect(dataBody.accounts[0].id).toBe(worker.account.employeeId);
@@ -146,7 +153,7 @@ describe("account-scoped signup, farm setup and review", () => {
     expect((await (await dashboard.GET(req("/api/dashboard", "GET", undefined, cookie))).json()).data.metrics.activeWorkers).toBe(2);
   });
 
-  it("persists worker logs and shared first-review attribution without editing the sample", async () => {
+  it("persists worker logs and shared first-review attribution on every farm, scoped to that farm", async () => {
     expect((await mobileLogs.POST(upload(token, randomUUID(), fieldId))).status).toBe(403);
     const response = await mobileLogs.POST(upload(token, worker.account.employeeId!, fieldId, true));
     expect(response.status).toBe(200); logId = (await response.json()).data.logId;
@@ -158,13 +165,15 @@ describe("account-scoped signup, farm setup and review", () => {
     expect(first.is_new).toBe(false); expect(first.reviewed_by).toBe(admin.account.id); expect(first.reviewed_at).toBeTruthy();
     await review.POST(req(`/api/logs/${logId}/review`, "POST", {}, cookie), params({ logId }));
     expect((await sql`select reviewed_at from toph.work_logs where id = ${logId}`)[0].reviewed_at).toEqual(first.reviewed_at);
-    const responseSample = await sample.POST(req("/api/auth/sample", "POST", {})); expect(responseSample.status).toBe(200);
-    const sampleCookie = responseSample.headers.get("set-cookie")!.split(";")[0];
-    const sampleId = "30000000-0000-4000-8000-000000000001";
-    const [before] = await sql`select is_new, updated_at from toph.work_logs where id = ${sampleId}`;
-    await review.POST(req(`/api/logs/${sampleId}/review`, "POST", {}, sampleCookie), params({ logId: sampleId }));
-    expect((await sql`select is_new, updated_at from toph.work_logs where id = ${sampleId}`)[0]).toEqual(before);
-    expect((await log.GET(req(`/api/logs/${logId}`, "GET", undefined, sampleCookie), params({ logId }))).status).toBe(404);
+    // Bays Ranch is a regular farm: its administrator signs in by name and reviews persist.
+    const responseBays = await login.POST(req("/api/auth/login", "POST", { name: "Ranch Admin", password: "ranch", client: "web" })); expect(responseBays.status).toBe(200);
+    const baysCookie = responseBays.headers.get("set-cookie")!.split(";")[0];
+    const baysLogId = "30000000-0000-4000-8000-000000000001";
+    expect((await sql`select is_new from toph.work_logs where id = ${baysLogId}`)[0].is_new).toBe(true);
+    expect((await review.POST(req(`/api/logs/${baysLogId}/review`, "POST", {}, baysCookie), params({ logId: baysLogId }))).status).toBe(200);
+    const [reviewed] = await sql`select is_new, reviewed_by from toph.work_logs where id = ${baysLogId}`;
+    expect(reviewed.is_new).toBe(false); expect(reviewed.reviewed_by).toBe("90000000-0000-4000-8000-000000000001");
+    expect((await log.GET(req(`/api/logs/${logId}`, "GET", undefined, baysCookie), params({ logId }))).status).toBe(404);
   });
 
   it("keeps recording bytes private to their author and farm administrator", async () => {
@@ -173,7 +182,7 @@ describe("account-scoped signup, farm setup and review", () => {
     expect((await recording.GET(req(path, "GET", undefined, token, true), params({ recordingId: row.id }))).status).toBe(200);
     expect((await recording.GET(req(path, "GET", undefined, cookie), params({ recordingId: row.id }))).status).toBe(200);
     expect((await recording.GET(req(path), params({ recordingId: row.id }))).status).toBe(401);
-    const another = await join.POST(req("/api/auth/join", "POST", { name: `Other worker ${suffix}`, code: admin.joinCode, client: "mobile" }, "", true));
+    const another = await join.POST(req("/api/auth/join", "POST", { name: `Other worker ${suffix}`, password: PASSWORD, code: admin.joinCode, client: "mobile" }, "", true));
     const other = (await another.json()).data;
     expect((await recording.GET(req(path, "GET", undefined, other.token, true), params({ recordingId: row.id }))).status).toBe(404);
     const state = (await (await workspace.GET(req("/api/workspace", "GET", undefined, cookie))).json());
@@ -186,14 +195,14 @@ describe("account-scoped signup, farm setup and review", () => {
   it("rotates codes, rejects ghost members, revokes inactive worker sessions and preserves work", async () => {
     const response = await invite.POST(req("/api/farm/invite", "POST", {}, cookie)); expect(response.status).toBe(200);
     expect((await response.json()).data.joinCode).not.toBe(admin.joinCode);
-    expect((await join.POST(req("/api/auth/join", "POST", { name: `Old code ${suffix}`, code: admin.joinCode, client: "mobile" }, "", true))).status).toBe(400);
+    expect((await join.POST(req("/api/auth/join", "POST", { name: `Old code ${suffix}`, password: PASSWORD, code: admin.joinCode, client: "mobile" }, "", true))).status).toBe(400);
     const state = await (await workspace.GET(req("/api/workspace", "GET", undefined, cookie))).json();
     expect((await workspace.PATCH(req("/api/workspace", "PATCH", { expectedRevision: state.revision, patch: { employees: [...state.data.employees, { ...state.data.employees[0], id: randomUUID(), name: "Ghost" }] } }, cookie))).status).toBe(400);
     const listed = (await (await members.GET(req("/api/farm/members", "GET", undefined, cookie))).json()).data;
     expect(listed).toHaveLength(3);
     expect((await member.DELETE(req(`/api/farm/members/${worker.account.id}`, "DELETE", undefined, cookie), params({ accountId: worker.account.id }))).status).toBe(200);
     expect((await session.GET(req("/api/auth/session", "GET", undefined, token, true))).status).toBe(401);
-    expect((await login.POST(req("/api/auth/login", "POST", { name: worker.account.name, client: "mobile" }, "", true))).status).toBe(401);
+    expect((await login.POST(req("/api/auth/login", "POST", { name: worker.account.name, password: PASSWORD, client: "mobile" }, "", true))).status).toBe(401);
     expect((await sql`select id from toph.work_logs where id = ${logId}`)).toHaveLength(1);
     expect((await (await dashboard.GET(req("/api/dashboard", "GET", undefined, cookie))).json()).data.metrics.activeWorkers).toBe(1);
     expect((await logout.POST(req("/api/auth/logout", "POST", {}, cookie))).status).toBe(200);

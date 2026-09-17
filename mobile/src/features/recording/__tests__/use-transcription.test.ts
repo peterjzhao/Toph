@@ -79,3 +79,21 @@ test("failed append preserves the last successful parse; loading another draft c
   await act(async () => { result.current.load([clip("other", "Another draft.")]); });
   expect(result.current.extractedFields).toBeNull();
 });
+test("hands-free: appendClip returns the result, and speech without a clip precedes the clips", async () => {
+  transcribe.mockResolvedValueOnce({ ...transcriptResult("Ten thirty.", "I sprayed field A.\n\nTen thirty."), voice: { status: "needs_fields", prompt: "Which product?", missingFields: ["product"] } });
+  extract.mockResolvedValueOnce(transcriptResult("all", "I sprayed field A.\n\nTen thirty.\n\nActually eleven."));
+  const { result } = await renderHook(() => useTranscription(options()));
+  await act(async () => { result.current.load([], " I sprayed field A. "); });
+  expect(result.current.transcript).toMatchObject({ status: "idle", text: "I sprayed field A." });
+  let returned: TranscriptionResult | null = null;
+  await act(async () => { returned = await result.current.appendClip(clip("answer")); });
+  expect(returned!.voice?.prompt).toBe("Which product?");
+  expect(transcribe.mock.calls[0][1].context.previousTranscript).toBe("I sprayed field A.");
+  expect(extract).not.toHaveBeenCalled();
+  // A reply that is already transcribed (a spoken correction) is only re-extracted.
+  await act(async () => { await result.current.appendClip(clip("change", "Actually eleven.")); });
+  expect(transcribe).toHaveBeenCalledTimes(1);
+  expect(extract.mock.calls[0][0]).toBe("I sprayed field A.\n\nTen thirty.\n\nActually eleven.");
+  await act(async () => { result.current.load([]); });
+  expect(result.current.transcript.text).toBe("");
+});

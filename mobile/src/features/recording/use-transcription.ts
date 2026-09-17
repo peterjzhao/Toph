@@ -5,7 +5,7 @@ import { extractRecordingDetails, transcribeRecording } from "./transcribe";
 
 export type Transcript = { status: "idle" | "working" | "done" | "error" | "cancelled"; text: string; message: string };
 const initial: Transcript = { status: "idle", text: "", message: "" };
-const transcriptText = (clips: RecordingClip[]) => clips.map(clip => clip.transcript).filter(Boolean).join("\n\n");
+const clipText = (clips: RecordingClip[]) => clips.map(clip => clip.transcript).filter(Boolean).join("\n\n");
 type Options = { context: Omit<TranscriptionContext, "previousTranscript">; onFields: (fields: ExtractedLogFields) => void };
 
 /** Retain each clip's speech and retry extraction without retranscribing completed audio. */
@@ -17,22 +17,27 @@ export function useTranscription(options: Options) {
   const [extractedFields, setExtractedFields] = useState<ExtractedLogFields | null>(null);
   const request = useRef<AbortController | null>(null);
   const generation = useRef(0);
+  // Speech captured without a clip (a hands-free voice conversation) precedes the clips' text.
+  const preface = useRef("");
+  const transcriptText = useCallback((items: RecordingClip[]) => [preface.current, clipText(items)].filter(Boolean).join("\n\n"), []);
 
   const cancel = useCallback(() => {
     if (!request.current) return;
     generation.current += 1;
     request.current.abort(); request.current = null;
     setTranscript({ status: "cancelled", text: transcriptText(clipsRef.current), message: "Transcription cancelled. Your recording is kept on this device." });
-  }, []);
-  const load = useCallback((next: RecordingClip[]) => {
+  }, [transcriptText]);
+  const load = useCallback((next: RecordingClip[], spoken = "") => {
     generation.current += 1;
     request.current?.abort(); request.current = null;
+    preface.current = spoken.trim();
     clipsRef.current = next; setClips(next);
     setExtractedFields(null);
     setTranscript({ status: next.length && next.every(clip => clip.transcript) ? "done" : "idle", text: transcriptText(next), message: "" });
-  }, []);
-  const run = useCallback(async (next = clipsRef.current) => {
-    if (!next.length) return;
+  }, [transcriptText]);
+  /** Resolves with the server's result, or null when the run failed, was cancelled or was superseded. */
+  const process = useCallback(async (next = clipsRef.current): Promise<TranscriptionResult | null> => {
+    if (!next.length) return null;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     const runId = ++generation.current;
@@ -44,7 +49,7 @@ export function useTranscription(options: Options) {
       for (let index = 0; index < next.length; index += 1) {
         if (next[index].transcript) continue;
         result = await transcribeRecording(next[index].audio, { signal: controller.signal, context: { ...context, previousTranscript: transcriptText(next.slice(0, index)) } });
-        if (runId !== generation.current) return;
+        if (runId !== generation.current) return null;
         next = next.map((clip, position) => position === index ? { ...clip, transcript: result!.text } : clip);
         clipsRef.current = next; setClips(next);
       }
@@ -52,19 +57,24 @@ export function useTranscription(options: Options) {
       if (!result || result.transcript !== transcriptText(next)) {
         result = await extractRecordingDetails(transcriptText(next), { signal: controller.signal, context });
       }
-      if (runId !== generation.current) return;
+      if (runId !== generation.current) return null;
       if (result.fields) {
         setExtractedFields(result.fields);
         latest.current.onFields(result.fields);
       }
       setTranscript({ status: result.extractionError ? "error" : "done", text: transcriptText(next),
         message: result.extractionError || "" });
+      return result;
     } catch (cause) {
-      if (runId !== generation.current) return;
+      if (runId !== generation.current) return null;
       setTranscript({ status: "error", text: transcriptText(clipsRef.current), message: cause instanceof Error ? cause.message : "Transcription failed. Please try again." });
+      return null;
     } finally { if (runId === generation.current) request.current = null; }
-  }, []);
+  }, [transcriptText]);
+  const run = useCallback(async (next?: RecordingClip[]) => { await process(next); }, [process]);
   const append = useCallback((clip: RecordingClip) => run([...clipsRef.current, clip]), [run]);
+  /** Hands-free mode reads `voice` from the result; a clip that already has its transcript is only re-extracted. */
+  const appendClip = useCallback((clip: RecordingClip) => process([...clipsRef.current, clip]), [process]);
   useEffect(() => () => { generation.current += 1; request.current?.abort(); }, []);
-  return { clips, transcript, extractedFields, cancel, load, run, append };
+  return { clips, transcript, extractedFields, cancel, load, run, append, appendClip };
 }

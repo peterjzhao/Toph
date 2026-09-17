@@ -24,7 +24,7 @@ export function describeRuntimeGrants(role: string): string[] {
     `GRANT SELECT ON ALL TABLES IN SCHEMA toph TO ${role} (includes the dashboard_logs view)`,
     `GRANT INSERT ON toph.tags TO ${role}`,
     `GRANT INSERT, DELETE ON toph.work_log_tags TO ${role}`,
-    `GRANT UPDATE (updated_at, is_new, reviewed_by, reviewed_at) ON toph.work_logs TO ${role}`,
+    `GRANT UPDATE (updated_at, is_new, reviewed_by, reviewed_at, details) ON toph.work_logs TO ${role}`,
     `GRANT INSERT and scoped column UPDATE privileges for farm/account onboarding TO ${role}`,
     `GRANT INSERT, UPDATE (payload, revision, updated_at) ON toph.workspace_state TO ${role}`,
     `GRANT EXECUTE ON FUNCTION toph.waveform_peaks_valid(jsonb) TO ${role}`,
@@ -69,7 +69,7 @@ export async function applyRuntimeGrants(sql: postgres.Sql, role: string): Promi
     await tx`grant select on all tables in schema toph to ${tx(role)}`;
     await tx`grant insert on toph.tags to ${tx(role)}`;
     await tx`grant insert, delete on toph.work_log_tags to ${tx(role)}`;
-    await tx`grant update (updated_at, is_new, reviewed_by, reviewed_at) on toph.work_logs to ${tx(role)}`;
+    await tx`grant update (updated_at, is_new, reviewed_by, reviewed_at, details) on toph.work_logs to ${tx(role)}`;
     await tx`grant insert on toph.farms, toph.employees, toph.accounts, toph.account_sessions, toph.farm_access, toph.farm_images, toph.fields to ${tx(role)}`;
     await tx`grant update (name, timezone, updated_at) on toph.farms to ${tx(role)}`;
     await tx`grant update (display_name, is_active, updated_at) on toph.employees to ${tx(role)}`;

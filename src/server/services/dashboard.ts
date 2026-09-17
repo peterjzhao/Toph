@@ -10,6 +10,7 @@ import { DASHBOARD_CONTRACT_VERSION } from "@/contracts/dashboard";
 import type { FarmContext } from "@/server/farm-context";
 import { dashboardLogs, employees, fields, tags, workLogTags, workLogs } from "@/server/db/schema";
 import { notFound } from "@/server/errors";
+import { treatmentSummary } from "@/contracts/log-form";
 import { instantToLocalDate } from "@/server/time/zoned";
 import { validateDashboardQuery, type ParsedDashboardQuery } from "@/server/validation/dashboard-query";
 import { parseUuid } from "@/server/validation/ids";
@@ -45,7 +46,8 @@ export function toLogDto(row: ViewRow): LogDto {
     field: { id: row.fieldId, name: row.fieldName, mapImageUrl: row.fieldMapImagePath },
     startAt: row.startAt.toISOString(),
     endAt: row.endAt.toISOString(),
-    summary: row.summary,
+    // Until the dashboard renders details itself, the item and quantity read as part of the summary.
+    summary: [row.summary, treatmentSummary(row.details ?? {})].filter(Boolean).join("\n\n"),
     isNew: row.isNew,
     recording: row.recordingPath
       ? {
@@ -56,6 +58,7 @@ export function toLogDto(row: ViewRow): LogDto {
         }
       : null,
     tags: (row.tags ?? []).map((tag) => ({ id: tag.id, label: tag.label })),
+    details: row.details ?? {},
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -82,6 +85,7 @@ function buildLogFilter(farmId: string, query: ParsedDashboardQuery, dateRange: 
         sql`${dashboardLogs.employeeName} ILIKE ${pattern} ESCAPE '\\'`,
         sql`${dashboardLogs.activity} ILIKE ${pattern} ESCAPE '\\'`,
         sql`${dashboardLogs.fieldName} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`exists (select 1 from jsonb_each_text(${dashboardLogs.details}) d where d.value ILIKE ${pattern} ESCAPE '\\')`,
         sql`exists (
           select 1 from ${workLogTags} wt
           join ${tags} t on t.id = wt.tag_id and t.farm_id = wt.farm_id

@@ -2,7 +2,7 @@
 
 React Native app for Toph, built with [Expo](https://expo.dev) SDK 57, React Native 0.86, Expo Router, and TypeScript. It lives in `mobile/` beside the Next.js dashboard at the repository root and has its own `package.json` and `node_modules`.
 
-The app is the worker-facing recording flow: sign in, record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. Each account belongs to one farm. See [mobile API setup](../docs/backend/mobile.md) for the required server deployment and configuration. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when the server OpenAI key is configured.
+The app is the worker-facing recording flow: sign in, record a voice note about field work (or write one), review and complete the log, and keep drafts on the device. The native recording feature follows the Figma typography and colors; the earlier web phone mockup has been removed. Each account belongs to one farm. Save log keeps a local copy before uploading; account details, photos, and submitted logs persist in PostgreSQL. Recording processing returns speech and structured review fields when the server OpenAI key is configured.
 
 ## Requirements
 
@@ -54,7 +54,7 @@ override. Never put database credentials or server API keys in an `EXPO_PUBLIC_*
 After pushing the server changes and waiting for Vercel to show Ready, run
 `npm run check:mobile-server` from the repository root. Reopen the updated phone app and
 log in with your unique name, or choose Join a farm and enter a name plus the admin's farm
-code. The Bays Ranch sample farm is an explicit separate entry into the seeded Isaac account.
+code. Bays Ranch's seeded workers (for example `Isaac Wang`) log in by name like anyone else.
 The avatar opens your own profile, photo, defaults, and Sign out. Save log keeps a
 device copy and syncs to the same PostgreSQL database the dashboard reads. A failed upload
 stays in the library with a Sync log action. The combined audio limit is 3.8 MB per log.
@@ -65,6 +65,32 @@ the Inbox tab. From the repository root, run `npm --prefix mobile run ios:releas
 phone connected and choose it when prompted. Install in place to keep local drafts. Server-only
 changes do not require a native rebuild. A Git push does not update installed app binaries.
 
+## Hands-free mode
+
+The Record screen has a **Hands-free** switch, remembered on the device. When it is on, the screen
+is one large tap target: tap to start, tap again to stop. The background colour and a large label
+show the state (Connecting, Listening, Thinking, Speaking, Saved, Stopped), each change gives a
+haptic tap, and the screen stays awake. **Review on screen** opens the normal review form with
+whatever has been filled in. With the switch off, recording works exactly as before. A spoken
+"save" runs the same Save log as the form: a device draft first, then the upload.
+
+There are two transports:
+
+- **Realtime conversation** over WebRTC with `react-native-webrtc`. This is native code, so it needs
+  a development or Release build made after `npx expo prebuild --no-clean`; it is not in Expo Go.
+  The call is closed on save, cancel, five minutes, a lost connection, or when the app leaves the
+  foreground.
+- **Turn by turn**, used in Expo Go, when the call cannot start, or when it drops (the transcript
+  carries over). The app records until you stop speaking, the server asks for what is missing, and
+  the prompt is played from `/api/mobile/v1/speech`, or spoken by the phone (`expo-speech`) when
+  that request fails. Silence thresholds are in `hands-free/silence.ts`.
+
+`react-native-webrtc` 124.0.8 with `@config-plugins/react-native-webrtc` 15.0.2 is the newest pair;
+the plugin's table ends at SDK 56 and `expo-doctor` lists the library as untested on the New
+Architecture, which this app uses. Treat the first device build as the acceptance test. The plugin's
+Android `CAMERA` and `SYSTEM_ALERT_WINDOW` permissions are blocked in `app.json`; the app only
+uses the microphone.
+
 ## Worker inbox
 
 The Inbox tab opens your conversation with the farm admin without discarding your recording
@@ -72,7 +98,7 @@ draft. Unread messages show a badge. Messages and replies persist in PostgreSQL,
 five seconds while active, and catch up when you reopen the app. Sent/Read indicates server
 save and recipient acknowledgement. Failed sends retain their composer text for retry while
 the workspace is mounted. No APNs setup or notification permission is required; there are no
-notifications while the app is closed. See [messaging](../docs/backend/messages.md).
+notifications while the app is closed.
 
 Name-based access intentionally has no password or email verification for this project's
 simplified account model; knowing a name is enough to sign in. The server issues an opaque
@@ -119,7 +145,7 @@ before saving. A separate Save log request persists it to the shared PostgreSQL 
 The root/server environment needs `OPENAI_API_KEY`;
 no key or transcription token belongs in the mobile bundle. If extraction fails after
 speech succeeds, the transcript stays available and retry only extracts details. Cancel
-retains the audio and completed text. See [backend setup and live tests](../docs/backend/transcription.md).
+retains the audio and completed text.
 
 Expo 57 uploads must append an `expo-file-system` `File` to `FormData`. The older React
 Native `{ uri, name, type }` object causes `Unsupported FormDataPart implementation`
@@ -224,6 +250,5 @@ Unit tests cover the pure helpers, draft and profile storage (against an in-memo
 Edit `../shared/design/tokens.ts` for the common colors, spacing, radii, and typography.
 `src/features/recording/styles.ts` maps those values into native styles, and the web app
 uses the same source for its CSS variables. Both use the `@toph/design` import alias.
-See [the design token guide](../docs/design-tokens.md) for examples and platform differences.
 If Metro was already running before this configuration was added, restart it once so it
 loads the new alias and shared-folder watcher. After that, token edits use Fast Refresh.

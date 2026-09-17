@@ -237,7 +237,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Could not sign out. Please try again."); }
   }
   async function markReviewed(id: string) {
-    if (account?.farm.isSample) return;
     await requestJson(`/api/logs/${id}/review`, { method: "POST", body: "{}" });
     await reloadDashboard();
   }

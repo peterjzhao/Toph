@@ -13,6 +13,7 @@ import { toLogDto } from "@/server/services/dashboard";
 import { dashboardLogs } from "@/server/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { MAX_MOBILE_AUDIO_BYTES } from "./accounts";
+import { checkLogDetails, resolveLogForm, type LogDetails } from "@/contracts/log-form";
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const text = (max: number) => z.string().trim().max(max);
@@ -21,6 +22,7 @@ const metadataSchema = z.object({
   activity: text(80).min(1), workDate: z.string().refine(isValidCalendarDate), startTime: time, endTime: time,
   notes: text(16_000), transcript: text(40_000).nullable(),
   treatment: z.object({ product: text(200).nullable(), amount: z.number().positive().max(1e9).nullable(), unit: text(40).nullable() }).strict().nullable(),
+  details: z.record(z.string().min(1).max(60), z.union([text(200), z.number().finite(), z.null()])).refine(value => Object.keys(value).length <= 80).optional(),
   tags: z.array(text(40).min(1)).max(10),
   recordings: z.array(z.object({ mimeType: z.enum(["audio/mp4", "audio/m4a", "audio/x-m4a", "audio/mpeg", "audio/wav", "audio/webm"]), durationSeconds: z.number().positive().max(1800) }).strict()).max(8),
 }).strict();
@@ -119,13 +121,20 @@ export async function saveMobileLog(ctx: FarmContext, metadata: MobileLogSubmiss
     // Workspace-created employees become normalized records before the log FK is written.
     const [profile] = await tx`select avatar_url from toph.mobile_profiles where farm_id = ${ctx.farmId} and employee_id = ${employee.id}`;
     await tx`insert into toph.employees (id, farm_id, display_name, avatar_path) values (${employee.id}, ${ctx.farmId}, ${employee.name}, ${profile?.avatar_url ?? null}) on conflict (id) do nothing`;
+    // One details object per log; `treatment` from installed apps folds into the same keys. Values
+    // the farm's current form no longer asks for are kept so an offline draft never loses data.
+    const checked = checkLogDetails(resolveLogForm(state.logForm), metadata.activity, { ...metadata.treatment, ...metadata.details }, true);
+    if (checked.problems.length) throw validationError("Check the log details.", Object.fromEntries(checked.problems.map(problem => [`details.${problem.key}`, problem.message])));
+    const details = checked.details;
+    const treatment = ["product", "amount", "unit"].some(key => key in details)
+      ? { product: details.product ?? null, amount: details.amount ?? null, unit: details.unit ?? null } : null;
     const logId = randomUUID();
     const clipIds = clips.map(() => randomUUID());
     const recordingPath = clipIds.length ? `/api/mobile/v1/recordings/${clipIds[0]}` : null;
-    const treatmentSummary = metadata.treatment ? [metadata.treatment.product, metadata.treatment.amount, metadata.treatment.unit].filter(value => value !== null && value !== "").join(" ") : "";
-    const summary = [metadata.notes || metadata.transcript || "Voice recording", treatmentSummary ? `Treatment: ${treatmentSummary}` : ""].filter(Boolean).join("\n\n");
-    await tx`insert into toph.work_logs (id, farm_id, employee_id, field_id, activity, work_date, start_at, end_at, summary, transcript, is_new, recording_path, recording_duration_seconds)
-      values (${logId}, ${ctx.farmId}, ${employee.id}, ${metadata.fieldId}, ${metadata.activity}, ${metadata.workDate}, ${start.toISOString()}, ${end.toISOString()}, ${summary}, ${metadata.transcript}, true, ${recordingPath}, ${clips.length ? clips.reduce((sum, clip) => sum + clip.durationSeconds, 0) : null})`;
+    // The treatment line is composed from details when the log is read, so corrections show up.
+    const summary = metadata.notes || metadata.transcript || "Voice recording";
+    await tx`insert into toph.work_logs (id, farm_id, employee_id, field_id, activity, work_date, start_at, end_at, summary, transcript, is_new, recording_path, recording_duration_seconds, details)
+      values (${logId}, ${ctx.farmId}, ${employee.id}, ${metadata.fieldId}, ${metadata.activity}, ${metadata.workDate}, ${start.toISOString()}, ${end.toISOString()}, ${summary}, ${metadata.transcript}, true, ${recordingPath}, ${clips.length ? clips.reduce((sum, clip) => sum + clip.durationSeconds, 0) : null}, ${JSON.stringify(details)}::jsonb)`;
     for (let index = 0; index < clips.length; index++) {
       const clip = clips[index];
       await tx`insert into toph.mobile_recordings (id, farm_id, log_id, position, mime_type, duration_seconds, bytes)
@@ -139,7 +148,7 @@ export async function saveMobileLog(ctx: FarmContext, metadata: MobileLogSubmiss
       await tx`insert into toph.work_log_tags (farm_id, work_log_id, tag_id) values (${ctx.farmId}, ${logId}, ${tag.id}) on conflict do nothing`;
     }
     const [receipt] = await tx`insert into toph.mobile_submissions (farm_id, employee_id, client_draft_id, log_id, content_hash, notes, treatment)
-      values (${ctx.farmId}, ${employee.id}, ${metadata.clientDraftId}, ${logId}, ${contentHash}, ${metadata.notes}, ${metadata.treatment ? JSON.stringify(metadata.treatment) : null}::jsonb) returning saved_at`;
+      values (${ctx.farmId}, ${employee.id}, ${metadata.clientDraftId}, ${logId}, ${contentHash}, ${metadata.notes}, ${treatment ? JSON.stringify(treatment) : null}::jsonb) returning saved_at`;
     return { clientDraftId: metadata.clientDraftId, logId, savedAt: new Date(receipt.saved_at).toISOString() };
   });
 }
@@ -154,13 +163,20 @@ export async function listMobileLogs(ctx: FarmContext, accountId: string): Promi
   const [submissions, clips, transcripts] = await Promise.all([
     ctx.sql`select log_id, client_draft_id, notes, treatment from toph.mobile_submissions where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[])`,
     ctx.sql`select id, log_id, duration_seconds, mime_type from toph.mobile_recordings where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[]) order by position`,
-    ctx.sql`select id, transcript from toph.work_logs where farm_id = ${ctx.farmId} and id = any(${ids}::uuid[])`,
+    ctx.sql`select id, transcript, details from toph.work_logs where farm_id = ${ctx.farmId} and id = any(${ids}::uuid[])`,
   ]);
   return rows.map(row => {
     const submission = submissions.find(item => item.log_id === row.id);
     return { ...toLogDto(row), clientDraftId: submission?.client_draft_id ?? null, notes: submission?.notes ?? row.summary,
       treatment: typeof submission?.treatment === "string" ? JSON.parse(submission.treatment) : submission?.treatment ?? null,
       transcript: transcripts.find(item => item.id === row.id)?.transcript ?? null,
+      details: decodeDetails(transcripts.find(item => item.id === row.id)?.details),
       clips: clips.filter(item => item.log_id === row.id).map(item => ({ url: `/api/mobile/v1/recordings/${item.id}`, durationSeconds: Number(item.duration_seconds), mimeType: item.mime_type })) };
   });
+}
+
+/** postgres.js returns jsonb written through a `::jsonb` cast as text on some paths. */
+export function decodeDetails(value: unknown): LogDetails {
+  const decoded = typeof value === "string" ? JSON.parse(value) : value;
+  return decoded && typeof decoded === "object" ? decoded as LogDetails : {};
 }

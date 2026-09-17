@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { WorkspaceState } from "@/contracts/workspace";
 import { validationError } from "@/server/errors";
+import { CUSTOM_KEY_PATTERN, MAX_CUSTOM_LOG_FIELDS, logFormCatalog, type ActivityFormDef } from "@/contracts/log-form";
 
 export const MAX_WORKSPACE_BODY_BYTES = 512 * 1024;
 export const MAX_WORKSPACE_STATE_BYTES = 1024 * 1024;
@@ -51,9 +52,27 @@ const settings = z.object({
   notifications: z.object({ recordings: z.boolean(), weekly: z.boolean(), reminders: z.boolean() }).strict(),
 }).strict();
 
+const activity = z.enum(Object.keys(logFormCatalog) as [string, ...string[]]);
+/** Switches may only name keys the catalog offers for that activity. */
+const catalog: Record<string, ActivityFormDef> = logFormCatalog;
+const catalogKeys = (list: "defaults" | "suggested") => z.record(z.string().max(80), z.array(z.string().max(60)).max(60)).superRefine((value, ctx) => {
+  for (const [name, keys] of Object.entries(value)) for (const key of keys) {
+    if (!catalog[name]?.[list].some(field => field.key === key)) ctx.addIssue({ code: "custom", path: [name], message: `Unknown field: ${key}` });
+  }
+});
+const customField = z.object({
+  key: z.string().regex(CUSTOM_KEY_PATTERN), label: requiredText(60), type: z.enum(["text", "number", "select"]),
+  options: z.array(requiredText(60)).min(1).max(30).optional(), activities: z.array(activity).min(1).max(30),
+}).strict().refine(field => (field.type === "select") === Boolean(field.options), { message: "A select needs options; other types take none.", path: ["options"] })
+  .refine(field => new Set(field.options).size === (field.options?.length ?? 0), { message: "Options must be unique.", path: ["options"] });
+const logForm = z.object({
+  enabled: catalogKeys("suggested"), hidden: catalogKeys("defaults"),
+  custom: z.array(customField).max(MAX_CUSTOM_LOG_FIELDS).refine(fields => new Set(fields.map(field => field.key)).size === fields.length, "Custom field keys must be unique."),
+}).strict();
+
 export const workspaceSchema = z.object({
   employees: z.array(employee).max(250), schedule: z.array(schedule).max(1000), reviews: z.array(review).max(1000),
-  reports: z.array(report).max(250), messages: z.array(message).max(2000), tickets: z.array(ticket).max(250), settings,
+  reports: z.array(report).max(250), messages: z.array(message).max(2000), tickets: z.array(ticket).max(250), settings, logForm: logForm.optional(),
 }).strict();
 const requestSchema = z.object({
   expectedRevision: z.number().int().min(0).max(2147483646),
