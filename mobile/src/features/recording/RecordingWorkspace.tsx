@@ -257,6 +257,8 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
 
   function rememberDraft(stored: RecordingDraft) {
     setDrafts(current => [stored, ...current.filter(item => item.id !== stored.id)]);
+    // A sync that finishes after the worker has moved on to a new recording must not reopen this one.
+    if (draftId.current !== stored.id) return;
     setEditing(stored); setSaved(stored);
   }
 
@@ -452,11 +454,11 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
       </KeyboardAvoidingView>
 
       <View style={[styles.navigation, { paddingBottom: Math.max(5, insets.bottom) }]} accessibilityRole="tablist">
-        <Press style={styles.navButton} onPress={openRecord} disabled={busy || saving} accessibilityRole="tab" accessibilityState={{ selected: screen !== "library" }}>
+        <Press style={styles.navButton} onPress={openRecord} disabled={busy} accessibilityRole="tab" accessibilityState={{ selected: screen !== "library" }}>
           <Mic size={22} color={screen !== "library" ? colors.ink : colors.soft} strokeWidth={1.6} />
           <Text style={[styles.navLabel, screen !== "library" ? styles.navActive : null]}>Record</Text>
         </Press>
-        <Press style={styles.navButton} onPress={openLibrary} disabled={busy || saving} accessibilityRole="tab" accessibilityState={{ selected: screen === "library" }}>
+        <Press style={styles.navButton} onPress={openLibrary} disabled={busy} accessibilityRole="tab" accessibilityState={{ selected: screen === "library" }}>
           <AudioLines size={22} color={screen === "library" ? colors.ink : colors.soft} strokeWidth={1.6} />
           <Text style={[styles.navLabel, screen === "library" ? styles.navActive : null]}>Logs</Text>
         </Press>
@@ -467,7 +469,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
       </View>
     </View>
     {accountOpen && <AccountSheet profile={profile} fields={bootstrap.fields.map(field => field.name)} farmName={session.farm.name} connected={connected} connectionError={connectionError} onRefresh={refreshAccounts} onSignOut={signOut} logCount={accountDrafts.length + visibleRemoteLogs.length} onClose={closeAccount} onSave={updateProfile} onViewLogs={() => { setAccountOpen(false); openLibrary(); }} />}
-    {handsFreeOpen && <HandsFreeScreen {...handsFree} fullScreen onPress={() => handsFree.ready ? handsFree.saveNow() : handsFree.stop()} onReview={() => handsFree.stop(true)} />}
+    {handsFreeOpen && <HandsFreeScreen {...handsFree} fullScreen onPress={() => { if (handsFree.phase === "saving") { handsFree.stop(); setScreen("review"); } else if (handsFree.ready) handsFree.saveNow(); else handsFree.stop(); }} onReview={() => handsFree.stop(true)} />}
     <InboxSheet visible={inboxOpen} onClose={() => setInboxOpen(false)} employeeId={profile.id} farmName={session.farm.name} online={online} inbox={inbox} />
   </View>;
 }
