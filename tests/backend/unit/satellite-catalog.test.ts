@@ -71,6 +71,25 @@ describe("searchAcquisitions", () => {
     expect(fetcher.mock.calls.length).toBeLessThanOrEqual(20);
   });
 
+  it("asks the catalogue to drop cloudy scenes, and drops any it lets through", async () => {
+    const fetcher = vi.fn(async () => page([feature("2026-04-03T18:50:21Z", MAX_CLOUD_COVER + 5), feature("2026-04-13T18:50:21Z", 4)]));
+    const result = await searchAcquisitions(extent, { from: "2026-04-01", to: "2026-04-30" }, "token", fetcher, MAX_CLOUD_COVER);
+
+    expect(result).toEqual([{ date: "2026-04-13", cloudCover: 4 }]);
+    const body = JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    // CQL2 text, verified against the live catalogue on September 17, 2026.
+    expect(body.filter).toBe(`eo:cloud_cover <= ${MAX_CLOUD_COVER}`);
+    expect(body["filter-lang"]).toBe("cql2-text");
+  });
+
+  it("sends no filter when every pass is wanted", async () => {
+    const fetcher = vi.fn(async () => page([feature("2026-04-03T18:50:21Z", 90)]));
+    const result = await searchAcquisitions(extent, { from: "2026-04-01", to: "2026-04-30" }, "token", fetcher);
+
+    expect(result).toEqual([{ date: "2026-04-03", cloudCover: 90 }]);
+    expect(JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).filter).toBeUndefined();
+  });
+
   it("treats a pass with no reported cloud cover as fully clouded rather than perfect", async () => {
     const fetcher = vi.fn(async () => page([{ type: "Feature", properties: { datetime: "2026-04-13T18:50:21Z" } }]));
     const result = await searchAcquisitions(extent, { from: "2026-04-01", to: "2026-04-30" }, "token", fetcher);

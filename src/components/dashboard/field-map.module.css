@@ -2,9 +2,14 @@
 .image { display: block; width: 100%; height: auto; user-select: none; }
 .regions { position: absolute; inset: 0; width: 100%; height: 100%; }
 .region { outline: none; cursor: pointer; }
-.region > :is(polygon, path) { fill: transparent; stroke: transparent; stroke-width: 2px; pointer-events: all; }
+.region > :is(polygon, path) { fill: transparent; stroke: var(--region-stroke, transparent); stroke-width: var(--region-stroke-width, 2px); pointer-events: all; }
 .region:hover > :is(polygon, path), .region:focus-visible > :is(polygon, path) { fill: rgb(0 101 240 / 18%); stroke: white; }
 .region:focus-visible > :is(polygon, path) { stroke-width: 3px; stroke: var(--toph-color-field-outline); fill: rgb(0 101 240 / 30%); }
 
 .selectedRegion > :is(polygon, path) { fill:rgb(0 101 240 / 20%); stroke:var(--toph-color-field-outline); stroke-width:2px; }
 .logMarker { pointer-events: none; }
+
+/* Satellite imagery over the aerial: the same box, never cropped, so outlines keep their places.
+   Every field is outlined faintly because the fields look different from orbit. */
+.overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; user-select: none; }
+.withOverlay { --region-stroke: rgb(255 255 255 / 55%); --region-stroke-width: 1px; }

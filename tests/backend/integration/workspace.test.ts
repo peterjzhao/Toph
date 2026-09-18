@@ -55,6 +55,16 @@ describe("persistent workspace pages", () => {
     expect((await getWorkspace(ctx)).data.settings.adminAvatar).toBeNull();
   });
 
+  it("saves a demo day only as a real calendar date, and turns it off again", async () => {
+    const initial = await getWorkspace(ctx);
+    expect(initial.data.settings.demoDay).toBeUndefined();
+    const on = await patchWorkspace(ctx, { expectedRevision: initial.revision, patch: { settings: { ...initial.data.settings, demoDay: "2026-04-29" } } });
+    expect((await getWorkspace(ctx)).data.settings.demoDay).toBe("2026-04-29");
+    await expect(patchWorkspace(ctx, { expectedRevision: on.revision, patch: { settings: { ...on.data.settings, demoDay: "2026-02-30" } } })).rejects.toThrow("Invalid workspace data.");
+    await patchWorkspace(ctx, { expectedRevision: on.revision, patch: { settings: { ...on.data.settings, demoDay: undefined } } });
+    expect((await getWorkspace(ctx)).data.settings.demoDay).toBeUndefined();
+  });
+
   it("initializes one seeded row transactionally even with concurrent first reads", async () => {
     const copies = await Promise.all(Array.from({ length: 6 }, () => getWorkspace(ctx)));
     expect(copies.every((copy) => copy.revision === 0)).toBe(true);

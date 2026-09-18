@@ -13,7 +13,7 @@ import type { FarmContext } from "@/server/farm-context";
 import { readJsonBody } from "@/server/http/body";
 import { TranscriptionError } from "@/server/recordings/audio";
 import { reserveTranscription } from "@/server/recordings/quota";
-import { instantToLocalDate } from "@/server/time/zoned";
+import { farmToday } from "@/server/time/farm-today";
 
 export const askModel = "gpt-4.1-mini";
 /** Newest logs first; enough for a season on a small farm while keeping the prompt bounded. */
@@ -76,7 +76,7 @@ export async function loadAskContext(ctx: FarmContext, now = new Date()): Promis
     unit: typeof row.details?.unit === "string" ? row.details.unit : null,
     details: Object.fromEntries(Object.entries(row.details ?? {}).filter(([key]) => !["product", "amount", "unit"].includes(key))),
   }));
-  return { farmName: ctx.farm.name, timezone: ctx.farm.timezone, today: dayLabel(instantToLocalDate(now, ctx.farm.timezone)), logs, truncated: rows.length > ASK_LOG_LIMIT };
+  return { farmName: ctx.farm.name, timezone: ctx.farm.timezone, today: dayLabel(await farmToday(ctx, now)), logs, truncated: rows.length > ASK_LOG_LIMIT };
 }
 
 /** Drops unknown and duplicate citations while keeping the model's relevance order. */

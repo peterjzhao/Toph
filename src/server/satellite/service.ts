@@ -12,10 +12,11 @@ import type { FarmContext } from "@/server/farm-context";
 import { dayLabel } from "@/server/ask/farm-question";
 import { reserveTranscription } from "@/server/recordings/quota";
 import { analyseField, type AnalysisLog } from "./analysis";
-import { monthlySpine, searchAcquisitions, type Acquisition } from "./catalog";
+import { MAX_CLOUD_COVER, searchAcquisitions } from "./catalog";
 import { cdseCredentials, cdseToken } from "./client";
 import { parseFarmExtent, readFarmExtent, type ExtentSource, type FarmExtent } from "./extent";
 import { renderFrame, type Frame } from "./imagery";
+import { createPassCache } from "./pass-cache";
 import { fetchFieldStatistics, type FieldObservation } from "./statistics";
 import { reserveSatellite } from "./usage";
 
@@ -75,36 +76,24 @@ export async function saveFarmLocation(ctx: FarmContext, bbox: [number, number, 
   return extent;
 }
 
-/** Log dates for one field, so the interface can mark them on the scrubber before any model runs. */
-async function fieldLogDates(ctx: FarmContext, fieldId: string): Promise<FieldTimelineDto["logDates"]> {
-  const rows = await ctx.sql<{ id: string; work_date: string; activity: string }[]>`
-    select id, work_date::text as work_date, activity
-    from toph.dashboard_logs
-    where farm_id = ${ctx.farmId} and field_id = ${fieldId}
-    order by work_date`;
-  return rows.map(row => ({ logId: row.id, date: row.work_date, activity: row.activity }));
-}
+const passCache = createPassCache();
 
 /**
- * The scrubber's stops.
+ * Every usable pass over the farm, for the map's date slider.
  *
- * One catalogue sweep yields both the monthly spine and every individual pass, so opening a month
- * costs nothing extra — only rendering a frame does, and that stays lazy in the imagery route.
+ * The page asks once per visit and then moves the slider without asking again; only the frame it
+ * settles on is rendered, in the imagery route. One catalogue sweep serves every visit to the same
+ * farm and extent until the cache expires, and only a real sweep draws on the farm's allowance.
  */
-export async function fieldTimeline(ctx: FarmContext, options: { fieldId?: string; month?: string; today: string }): Promise<FieldTimelineDto> {
+export async function fieldTimeline(ctx: FarmContext, options: { today: string }): Promise<FieldTimelineDto> {
   const extent = await loadExtent(ctx);
-  if (!extent) return { extent: null, months: [], acquisitions: [], logDates: [] };
-  await reserveSatellite(ctx);
-  const passes = await searchAcquisitions(extent, { from: ARCHIVE_START, to: options.today }, await token());
-  const months = monthlySpine(passes);
-  const selected = options.month ?? months.at(-1)?.month;
-  const acquisitions: Acquisition[] = selected ? passes.filter(pass => pass.date.startsWith(selected)) : [];
-  return {
-    extent,
-    months,
-    acquisitions,
-    logDates: options.fieldId ? await fieldLogDates(ctx, options.fieldId) : [],
-  };
+  if (!extent) return { extent: null, today: options.today, passes: [] };
+  const key = [ctx.farmId, extent.minX, extent.minY, extent.maxX, extent.maxY, options.today].join("|");
+  const passes = await passCache.get(key, async () => {
+    await reserveSatellite(ctx);
+    return searchAcquisitions(extent, { from: ARCHIVE_START, to: options.today }, await token(), fetch, MAX_CLOUD_COVER);
+  });
+  return { extent, today: options.today, passes };
 }
 
 export async function fieldFrame(ctx: FarmContext, date: string, layer: Layer): Promise<Frame> {

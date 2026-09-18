@@ -34,25 +34,32 @@ export type InitialRow = {
   start: string;
   end: string;
   isNew: boolean;
+  /**
+   * Farm-local arrival, "YYYY-MM-DD HH:MM". Five logs arrive on April 29 (the demo day), one of
+   * them unopened, which is the Figma's "5 Todays Recordings, 1 New".
+   */
+  received: string;
   summary: string;
 };
 
 export const INITIAL_ROWS: readonly InitialRow[] = [
-  { n: 1, employee: "Isaac Wang", activity: "Spraying", workDate: "2026-04-19", field: "FIELD A", start: "06:00", end: "10:40", isNew: true, summary: ISAAC_SUMMARY },
-  { n: 2, employee: "Maya Patel", activity: "Harvesting", workDate: "2026-04-20", field: "FIELD B", start: "07:30", end: "11:15", isNew: true, summary: "Harvested the east rows of FIELD B from 7:30 to 11:15. Crates were stacked at the north gate for pickup; no equipment issues." },
-  { n: 3, employee: "Liam Johnson", activity: "Planting", workDate: "2026-04-21", field: "FIELD C", start: "08:00", end: "12:00", isNew: true, summary: "Planted FIELD C between 8:00 and 12:00. Finished the planned rows and flagged the low corner for drainage before the next pass." },
-  { n: 4, employee: "Sophia Lee", activity: "Irrigation", workDate: "2026-04-22", field: "FIELD D", start: "06:30", end: "09:30", isNew: true, summary: "Ran irrigation on FIELD D from 6:30 to 9:30. Checked the drip lines along the west edge and cleared two blocked emitters." },
-  { n: 5, employee: "Ethan Kim", activity: "Fertilizing", workDate: "2026-04-23", field: "FIELD E", start: "05:45", end: "09:00", isNew: false, summary: "Fertilized FIELD E from 5:45 to 9:00 following the field plan. Covered the full block before the wind picked up mid-morning." },
-  { n: 6, employee: "Olivia Martinez", activity: "Weeding", workDate: "2026-04-24", field: "FIELD F", start: "06:15", end: "10:00", isNew: false, summary: "Weeded FIELD F from 6:15 to 10:00. The south half is clear; the north half needs one more pass later this week." },
-  { n: 7, employee: "Noah Brown", activity: "Pruning", workDate: "2026-04-25", field: "FIELD G", start: "07:00", end: "11:30", isNew: false, summary: "Pruned FIELD G between 7:00 and 11:30. Cuttings were collected at the end of each row for pickup." },
-  { n: 8, employee: "Emma Davis", activity: "Monitoring", workDate: "2026-04-26", field: "FIELD H", start: "08:15", end: "12:45", isNew: false, summary: "Walked FIELD H from 8:15 to 12:45 checking plant condition and moisture. Nothing unusual to report." },
-  { n: 9, employee: "James Wilson", activity: "Soil Testing", workDate: "2026-04-27", field: "FIELD I", start: "06:00", end: "09:00", isNew: false, summary: "Collected soil samples across FIELD I from 6:00 to 9:00, one per grid square. Samples are labeled and ready to send out." },
-  { n: 10, employee: "Isabella Garcia", activity: "Seeding", workDate: "2026-04-28", field: "FIELD J", start: "07:45", end: "11:00", isNew: false, summary: "Seeded FIELD J from 7:45 to 11:00. Completed all rows and refilled the seeder twice." },
-  { n: 11, employee: "Benjamin Moore", activity: "Pest Control", workDate: "2026-04-29", field: "FIELD K", start: "06:30", end: "10:30", isNew: false, summary: "Pest control pass on FIELD K from 6:30 to 10:30. Treated the perimeter rows first and finished the interior before the heat." },
+  { n: 1, employee: "Isaac Wang", activity: "Spraying", workDate: "2026-04-19", field: "FIELD A", start: "06:00", end: "10:40", isNew: true, received: "2026-04-29 07:12", summary: ISAAC_SUMMARY },
+  { n: 2, employee: "Maya Patel", activity: "Harvesting", workDate: "2026-04-20", field: "FIELD B", start: "07:30", end: "11:15", isNew: true, received: "2026-04-20 11:24", summary: "Harvested the east rows of FIELD B from 7:30 to 11:15. Crates were stacked at the north gate for pickup; no equipment issues." },
+  { n: 3, employee: "Liam Johnson", activity: "Planting", workDate: "2026-04-21", field: "FIELD C", start: "08:00", end: "12:00", isNew: true, received: "2026-04-21 12:09", summary: "Planted FIELD C between 8:00 and 12:00. Finished the planned rows and flagged the low corner for drainage before the next pass." },
+  { n: 4, employee: "Sophia Lee", activity: "Irrigation", workDate: "2026-04-22", field: "FIELD D", start: "06:30", end: "09:30", isNew: true, received: "2026-04-22 09:41", summary: "Ran irrigation on FIELD D from 6:30 to 9:30. Checked the drip lines along the west edge and cleared two blocked emitters." },
+  { n: 5, employee: "Ethan Kim", activity: "Fertilizing", workDate: "2026-04-23", field: "FIELD E", start: "05:45", end: "09:00", isNew: false, received: "2026-04-23 09:08", summary: "Fertilized FIELD E from 5:45 to 9:00 following the field plan. Covered the full block before the wind picked up mid-morning." },
+  { n: 6, employee: "Olivia Martinez", activity: "Weeding", workDate: "2026-04-24", field: "FIELD F", start: "06:15", end: "10:00", isNew: false, received: "2026-04-24 10:13", summary: "Weeded FIELD F from 6:15 to 10:00. The south half is clear; the north half needs one more pass later this week." },
+  { n: 7, employee: "Noah Brown", activity: "Pruning", workDate: "2026-04-25", field: "FIELD G", start: "07:00", end: "11:30", isNew: false, received: "2026-04-25 11:37", summary: "Pruned FIELD G between 7:00 and 11:30. Cuttings were collected at the end of each row for pickup." },
+  { n: 8, employee: "Emma Davis", activity: "Monitoring", workDate: "2026-04-26", field: "FIELD H", start: "08:15", end: "12:45", isNew: false, received: "2026-04-29 06:48", summary: "Walked FIELD H from 8:15 to 12:45 checking plant condition and moisture. Nothing unusual to report." },
+  { n: 9, employee: "James Wilson", activity: "Soil Testing", workDate: "2026-04-27", field: "FIELD I", start: "06:00", end: "09:00", isNew: false, received: "2026-04-29 06:51", summary: "Collected soil samples across FIELD I from 6:00 to 9:00, one per grid square. Samples are labeled and ready to send out." },
+  { n: 10, employee: "Isabella Garcia", activity: "Seeding", workDate: "2026-04-28", field: "FIELD J", start: "07:45", end: "11:00", isNew: false, received: "2026-04-29 06:55", summary: "Seeded FIELD J from 7:45 to 11:00. Completed all rows and refilled the seeder twice." },
+  { n: 11, employee: "Benjamin Moore", activity: "Pest Control", workDate: "2026-04-29", field: "FIELD K", start: "06:30", end: "10:30", isNew: false, received: "2026-04-29 10:38", summary: "Pest control pass on FIELD K from 6:30 to 10:30. Treated the perimeter rows first and finished the interior before the heat." },
 ];
 
 /** The farm administrator is a separate account, not an extra employee profile. */
 export const INITIAL_EMPLOYEES = INITIAL_ROWS.map((row) => ({ n: row.n, name: row.employee }));
+
+export const ADMIN_ACCOUNT = { id: "90000000-0000-4000-8000-000000000001", name: "Ranch Admin" } as const;
 
 export type RecordKind = "employee" | "field" | "workLog";
 

@@ -12,7 +12,7 @@ import { dashboardLogs, employees, fields, tags, workLogTags, workLogs, workspac
 import { notFound } from "@/server/errors";
 import { treatmentSummary } from "@/contracts/log-form";
 import { responseAccuracy } from "@/contracts/response-accuracy";
-import { instantToLocalDate } from "@/server/time/zoned";
+import { farmToday } from "@/server/time/farm-today";
 import { validateDashboardQuery, type ParsedDashboardQuery } from "@/server/validation/dashboard-query";
 import { parseUuid } from "@/server/validation/ids";
 import { containsPattern } from "@/server/validation/like-pattern";
@@ -114,7 +114,8 @@ function orderFor(sort: ParsedDashboardQuery["sort"]): SQL[] {
 }
 
 /**
- * Metric cards computed from the farm's data as of today in the farm timezone. Response
+ * Metric cards computed from the farm's data as of the farm's today (see `farmToday`). Today's
+ * recordings are the logs that arrived that day, whatever day the work was done. Response
  * accuracy comes from the farm's Audit Manager decisions (see `responseAccuracy`).
  */
 async function loadMetrics(ctx: FarmContext, today: string): Promise<DashboardData["metrics"]> {
@@ -124,7 +125,7 @@ async function loadMetrics(ctx: FarmContext, today: string): Promise<DashboardDa
       newRecordings: sql<number>`count(*) filter (where ${workLogs.isNew})::int`,
     })
     .from(workLogs)
-    .where(and(eq(workLogs.farmId, ctx.farmId), eq(workLogs.workDate, today)));
+    .where(and(eq(workLogs.farmId, ctx.farmId), sql`(${workLogs.createdAt} at time zone ${ctx.farm.timezone})::date = ${today}::date`));
   const [workerCounts] = await ctx.db
     .select({ activeWorkers: sql<number>`count(*)::int` })
     .from(employees)
@@ -156,7 +157,7 @@ async function loadMetrics(ctx: FarmContext, today: string): Promise<DashboardDa
  */
 export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {}): Promise<DashboardResult> {
   const parsed = validateDashboardQuery(query);
-  const today = instantToLocalDate(new Date(), ctx.farm.timezone);
+  const today = await farmToday(ctx);
   const dateRange = resolveDateRange(parsed, today);
   const filter = buildLogFilter(ctx.farmId, parsed, dateRange);
 

@@ -15,6 +15,10 @@ type StitchOptions = {
   gapSeconds?: number;
 };
 const headerBytes = 44;
+/** About -40 dBFS. Quieter samples at a turn's edges are the pause voice detection keeps around speech. */
+const quietLevel = 328;
+/** Kept around the speech so soft first and last sounds survive: 150 ms. */
+const marginSamples = 3600;
 
 function decode(base64: string) {
   const binary = atob(base64);
@@ -36,6 +40,22 @@ function wav(data: Uint8Array, sampleRate: number) {
   return bytes;
 }
 
+/**
+ * Voice detection returns a turn with the silence before and after it (half a second to a few seconds),
+ * which would stretch every one-second gap. A turn with nothing above the quiet level is kept whole.
+ */
+function trim(pcm: Uint8Array) {
+  const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  const samples = pcm.byteLength / 2;
+  const loud = (index: number) => Math.abs(view.getInt16(index * 2, true)) > quietLevel;
+  let first = 0;
+  while (first < samples && !loud(first)) first += 1;
+  if (first === samples) return pcm;
+  let last = samples - 1;
+  while (!loud(last)) last -= 1;
+  return pcm.subarray(Math.max(0, first - marginSamples) * 2, Math.min(samples, last + 1 + marginSamples) * 2);
+}
+
 /** Averages each run of `factor` samples: a plain low-pass before dropping to a lower rate. */
 function decimate(pcm: Uint8Array, factor: number, maxSamples: number) {
   const input = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
@@ -52,7 +72,7 @@ function decimate(pcm: Uint8Array, factor: number, maxSamples: number) {
 
 /** Null when no turn has any audio. */
 export function stitchCallAudio(segments: string[], { maxBytes = Infinity, gapSeconds = 1 }: StitchOptions = {}): CallRecording | null {
-  const turns = segments.filter(Boolean).map(decode).filter(bytes => bytes.byteLength > 0);
+  const turns = segments.filter(Boolean).map(decode).filter(bytes => bytes.byteLength > 0).map(trim);
   if (!turns.length) return null;
   const gap = Math.round(gapSeconds * REALTIME_SAMPLE_RATE) * 2;
   const pcm = new Uint8Array(turns.reduce((total, turn) => total + turn.byteLength, 0) + gap * (turns.length - 1));

@@ -31,6 +31,18 @@ beforeEach(() => {
   mockApi.logout.mockResolvedValue({ ok: true });
 });
 
+test("shows the launch wordmark with a connecting status until the saved session settles", async () => {
+  let finishRestore!: (restored: boolean) => void;
+  jest.mocked(restoreSessionToken).mockReturnValue(new Promise(resolve => { finishRestore = resolve; }));
+  await render(<AccountGateway />);
+  expect(screen.getByLabelText("Toph")).toBeTruthy();
+  expect(screen.getByText("Connecting to your account")).toBeTruthy();
+  expect(screen.queryByLabelText("Your name")).toBeNull();
+  finishRestore(false);
+  await screen.findByText("Welcome back");
+  expect(screen.queryByText("Connecting to your account")).toBeNull();
+});
+
 test("requires explicit login and saves a verified native session before opening the workspace", async () => {
   await render(<AccountGateway />);
   await screen.findByText("Welcome back");

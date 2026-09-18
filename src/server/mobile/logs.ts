@@ -17,6 +17,12 @@ import { checkLogDetails, resolveLogForm, type LogDetails } from "@/contracts/lo
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const text = (max: number) => z.string().trim().max(max);
+/**
+ * The phone sends the type its platform gives a file's extension: a call-mode recording (.wav) is
+ * audio/vnd.wave on iOS and audio/x-wav on Android. All are kept as audio/wav, which browsers play.
+ */
+const wavTypes = ["audio/wav", "audio/x-wav", "audio/vnd.wave", "audio/wave"] as const;
+const audioType = (mime: string) => (wavTypes as readonly string[]).includes(mime) ? "audio/wav" : mime;
 const metadataSchema = z.object({
   contractVersion: z.literal("1"), clientDraftId: z.string().uuid(), accountId: z.string().uuid(), fieldId: z.string().uuid(),
   activity: text(80).min(1), workDate: z.string().refine(isValidCalendarDate), startTime: time, endTime: time,
@@ -24,7 +30,7 @@ const metadataSchema = z.object({
   treatment: z.object({ product: text(200).nullable(), amount: z.number().positive().max(1e9).nullable(), unit: text(40).nullable() }).strict().nullable(),
   details: z.record(z.string().min(1).max(60), z.union([text(200), z.number().finite(), z.null()])).refine(value => Object.keys(value).length <= 80).optional(),
   tags: z.array(text(40).min(1)).max(10),
-  recordings: z.array(z.object({ mimeType: z.enum(["audio/mp4", "audio/m4a", "audio/x-m4a", "audio/mpeg", "audio/wav", "audio/webm"]), durationSeconds: z.number().positive().max(1800) }).strict()).max(8),
+  recordings: z.array(z.object({ mimeType: z.enum(["audio/mp4", "audio/m4a", "audio/x-m4a", "audio/mpeg", ...wavTypes, "audio/webm"]).transform(audioType), durationSeconds: z.number().positive().max(1800) }).strict()).max(8),
 }).strict();
 export function parseMobileSubmission(value: unknown): MobileLogSubmission {
   const result = metadataSchema.safeParse(value);
@@ -69,7 +75,7 @@ export async function readMobileSubmission(request: Request): Promise<{ metadata
   for (let index = 0; index < metadata.recordings.length; index++) {
     const file = form.get(`audio${index}`);
     const spec = metadata.recordings[index];
-    if (!(file instanceof File) || !file.size || file.type !== spec.mimeType || form.getAll(`audio${index}`).length !== 1) throw validationError("A recording clip is missing or has the wrong format.");
+    if (!(file instanceof File) || !file.size || audioType(file.type) !== spec.mimeType || form.getAll(`audio${index}`).length !== 1) throw validationError("A recording clip is missing or has the wrong format.");
     const bytes = Buffer.from(await file.arrayBuffer());
     audioBytes += bytes.length;
     if (audioBytes > MAX_MOBILE_AUDIO_BYTES) throw payloadTooLarge(MAX_MOBILE_AUDIO_BYTES);

@@ -7,12 +7,12 @@ import { ArrowUpRight, ChevronRight, Expand, LifeBuoy, Plus, Settings2 } from "l
 import { useWorkspace } from "./workspace-provider";
 import { Badge, Button, EmptyState, Modal, PageHeader, Panel } from "./workspace-ui";
 import { InviteCode } from "../accounts/account-page";
-import type { SupportTicket, WorkspaceSettings } from "@/contracts/workspace";
+import { DESIGN_DEMO_DAY, type SupportTicket, type WorkspaceSettings } from "@/contracts/workspace";
 import { formatDate } from "@/lib/format";
 import { fieldMapImage } from "@/lib/field-map";
 import { FieldMap } from "@/components/dashboard/field-map";
 import { FilterSelect } from "@/components/dashboard/filter-select";
-import { FieldTimeline } from "./field-timeline";
+import { FieldTimelineBar, useFieldTimeline } from "./field-timeline";
 import s from "./workspace.module.css";
 import mapStyles from "../dashboard/dashboard.module.css";
 
@@ -27,15 +27,15 @@ export function MapPage() {
     router.push(`/map?${next.toString()}`, { scroll: false });
   }
   const [search, setSearch] = useState(""); const [expanded, setExpanded] = useState(false);
+  const satellite = useFieldTimeline();
   const field = data.filterOptions.fields.find(item => item.id === selected) ?? data.filterOptions.fields[0];
   const logs = data.logs.filter(log => log.field.id === field?.id);
   const image = field ? fieldMapImage(field.id, field.mapImageUrl ?? logs[0]?.field.mapImageUrl) : "";
   const hours = logs.reduce((sum, log) => sum + (Date.parse(log.endAt) - Date.parse(log.startAt)) / 3600000, 0);
-  const renderMap = () => image && field ? <div className={mapStyles.mapLink}><FieldMap field={field} fields={data.filterOptions.fields} imageUrl={image} onSelect={selectField} /></div> : <EmptyState title="No imagery available" description="There is no map attached to this field."/>;
+  const renderMap = () => image && field ? <div className={mapStyles.mapLink}><FieldMap field={field} fields={data.filterOptions.fields} imageUrl={image} overlayUrl={satellite.overlayUrl} overlayAlt={satellite.overlayAlt} onSelect={selectField} /></div> : <EmptyState title="No imagery available" description="There is no map attached to this field."/>;
   return <div className={s.page}><PageHeader title="Map"><Badge>{data.filterOptions.fields.length} fields</Badge></PageHeader>
     <div className={s.split}><Panel><div className={s.panelBody}><label className={s.eyebrow} htmlFor="field-search">Your fields</label><input id="field-search" className={s.searchInput} style={{ marginTop: 12 }} type="search" placeholder="Search fields" value={search} onChange={event => setSearch(event.target.value)}/></div><div className={s.fieldList}>{data.filterOptions.fields.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).map(item => <button key={item.id} className={`${s.fieldButton} ${field?.id === item.id ? s.fieldSelected : ""}`} onClick={() => selectField(item.id)} aria-pressed={field?.id === item.id}><div><strong>{item.name}</strong><small>{data.logs.filter(log => log.field.id === item.id).length} activity log</small></div><ChevronRight size={15}/></button>)}</div>{!data.filterOptions.fields.some(item => item.name.toLowerCase().includes(search.toLowerCase())) && <EmptyState title="No matching fields"/>}</Panel>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}><Panel><div className={`${s.panelBody} ${mapStyles.detailRight}`}>{renderMap()}<button type="button" className={mapStyles.detailButton} disabled={!image} onClick={() => setExpanded(true)}><Expand size={16}/><span>Expand Map</span></button></div></Panel>
-      {field && <Panel><FieldTimeline key={field.id} field={field} fields={data.filterOptions.fields} /></Panel>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}><Panel><div className={`${s.panelBody} ${mapStyles.detailRight}`}>{renderMap()}{image && field && <FieldTimelineBar timeline={satellite} fields={data.filterOptions.fields} />}<button type="button" className={mapStyles.detailButton} disabled={!image} onClick={() => setExpanded(true)}><Expand size={16}/><span>Expand Map</span></button></div></Panel>
       <Panel><div className={s.detailsGrid}><div><span>ACTIVITY LOGS</span><strong>{logs.length}</strong></div><div><span>LOGGED HOURS</span><strong>{hours.toFixed(1)} h</strong></div><div><span>LATEST ACTIVITY</span><strong>{logs.at(-1)?.activity ?? "No activity"}</strong></div></div><div className={s.smallList}>{logs.map(log => <Link key={log.id} href={`/activity-logs?log=${log.id}`}><div><strong>{log.activity} · {log.employee.name}</strong><p>{formatDate(log.date)}</p></div><ArrowUpRight size={16}/></Link>)}</div></Panel></div>
     </div>{expanded && <Modal wide title={field?.name ?? "Field map"} onClose={() => setExpanded(false)}>{renderMap()}</Modal>}
   </div>;
@@ -78,7 +78,8 @@ export function SettingsPage() {
     <form onSubmit={save} className={s.settingsGrid}><Panel><div className={s.panelHeading}><div><h2>Farm profile</h2></div><Settings2 size={18} color="#888"/></div><div className={`${s.panelBody} ${s.form}`}><div className={s.adminPhoto}><img src={draft.adminAvatar ?? "/assets/avatar-default.svg"} alt="Administrator photo"/><input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => void uploadPhoto(event)} /><button type="button" className={s.secondaryButton} disabled={saving || photoBusy} onClick={() => photoInput.current?.click()}>{photoBusy ? "Opening…" : "Upload photo"}</button>{draft.adminAvatar && <button type="button" className={s.textButton} disabled={saving || photoBusy} onClick={() => setDraft(previous => ({ ...previous, adminAvatar: null }))}>Remove photo</button>}</div><div className={s.formGrid}><label>Farm name<input required maxLength={100} value={draft.farmName} onChange={event => setDraft({ ...draft, farmName: event.target.value })}/></label><label>Administrator name<input required maxLength={100} value={draft.contactName} onChange={event => setDraft({ ...draft, contactName: event.target.value })}/></label></div><label>Contact email<input type="email" maxLength={254} value={draft.email} onChange={event => setDraft({ ...draft, email: event.target.value })}/></label><FilterSelect label="Display timezone" value={draft.timezone} options={Array.from(new Set([draft.timezone, "America/Los_Angeles","America/Denver","America/Chicago","America/New_York","Europe/London","UTC"])).map(zone => ({ value: zone, label: zone }))} onChange={timezone => setDraft({ ...draft, timezone })} /><InviteCode compact /><Link className={s.textButton} href="/onboarding" style={{ alignSelf: "flex-start" }}>Manage fields <ArrowUpRight size={14}/></Link>{error && <p className={s.formError} role="alert">{error}</p>}<div className={s.formActions}><button type="button" className={s.secondaryButton} disabled={!dirty || saving || photoBusy} onClick={() => { setDraft(structuredClone(workspace.settings)); setError(""); }}>Discard changes</button><Button type="submit" disabled={!dirty || saving || photoBusy}>{saving ? "Saving…" : "Save changes"}</Button></div></div></Panel>
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}><Panel><div className={s.panelHeading}><div><h2>Notification preferences</h2></div></div><div className={s.panelBody}>{([
         ["recordings", "New recordings"], ["weekly", "Weekly summary"], ["reminders", "Schedule reminders"],
-      ] as const).map(([key,title]) => <label key={key} className={s.toggleRow}><div><strong>{title}</strong></div><input type="checkbox" className={s.toggle} aria-label={title} checked={draft.notifications[key]} onChange={event => setDraft({ ...draft, notifications: { ...draft.notifications, [key]: event.target.checked } })}/></label>)}</div></Panel></div>
+      ] as const).map(([key,title]) => <label key={key} className={s.toggleRow}><div><strong>{title}</strong></div><input type="checkbox" className={s.toggle} aria-label={title} checked={draft.notifications[key]} onChange={event => setDraft({ ...draft, notifications: { ...draft.notifications, [key]: event.target.checked } })}/></label>)}</div></Panel>
+        <Panel><div className={s.panelHeading}><div><h2>Demo</h2></div></div><div className={s.panelBody}><label className={s.toggleRow}><div><strong>Demo day</strong><p>Treat {formatDate(draft.demoDay ?? DESIGN_DEMO_DAY)} as today on the dashboard and in Ask Toph. Off uses the real date.</p></div><input type="checkbox" className={s.toggle} aria-label="Demo day" checked={Boolean(draft.demoDay)} onChange={event => setDraft({ ...draft, demoDay: event.target.checked ? DESIGN_DEMO_DAY : undefined })}/></label></div></Panel></div>
     </form>
   </div>;
 }

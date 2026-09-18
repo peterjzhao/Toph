@@ -48,11 +48,11 @@ export type DashboardData = {
     timezone: string;
   };
   metrics: {
-    recordingsToday: number; // logs dated today in the farm timezone
+    recordingsToday: number; // logs that arrived on asOf, whatever day the work was done
     newRecordings: number; // of those, logs still flagged new
     activeWorkers: number; // employees with is_active plus the farm's administrator account
-    responseAccuracy: number | null; // approved ÷ (approved + flagged) audit decisions, nearest 5; null with no decisions
-    asOf: string; // YYYY-MM-DD, today in the farm timezone
+    responseAccuracy: number | null; // approved ÷ (approved + flagged) audit decisions, nearest 10; null with no decisions
+    asOf: string; // YYYY-MM-DD, the farm's today: its Settings demo day, or the real date in the farm timezone
   };
   newLogCount: number; // New records matching the current filters, before pagination
   logs: LogDto[];

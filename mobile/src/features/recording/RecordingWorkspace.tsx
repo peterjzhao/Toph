@@ -85,6 +85,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const handsFree = useHandsFree({
     context: voiceContext, recorder, appendClip: transcription.appendClip, loadTranscript: load, applyFields,
     save: () => new Promise<SaveOutcome>(done => setVoiceSave({ done })),
+    maxRecordingBytes: bootstrap.maxAudioBytes,
     onReset: newRecording,
     onReview: message => { setScreen("review"); if (message) setError(message); },
   });
@@ -370,7 +371,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
               </Press>
               <Press style={[styles.mode, styles.modeCall]} onPressIn={prewarm} onPress={() => void handsFree.start()} accessibilityRole="button" accessibilityLabel="Start call mode" accessibilityHint="Talk through a log and save it by voice, without touching the screen">
                 <View style={[styles.modeIcon, styles.modeIconCall]}><Phone size={24} color={colors.white} strokeWidth={1.7} /></View>
-                <View><Text style={styles.modeTitle}>Call mode</Text><Text style={styles.modeText}>Hands-free. Toph asks, you answer, it saves.</Text></View>
+                <View><Text style={styles.modeTitle}>Call mode</Text><Text style={styles.modeText}>Hands-free mode</Text></View>
               </Press>
             </View> : <View style={styles.recorder}>
               <View style={styles.recorderStatus} accessibilityLiveRegion="polite">
@@ -414,9 +415,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
             <View style={styles.savedSummary}>
               <Text style={styles.savedTitle}>{saved.activity} · {fieldLabel(saved.field)}</Text>
               <Text style={[shared.muted, styles.centered]}>{dateLabel(saved.workDate)} · {saved.audio ? clock(saved.durationSeconds) : "Note"}</Text>
-              {activityDetailSummary(saved) ? <Text style={[shared.text, styles.centered]}>{activityDetailSummary(saved)}</Text> : null}
             </View>
-            {!saved.sync && <Text style={[shared.muted, styles.centered]}>{saving ? "Syncing…" : "Saved on device"}</Text>}
             {!saved.sync && bootstrap.fields.length > 0 && <Press style={shared.primaryButton} onPress={() => void retrySync()} disabled={saving} accessibilityRole="button"><CloudUpload size={18} color={colors.white} /><Text style={shared.primaryText}>{saving ? "Syncing…" : "Sync log"}</Text></Press>}
             <Press style={shared.primaryButton} onPress={newRecording} disabled={saving} accessibilityRole="button"><Plus size={18} color={colors.white} /><Text style={shared.primaryText}>New recording</Text></Press>
             <Pressable style={shared.quietButton} onPress={openLibrary} accessibilityRole="button"><Text style={shared.quietText}>View logs</Text><ArrowRight size={16} color={colors.muted} /></Pressable>
@@ -468,7 +467,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
       </View>
     </View>
     {accountOpen && <AccountSheet profile={profile} fields={bootstrap.fields.map(field => field.name)} farmName={session.farm.name} connected={connected} connectionError={connectionError} onRefresh={refreshAccounts} onSignOut={signOut} logCount={accountDrafts.length + visibleRemoteLogs.length} onClose={closeAccount} onSave={updateProfile} onViewLogs={() => { setAccountOpen(false); openLibrary(); }} />}
-    {handsFreeOpen && <HandsFreeScreen {...handsFree} fullScreen onPress={() => handsFree.stop()} onReview={() => handsFree.stop(true)} />}
+    {handsFreeOpen && <HandsFreeScreen {...handsFree} fullScreen onPress={() => handsFree.ready ? handsFree.saveNow() : handsFree.stop()} onReview={() => handsFree.stop(true)} />}
     <InboxSheet visible={inboxOpen} onClose={() => setInboxOpen(false)} employeeId={profile.id} farmName={session.farm.name} online={online} inbox={inbox} />
   </View>;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Easing, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { newPasswordProblem, PASSWORD_MAX_LENGTH, type AccountSession, type AuthResponse } from "@toph/contracts/accounts";
 import type { MobileBootstrap } from "@toph/contracts/mobile";
@@ -90,12 +90,13 @@ export default function AccountGateway() {
   }
 
   if (session && bootstrap) return <RecordingWorkspace key={`${session.farm.id}:${session.account.id}`} session={session} initialBootstrap={bootstrap} onSignOut={signOut} />;
+  if (starting) return <LaunchScreen status="Connecting to your account" />;
 
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled">
       <Text style={styles.brand}>toph</Text>
       <View style={styles.card}>
-        {starting ? <><ActivityIndicator color={colors.green} /><Text style={shared.muted}>Opening your account…</Text></> : session ? <>
+        {session ? <>
           <Text style={shared.heading}>Welcome, {session.account.name}</Text>
           <Text style={shared.muted}>{session.farm.name}</Text>
           <Text style={shared.text}>Connect to load your farm and recording workspace. Your device drafts are kept.</Text>
@@ -123,7 +124,38 @@ export default function AccountGateway() {
   </KeyboardAvoidingView>;
 }
 
+/** Redraws the native launch screen so the wordmark stays in place, with a status line beneath it. */
+function LaunchScreen({ status }: { status: string }) {
+  const [opacity] = useState(() => new Animated.Value(1));
+  useEffect(() => {
+    let active = true;
+    let pulse: Animated.CompositeAnimation | undefined;
+    void AccessibilityInfo.isReduceMotionEnabled().then(reduceMotion => {
+      if (!active || reduceMotion) return;
+      pulse = Animated.loop(Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.45, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]));
+      pulse.start();
+    });
+    return () => { active = false; pulse?.stop(); };
+  }, [opacity]);
+  // Equal halves keep the wordmark at the screen centre, where the native splash draws it.
+  return <View style={styles.launch}>
+    <View style={styles.launchHalf} />
+    <Image source={require("@/assets/images/splash-toph.png")} style={styles.wordmark} resizeMode="contain" fadeDuration={0} accessible accessibilityLabel="Toph" />
+    <View style={styles.launchHalf}>
+      <Animated.Text style={[shared.muted, styles.status, { opacity }]}>{status}</Animated.Text>
+    </View>
+  </View>;
+}
+
 const styles = StyleSheet.create({
+  launch: { flex: 1, alignItems: "center", backgroundColor: colors.white },
+  launchHalf: { flex: 1, alignSelf: "stretch", alignItems: "center", paddingHorizontal: spacing.xl },
+  // The expo-splash-screen plugin in app.json draws this 677×338 asset 150 points wide.
+  wordmark: { width: 150, aspectRatio: 677 / 338 },
+  status: { marginTop: spacing.sm, textAlign: "center" },
   page: { flex: 1, backgroundColor: colors.white },
   content: { flexGrow: 1, paddingHorizontal: spacing.xl, gap: 48 },
   brand: { fontFamily: fonts.semibold, fontSize: 36, lineHeight: 44, letterSpacing: -1.5, color: colors.ink },

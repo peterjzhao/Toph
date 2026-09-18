@@ -56,7 +56,7 @@ test("a new farm has no sample fields and can keep a note until its admin finish
   expect(screen.getByLabelText("Field")).toHaveProp("accessibilityValue", { text: "" });
   await fireEvent.changeText(screen.getByLabelText("Observations"), "Checked the new farm.");
   await fireEvent.press(screen.getByRole("button", { name: "Save log" }));
-  await screen.findByText("Saved on device");
+  await screen.findByText("Draft saved");
   expect(screen.queryByRole("button", { name: "Sync log" })).toBeNull();
   expect((await listDrafts())[0]).toMatchObject({ farmId: "new-farm", field: "", employee: { id: isaac }, notes: "Checked the new farm." });
 });

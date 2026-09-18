@@ -8,6 +8,8 @@ export type HandsFreeState = {
   transport: HandsFreeTransport | null;
   /** The sentence being spoken, or why the session stopped. */
   message: string;
+  /** Every required detail is known, so a tap saves the log instead of stopping the call. */
+  ready: boolean;
 };
 export type HandsFreeEvent =
   | { type: "start" }
@@ -15,20 +17,21 @@ export type HandsFreeEvent =
   | { type: "listening" }
   | { type: "thinking" }
   | { type: "speaking"; text?: string }
+  | { type: "ready"; ready: boolean }
   /** The call has ended; the log is being saved behind this screen. */
   | { type: "saving" }
   | { type: "saved" }
   | { type: "fail"; message: string }
   | { type: "end" };
 
-export const idleState: HandsFreeState = { phase: "idle", transport: null, message: "" };
+export const idleState: HandsFreeState = { phase: "idle", transport: null, message: "", ready: false };
 const live: HandsFreePhase[] = ["connecting", "listening", "thinking", "speaking"];
 /** A microphone or a call may be open; the session must be closed before anything else uses audio. */
 export const isLive = (phase: HandsFreePhase) => live.includes(phase);
 
 export function reduceHandsFree(state: HandsFreeState, event: HandsFreeEvent): HandsFreeState {
   if (event.type === "end") return idleState;
-  if (event.type === "start") return isLive(state.phase) ? state : { phase: "connecting", transport: null, message: "" };
+  if (event.type === "start") return isLive(state.phase) ? state : { phase: "connecting", transport: null, message: "", ready: false };
   if (state.phase === "saving" && event.type === "saved") return { ...state, phase: "saved", message: "" };
   // Late adapter callbacks after a session ended, saved or failed must not revive it.
   if (!isLive(state.phase)) return state;
@@ -37,9 +40,10 @@ export function reduceHandsFree(state: HandsFreeState, event: HandsFreeEvent): H
     case "listening": return { ...state, phase: "listening", message: "" };
     case "thinking": return { ...state, phase: "thinking" };
     case "speaking": return { ...state, phase: "speaking", message: event.text ?? state.message };
-    case "saving": return { ...state, phase: "saving", message: "" };
-    case "saved": return { ...state, phase: "saved", message: "" };
-    case "fail": return { ...state, phase: "error", message: event.message };
+    case "ready": return state.ready === event.ready ? state : { ...state, ready: event.ready };
+    case "saving": return { ...state, phase: "saving", message: "", ready: false };
+    case "saved": return { ...state, phase: "saved", message: "", ready: false };
+    case "fail": return { ...state, phase: "error", message: event.message, ready: false };
   }
 }
 
@@ -56,3 +60,6 @@ export const phaseDisplay: Record<HandsFreePhase, Display> = {
   saved: { label: "Saved", hint: "Tap to continue", background: colors.text, foreground: colors.surface },
   error: { label: "Stopped", hint: "Tap to go back", background: colors.warning, foreground: colors.surface },
 };
+/** What a tap does once the log is complete. */
+const readyHints: Partial<Record<HandsFreePhase, string>> = { listening: "Speak now. Tap anywhere to save", thinking: "Tap anywhere to save", speaking: "Tap anywhere to save" };
+export const phaseHint = ({ phase, ready }: Pick<HandsFreeState, "phase" | "ready">) => (ready && readyHints[phase]) || phaseDisplay[phase].hint;

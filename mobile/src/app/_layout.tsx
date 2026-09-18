@@ -5,8 +5,10 @@ import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { tokens } from "@toph/design";
 
-// Hold the native wordmark while fonts load; there is no second JS splash.
+// Hold the native wordmark while fonts load. AccountGateway redraws it in the same place while the
+// account connects, and the fade (already the Android default) covers the handoff on iOS.
 void SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ fade: true });
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

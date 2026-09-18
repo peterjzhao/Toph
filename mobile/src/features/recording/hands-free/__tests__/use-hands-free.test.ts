@@ -16,6 +16,16 @@ const result = (voice: VoiceGuidance | null, text = "I sprayed field A."): Trans
 // Minted relative to now: a warmed secret is only handed to a call while it still has life left.
 const session: VoiceSession = { clientSecret: "ek_test", expiresAt: new Date(Date.now() + 120_000).toISOString(), model: "gpt-realtime-2.1", connectUrl: "https://api.openai.com/v1/realtime/calls", dataChannel: "oai-events", toolName: "check_log", maxSessionSeconds: 300 };
 const audio: RecordingAudio = { uri: "file:///cache/answer.m4a", mimeType: "audio/mp4", extension: "m4a" };
+const callAudio: RecordingAudio = { uri: "file:///cache/call.wav", mimeType: "audio/wav", extension: "wav" };
+/** 0.5 s of 24 kHz PCM16 silence, base64-encoded as a retrieved turn arrives. */
+const turnAudio = btoa("\0".repeat(24_000));
+const message = (event: Record<string, unknown>) => JSON.stringify(event);
+const workerTurn = (id: string, transcript: string) => [
+  message({ type: "input_audio_buffer.committed", item_id: id }),
+  message({ type: "conversation.item.retrieved", item: { id, type: "message", role: "user", content: [{ type: "input_audio", audio: turnAudio }] } }),
+  message({ type: "conversation.item.input_audio_transcription.completed", item_id: id, transcript }),
+];
+const approval = message({ type: "response.done", response: { output: [{ type: "function_call", name: "check_log", call_id: "c1", arguments: "{\"confirmed\":true}" }] } });
 const mounted: { unmount(): unknown }[] = [];
 async function mount(options: HandsFreeOptions) {
   const hook = await renderHook((props: HandsFreeOptions) => useHandsFree(props), { initialProps: options });
@@ -47,6 +57,7 @@ function setup(overrides: { connect?: HandsFreeAdapters["connect"]; session?: ()
     extract: jest.fn(async () => result(readBack)),
     requestMicrophone: jest.fn(async () => overrides.microphone ?? true),
     prepareCallAudio: jest.fn(async () => {}), haptic: jest.fn(), keepAwake: jest.fn(),
+    writeRecording: jest.fn((_bytes: Uint8Array) => callAudio),
   };
   const options: HandsFreeOptions = {
     context: transcriptionContext, recorder, adapters, savedBannerMs: 10,
@@ -67,7 +78,7 @@ async function answer(hook: Hook, recorder: ReturnType<typeof setup>["recorder"]
 }
 function fakeCall() {
   const sent: Record<string, any>[] = [];
-  const call = { send: jest.fn((event: Record<string, any>) => { sent.push(event); }), close: jest.fn() };
+  const call = { send: jest.fn((event: Record<string, any>) => { sent.push(event); }), mute: jest.fn(), close: jest.fn() };
   let callbacks!: RealtimeCallbacks;
   const connect: NonNullable<HandsFreeAdapters["connect"]> = jest.fn(async (_session, given) => { callbacks = given; return call; });
   return { call, sent, connect, callbacks: () => callbacks };
@@ -110,7 +121,7 @@ test("a blocked microphone is an error state and nothing is recorded", async () 
   expect(hook.result.current.phase).toBe("idle");
 });
 
-test("realtime: relays state and the tool call, hangs up on approval, then saves through the form", async () => {
+test("realtime: relays state and the tool call, saves on approval with the recording, and lets the model finish its sentence", async () => {
   const rtc = fakeCall();
   const { adapters, options, recorder } = setup({ connect: rtc.connect });
   const hook = await mount(options);
@@ -122,26 +133,127 @@ test("realtime: relays state and the tool call, hangs up on approval, then saves
   expect(hook.result.current.transport).toBe("realtime");
 
   await act(async () => {
-    rtc.callbacks().onMessage(JSON.stringify({ type: "response.output_audio_transcript.done", item_id: "a1", transcript: "What did you work on?" }));
-    rtc.callbacks().onMessage(JSON.stringify({ type: "conversation.item.input_audio_transcription.completed", item_id: "u1", transcript: "I sprayed field A." }));
+    rtc.callbacks().onMessage(message({ type: "response.output_audio_transcript.done", item_id: "a1", transcript: "What did you work on?" }));
+    workerTurn("u1", "I sprayed field A.").forEach(rtc.callbacks().onMessage);
     await flush();
   });
   expect(adapters.api.state).toHaveBeenCalledWith(transcriptionContext, "Assistant: What did you work on?\nWorker: I sprayed field A.", 1);
+  expect(rtc.sent).toContainEqual({ type: "conversation.item.retrieve", item_id: "u1", event_id: "retrieve-u1" });
   expect(rtc.sent.at(-1)).toMatchObject({ type: "conversation.item.create", item: { role: "system" } });
 
   await act(async () => {
-    rtc.callbacks().onMessage(JSON.stringify({ type: "response.done", response: { output: [{ type: "function_call", name: "check_log", call_id: "c1", arguments: "{\"confirmed\":true}" }] } }));
+    // The approval's reply ("Saving it now.") is still playing when its tool call arrives.
+    rtc.callbacks().onMessage(message({ type: "output_audio_buffer.started" }));
+    rtc.callbacks().onMessage(approval);
     await flush();
   });
   expect(adapters.api.check).toHaveBeenCalledWith("{\"confirmed\":true}");
   expect(adapters.extract).toHaveBeenCalledWith("Assistant: What did you work on?\nWorker: I sprayed field A.", transcriptionContext);
-  expect(options.loadTranscript).toHaveBeenCalledWith([], "I sprayed field A.");
+  // The worker's turn is the log's recording: one WAV, carrying the transcript so it is not transcribed again.
+  const wav = jest.mocked(adapters.writeRecording).mock.calls[0][0];
+  expect(String.fromCharCode(...wav.subarray(0, 4))).toBe("RIFF");
+  expect(options.loadTranscript).toHaveBeenCalledWith([{ audio: callAudio, durationSeconds: 0.5, transcript: "I sprayed field A." }], "");
   expect(options.applyFields).toHaveBeenCalledWith(fields);
   expect(options.save).toHaveBeenCalledTimes(1);
-  // The call is closed without waiting for a tool reply or a spoken goodbye.
-  expect(rtc.sent.find(event => event.item?.type === "function_call_output")).toBeUndefined();
-  expect(rtc.call.close).toHaveBeenCalledTimes(1);
   expect(hook.result.current.phase).toBe("saved");
+  expect(rtc.sent.find(event => event.item?.type === "function_call_output")).toBeUndefined();
+  // The save does not wait for the model, and the model is not cut off: the call stays up, muted, until it finishes.
+  expect(rtc.call.mute).toHaveBeenCalledTimes(1);
+  expect(rtc.call.close).not.toHaveBeenCalled();
+  await act(async () => { rtc.callbacks().onMessage(message({ type: "output_audio_buffer.stopped" })); await flush(); });
+  expect(rtc.call.close).toHaveBeenCalledTimes(1);
+});
+
+test("realtime: a model that never reports the end of its sentence is hung up on after lastWordsMs", async () => {
+  jest.useFakeTimers();
+  try {
+    const rtc = fakeCall();
+    const { options } = setup({ connect: rtc.connect });
+    const hook = await mount({ ...options, lastWordsMs: 6000 });
+    await act(async () => { await hook.result.current.start(); rtc.callbacks().onOpen(); });
+    await act(async () => {
+      rtc.callbacks().onMessage(message({ type: "output_audio_buffer.started" }));
+      rtc.callbacks().onMessage(approval);
+      await flush();
+    });
+    expect(options.save).toHaveBeenCalledTimes(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(5999); });
+    expect(rtc.call.close).not.toHaveBeenCalled();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(rtc.call.close).toHaveBeenCalledTimes(1);
+  } finally { jest.useRealTimers(); }
+});
+
+test("realtime: once the strict extraction has everything, a tap saves: the model stops, the call ends and the log is stored", async () => {
+  const rtc = fakeCall();
+  const { adapters, options } = setup({ connect: rtc.connect });
+  jest.mocked(adapters.api.state).mockImplementation(async (_context, _transcript, turn: number) => ({ turn, status: "ready_to_confirm", missingFields: [], problems: [], prompt: readBack.prompt, fields, stateNote: "LOG STATE ready" }));
+  const hook = await mount(options);
+  await act(async () => { await hook.result.current.start(); rtc.callbacks().onOpen(); });
+  expect(hook.result.current.ready).toBe(false);
+  await act(async () => {
+    workerTurn("u1", "I sprayed field A from five to six with two liters of neem oil.").forEach(rtc.callbacks().onMessage);
+    rtc.callbacks().onMessage(message({ type: "output_audio_buffer.started" }));
+    await flush();
+  });
+  expect(hook.result.current).toMatchObject({ phase: "speaking", ready: true });
+
+  await act(async () => { hook.result.current.saveNow(); await flush(); });
+  // Cut off on purpose: the worker asked to save.
+  expect(rtc.sent.slice(-2)).toEqual([{ type: "response.cancel" }, { type: "output_audio_buffer.clear" }]);
+  expect(rtc.call.mute).toHaveBeenCalled();
+  expect(rtc.call.close).toHaveBeenCalledTimes(1);
+  expect(adapters.extract).toHaveBeenCalledWith("Worker: I sprayed field A from five to six with two liters of neem oil.", transcriptionContext);
+  expect(options.loadTranscript).toHaveBeenCalledWith([{ audio: callAudio, durationSeconds: 0.5, transcript: "I sprayed field A from five to six with two liters of neem oil." }], "");
+  expect(options.save).toHaveBeenCalledTimes(1);
+  expect(hook.result.current).toMatchObject({ phase: "saved", ready: false });
+  expect(options.onReview).not.toHaveBeenCalled();
+});
+
+test("turn by turn, a complete log is saved by a tap without waiting for the spoken confirmation", async () => {
+  const { recorder, adapters, options } = setup();
+  const hook = await mount(options);
+  await act(async () => { void hook.result.current.start(); await flush(); });
+  expect(hook.result.current.ready).toBe(false);
+  await answer(hook, recorder, options);
+  // The read-back has been spoken and the microphone is open for the reply.
+  expect(hook.result.current).toMatchObject({ phase: "listening", ready: true });
+
+  await act(async () => { hook.result.current.saveNow(); await flush(); });
+  expect(recorder.reset).toHaveBeenCalled();
+  expect(adapters.api.confirm).not.toHaveBeenCalled();
+  expect(options.save).toHaveBeenCalledTimes(1);
+  expect(hook.result.current).toMatchObject({ phase: "saved", ready: false });
+  expect(options.onReview).not.toHaveBeenCalled();
+});
+
+test("stopping a call hands the review form the recording along with what was said", async () => {
+  const rtc = fakeCall();
+  const { options } = setup({ connect: rtc.connect });
+  const hook = await mount(options);
+  await act(async () => { await hook.result.current.start(); rtc.callbacks().onOpen(); });
+  await act(async () => { workerTurn("u1", "I sprayed field A.").forEach(rtc.callbacks().onMessage); await flush(); });
+  await act(async () => { hook.result.current.stop(true); });
+  expect(rtc.call.close).toHaveBeenCalledTimes(1);
+  expect(options.loadTranscript).toHaveBeenCalledWith([{ audio: callAudio, durationSeconds: 0.5, transcript: "I sprayed field A." }], "");
+  expect(options.onReview).toHaveBeenCalledTimes(1);
+});
+
+test("thinking and speaking take turns without a buzz; listening and the save still buzz", async () => {
+  const rtc = fakeCall();
+  const { adapters, options } = setup({ connect: rtc.connect });
+  jest.mocked(adapters.api.check).mockResolvedValue({ status: "needs_fields", missingFields: ["endTime"], problems: [], prompt: ask.prompt, fields, saveRequested: false });
+  const hook = await mount(options);
+  await act(async () => { await hook.result.current.start(); });
+  await act(async () => { rtc.callbacks().onOpen(); });
+  const step = async (event: Record<string, unknown>) => act(async () => { rtc.callbacks().onMessage(message(event)); await flush(); });
+  await step({ type: "output_audio_buffer.started" });
+  await step({ type: "response.done", response: { output: [{ type: "function_call", name: "check_log", call_id: "c1", arguments: "{}" }] } });
+  expect(hook.result.current.phase).toBe("thinking");
+  await step({ type: "output_audio_buffer.started" });
+  expect(hook.result.current.phase).toBe("speaking");
+  await step({ type: "output_audio_buffer.stopped" });
+  expect(jest.mocked(adapters.haptic).mock.calls.map(call => call[0])).toEqual(["connecting", "listening", "speaking", "listening"]);
 });
 
 test("realtime: details still missing at the final extraction open the form instead of saving", async () => {
@@ -188,6 +300,8 @@ test("a call that drops mid-session is closed and continues by turns with the tr
   expect(rtc.call.close).toHaveBeenCalledTimes(1);
   expect(options.loadTranscript).toHaveBeenCalledWith([], "I sprayed field A from eight.");
   expect(adapters.extract).toHaveBeenCalledTimes(1);
+  // The extraction still misses the end time, so a tap stops rather than saves.
+  expect(hook.result.current.ready).toBe(false);
   expect(options.applyFields).toHaveBeenCalledWith(fields);
   expect(said).toEqual([ask.prompt]);
   expect(recorder.start).toHaveBeenCalledTimes(1);

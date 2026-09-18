@@ -19,6 +19,7 @@
     "db:migrate": "tsx scripts/db/migrate.ts",
     "db:seed": "tsx scripts/db/seed.ts",
     "db:reset-sample": "tsx scripts/db/reset-sample.ts",
+    "db:reset-demo": "tsx scripts/db/reset-demo.ts",
     "db:check": "tsx scripts/db/check.ts",
     "db:enable-mobile": "tsx scripts/db/enable-mobile.ts",
     "test:backend": "vitest run --config tests/backend/vitest.config.mts",

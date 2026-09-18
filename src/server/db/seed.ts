@@ -7,7 +7,8 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
 import { BAYS_AERIAL, BAYS_FIELD_BOUNDARIES, BAYS_PLACEHOLDER_EXTENT } from "./bays-field-map";
-import { FARM, INITIAL_EMPLOYEES, INITIAL_ROWS, RECORDING, recordId } from "./initial-data";
+import { ADMIN_ACCOUNT, FARM, INITIAL_EMPLOYEES, INITIAL_ROWS, RECORDING, recordId } from "./initial-data";
+import { DESIGN_DEMO_DAY } from "@/contracts/workspace";
 import * as schema from "./schema";
 import { SAMPLE_REPORTS } from "./sample-reports";
 import { hashPassword, initialPassword } from "@/server/accounts/password";
@@ -48,6 +49,9 @@ export function buildInitialWorkLogs(): (typeof schema.workLogs.$inferInsert)[] 
       throw new Error(`Row ${row.n}: work_date ${row.workDate} does not match its start time`);
     }
     if (endAt <= startAt) throw new Error(`Row ${row.n}: end time is not after start time`);
+    const [receivedDate, receivedTime] = row.received.split(" ");
+    const receivedAt = localDateTimeToInstant(receivedDate, receivedTime, FARM.timezone);
+    if (receivedAt < endAt) throw new Error(`Row ${row.n}: arrives before the work ended`);
 
     return {
       id: recordId("workLog", row.n),
@@ -65,6 +69,8 @@ export function buildInitialWorkLogs(): (typeof schema.workLogs.$inferInsert)[] 
       recordingDurationSeconds: RECORDING.durationSeconds,
       waveformAssetPath: RECORDING.waveformAssetPath,
       waveformPeaks: null,
+      createdAt: receivedAt,
+      updatedAt: receivedAt,
     };
   });
 }
@@ -134,7 +140,7 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
     // Accounts for the administrator and each employee; each password is the lowercased first name.
     await tx.insert(schema.farmAccess).values({ farmId: FARM.id, joinCode: randomBytes(6).toString("hex").toUpperCase(), setupComplete: true }).onConflictDoNothing({ target: schema.farmAccess.farmId });
     await tx.insert(schema.accounts).values(await Promise.all([
-      { id: "90000000-0000-4000-8000-000000000001", farmId: FARM.id, employeeId: null, name: "Ranch Admin", normalizedName: "ranch admin", role: "admin" as const },
+      { id: ADMIN_ACCOUNT.id, farmId: FARM.id, employeeId: null, name: ADMIN_ACCOUNT.name, normalizedName: ADMIN_ACCOUNT.name.toLowerCase(), role: "admin" as const },
       ...INITIAL_EMPLOYEES.map(row => ({ id: recordId("employee", row.n), farmId: FARM.id, employeeId: recordId("employee", row.n), name: row.name, normalizedName: row.name.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase(), role: "worker" as const })),
     ].map(async row => ({ ...row, passwordHash: await hashPassword(initialPassword(row.name)) })))).onConflictDoNothing({ target: schema.accounts.id });
 
@@ -145,10 +151,13 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
       .from(schema.fields).where(eq(schema.fields.farmId, FARM.id)).orderBy(schema.fields.id);
     const workspace = makeWorkspaceSeed({ id: FARM.id, name: FARM.name, timezone: FARM.timezone, avatarPath: FARM.avatarPath }, seededEmployees, seededFields);
     workspace.settings.adminAvatar = adminAvatar();
-    // Demo audit decisions: ten logs approved and one flagged, which the shared accuracy formula reads as 90.
-    workspace.reviews = INITIAL_ROWS.map(row => row.n === 6
-      ? { logId: recordId("workLog", row.n), status: "Flagged" as const, note: "North half still needs a pass; confirm before closing out.", updatedAt: "2026-04-29T16:00:00.000Z" }
-      : { logId: recordId("workLog", row.n), status: "Approved" as const, note: "", updatedAt: "2026-04-29T16:00:00.000Z" });
+    // Shown as of the design's day, so the dashboard reads like the Figma. Settings can turn it off.
+    workspace.settings.demoDay = DESIGN_DEMO_DAY;
+    // Demo audit decisions on the seven opened logs, six approved and one flagged: 85.7%, shown as 90.
+    // The four new logs stay Pending.
+    workspace.reviews = INITIAL_ROWS.filter(row => !row.isNew).map(row => row.n === 6
+      ? { logId: recordId("workLog", row.n), status: "Flagged" as const, note: "North half still needs a pass; confirm before closing out.", updatedAt: "2026-04-29T21:00:00.000Z" }
+      : { logId: recordId("workLog", row.n), status: "Approved" as const, note: "", updatedAt: "2026-04-29T21:00:00.000Z" });
     await tx.execute(sql`insert into toph.workspace_state (farm_id, payload, revision)
       values (${FARM.id}, ${JSON.stringify(workspace)}::jsonb, 0) on conflict (farm_id) do nothing`);
     // Premade April reports; migration 0014 inserts the same rows into databases that already had this farm.

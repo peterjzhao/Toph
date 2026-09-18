@@ -5,41 +5,14 @@
  *
  *   npm run db:migrate
  */
-import { backfillPasswords } from "@/server/accounts/password";
-import { createSqlClient } from "@/server/db/connection";
-import { applyRuntimeGrants } from "@/server/db/grants";
-import { runMigrations } from "@/server/db/migrate";
 import { describeUrl, loadLocalEnv, requireEnv } from "./lib/env";
+import { migrateDatabase } from "./lib/migrate-database";
 
 async function main(): Promise<void> {
   loadLocalEnv();
   const url = requireEnv("DATABASE_MIGRATION_URL", "Set it in .env.local (see .env.example).");
-  const sslCaPath = process.env.DATABASE_SSL_CA_PATH?.trim() || null;
   console.log(`Migrating ${describeUrl(url)}`);
-
-  const result = await runMigrations(url, { sslCaPath });
-  console.log(`Migrations applied now: ${result.applied}; total recorded: ${result.total}`);
-
-  const sql = createSqlClient(url, { max: 1, sslCaPath, applicationName: "toph-grants" });
-  try {
-    const backfilled = await backfillPasswords(sql);
-    if (backfilled) console.log(`Set initial first-name passwords on ${backfilled} existing account(s).`);
-
-    const role = process.env.DATABASE_APP_ROLE?.trim();
-    if (!role) {
-      console.log("DATABASE_APP_ROLE is empty; skipping runtime grants.");
-      return;
-    }
-    const grants = await applyRuntimeGrants(sql, role);
-    if (grants.applied) {
-      const revoked = grants.revokedFrom.length ? ` Revoked access from: ${grants.revokedFrom.join(", ")}.` : "";
-      console.log(`Runtime grants applied to role "${role}".${revoked}`);
-    } else {
-      console.log(`Runtime grants skipped: role "${role}" ${grants.reason}. Create it first (see docs/backend/setup.md).`);
-    }
-  } finally {
-    await sql.end();
-  }
+  await migrateDatabase(url, process.env.DATABASE_SSL_CA_PATH?.trim() || null);
 }
 
 main().catch((error) => {

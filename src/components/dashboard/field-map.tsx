@@ -10,13 +10,20 @@ import styles from "./field-map.module.css";
 
 type Field = { id: string; name: string; boundary?: Array<{ x: number; y: number }> };
 
-export function FieldMap({ field, fields, imageUrl, zoom = 1, showLogMarker = false, onSelect }: {
+export function FieldMap({ field, fields, imageUrl, zoom = 1, showLogMarker = false, onSelect, overlayUrl, overlayAlt = "" }: {
   field: Field;
   fields: Field[];
   imageUrl?: string | null;
   zoom?: number;
   showLogMarker?: boolean;
   onSelect?: (fieldId: string) => void;
+  /**
+   * Satellite imagery of the same extent, stretched over the aerial's own box. Field boundaries
+   * are normalized to that box, which maps exactly onto the extent, so the outlines line up
+   * whatever the extent's proportions.
+   */
+  overlayUrl?: string | null;
+  overlayAlt?: string;
 }) {
   const router = useRouter();
   const markerGradient = useId();
@@ -35,8 +42,9 @@ export function FieldMap({ field, fields, imageUrl, zoom = 1, showLogMarker = fa
     else router.push(fieldMapHref(fieldId));
   }
   const image = <img className={styles.image} src={source} alt={`Satellite map of ${field.name}`} draggable={false} onLoad={event => { const image = event.currentTarget; setImageSize({ source, width: image.naturalWidth, height: image.naturalHeight }); }} width={!custom && region ? region.sourceSize.width : undefined} height={!custom && region ? region.sourceSize.height : undefined} />;
-  return <div className={styles.canvas} style={{ width: `${zoom * 100}%` }}>
+  return <div className={`${styles.canvas} ${overlayUrl ? styles.withOverlay : ""}`} style={{ width: `${zoom * 100}%` }}>
     {interactive ? image : <Link href={fieldMapHref(field.id)} aria-label={`Open ${field.name}`}>{image}</Link>}
+    {overlayUrl && <img className={styles.overlay} src={overlayUrl} alt={overlayAlt} draggable={false} />}
     {interactive && <svg className={styles.regions} viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="none" role="group" aria-label="Select a field on the map">
       {regions.map(region => {
         const target = fields.find(item => item.id === region.fieldId);

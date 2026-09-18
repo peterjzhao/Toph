@@ -29,6 +29,22 @@ test("joins the worker's turns into one 24 kHz mono WAV with a second of silence
   expect(recording).toMatchObject({ sampleRate: 24_000, durationSeconds: (first.length + gap + second.length) / 24_000 });
 });
 
+test("the quiet that voice detection leaves around each turn is trimmed, so the pause between turns is about a second", () => {
+  const quiet = (count: number) => Array<number>(count).fill(12);
+  const speech = Array.from({ length: 480 }, (_, index) => (index % 2 ? 9000 : -9000));
+  // Half a second of lead-in and a second of tail around 20 ms of speech.
+  const turn = pcm([...quiet(12_000), ...speech, ...quiet(24_000)]);
+  const recording = stitchCallAudio([turn, turn])!;
+  const margin = 3600; // 150 ms kept on each side
+  const trimmed = margin + speech.length + margin;
+  expect(recording.durationSeconds).toBeCloseTo((trimmed * 2 + 24_000) / 24_000, 5);
+  const samples = samplesOf(recording.bytes);
+  expect(samples.slice(margin, margin + speech.length)).toEqual(speech);
+  expect(samples.slice(trimmed + 24_000 + margin, trimmed + 24_000 + margin + speech.length)).toEqual(speech);
+  // A turn with nothing above the quiet level (a whisper) is kept whole rather than dropped.
+  expect(stitchCallAudio([pcm(quiet(100))])!.durationSeconds).toBeCloseTo(100 / 24_000, 5);
+});
+
 test("one turn has no gap, and nothing to join is no recording", () => {
   const single = stitchCallAudio(["", pcm([7, 8])])!;
   expect(samplesOf(single.bytes)).toEqual([7, 8]);

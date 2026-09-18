@@ -1,5 +1,6 @@
 /** The native side of hands-free mode. Loaded on the first session so the screens import no audio module up front. */
 import { requestRecordingPermissionsAsync, setAudioModeAsync } from "expo-audio";
+import { File, Paths } from "expo-file-system";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { extractRecordingDetails } from "../transcribe";
 import type { HandsFreePhase } from "./machine";
@@ -41,5 +42,12 @@ export function createNativeAdapters(): HandsFreeAdapters {
     prepareCallAudio: () => setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true, shouldRouteThroughEarpiece: false }).catch(() => undefined),
     haptic: phase => { void haptics[phase]?.().catch(() => undefined); },
     keepAwake: on => { void (on ? activateKeepAwakeAsync(keepAwakeTag) : deactivateKeepAwake(keepAwakeTag)).catch(() => undefined); },
+    // Beside the recorder's own files; saving the draft copies it into the draft's folder.
+    writeRecording: wav => {
+      const file = new File(Paths.cache, `call-${Date.now()}.wav`);
+      file.create({ overwrite: true });
+      file.write(wav);
+      return { uri: file.uri, mimeType: "audio/wav", extension: "wav" };
+    },
   };
 }

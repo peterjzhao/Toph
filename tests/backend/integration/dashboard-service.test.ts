@@ -4,6 +4,7 @@ import { createFarmContext, type FarmContext } from "@/server/farm-context";
 import { getDashboard, getLog, listTags } from "@/server/services/dashboard";
 import { ApiError } from "@/server/errors";
 import { FARM_ID, ISAAC_LOG_ID, ISAAC_SUMMARY, recordId } from "@/server/db/initial-data";
+import { resetSampleFarm } from "@/server/db/reset-sample";
 import { instantToLocalDate } from "@/server/time/zoned";
 import { openTestSql } from "../helpers/test-db";
 import { getTestDatabaseTarget } from "../helpers/test-env";
@@ -19,11 +20,8 @@ describe("dashboard read services", () => {
   beforeAll(async () => {
     sql = openTestSql();
     await prepareTestDatabase(sql);
-    await resetTags(sql);
-    // Ten approved, one flagged, plus a decision about a log that doesn't exist (ignored): 10 ÷ 11 → 90.
-    const reviews = [...Array.from({ length: 11 }, (_, index) => ({ logId: recordId("workLog", index + 1), status: index === 5 ? "Flagged" : "Approved", note: index === 5 ? "Follow up" : "", updatedAt: "2026-04-29T16:00:00.000Z" })),
-      { logId: "00000000-0000-4000-8000-00000000dead", status: "Flagged", note: "stale", updatedAt: "2026-04-29T16:00:00.000Z" }];
-    await sql`update toph.workspace_state set payload = jsonb_set(payload, '{reviews}', ${JSON.stringify(reviews)}::jsonb) where farm_id = ${FARM_ID}`;
+    // Bays Ranch exactly as seeded, whatever earlier suites changed.
+    await resetSampleFarm(sql);
     ctx = await createFarmContext({ databaseUrl: getTestDatabaseTarget().url, farmId: FARM_ID });
   });
 
@@ -41,14 +39,15 @@ describe("dashboard read services", () => {
       avatarUrl: "/assets/avatar.jpg",
       timezone: "America/Los_Angeles",
     });
-    // Eleven active employees plus the separate administrator account make twelve workers.
-    const today = instantToLocalDate(new Date(), "America/Los_Angeles");
+    // The Figma cards, from the seed on its demo day: five logs arrived on April 29 and one of them
+    // is unopened; eleven active employees plus the administrator; six of the seven reviewed logs
+    // approved (85.7%, shown to the nearest 10).
     expect(data.metrics).toEqual({
-      recordingsToday: 0,
-      newRecordings: 0,
+      recordingsToday: 5,
+      newRecordings: 1,
       activeWorkers: 12,
       responseAccuracy: 90,
-      asOf: today,
+      asOf: "2026-04-29",
     });
     expect(data.newLogCount).toBe(4);
     expect(data.logs).toHaveLength(11);
@@ -96,6 +95,19 @@ describe("dashboard read services", () => {
     });
   });
 
+  it("scores only audit decisions about logs that still exist", async () => {
+    const [{ reviews }] = await sql<{ reviews: unknown[] }[]>`select payload->'reviews' as reviews from toph.workspace_state where farm_id = ${FARM_ID}`;
+    const stale = ["00000000-0000-4000-8000-00000000dead", "00000000-0000-4000-8000-00000000beef"]
+      .map((logId) => ({ logId, status: "Flagged", note: "stale", updatedAt: "2026-04-29T21:00:00.000Z" }));
+    await sql`update toph.workspace_state set payload = jsonb_set(payload, '{reviews}', ${JSON.stringify([...reviews, ...stale])}::jsonb) where farm_id = ${FARM_ID}`;
+    try {
+      // Counting the two stale flags would give 6 ÷ 9 → 70.
+      expect((await getDashboard(ctx)).data.metrics.responseAccuracy).toBe(90);
+    } finally {
+      await sql`update toph.workspace_state set payload = jsonb_set(payload, '{reviews}', ${JSON.stringify(reviews)}::jsonb) where farm_id = ${FARM_ID}`;
+    }
+  });
+
   it("counts the administrator once and excludes inactive employees and other farms", async () => {
     await sql`update toph.employees set is_active = false where id = ${recordId("employee", 1)}`;
     try {
@@ -106,6 +118,57 @@ describe("dashboard read services", () => {
     } finally {
       await sql`update toph.employees set is_active = true where id = ${recordId("employee", 1)}`;
     }
+  });
+
+  /** Sets the farm's demo day (null removes it) and when chosen logs arrived; restores both afterwards. */
+  async function withFarmDay(demoDay: string | null, arrivals: Record<string, string>, run: () => Promise<void>): Promise<void> {
+    const [{ settings }] = await sql<{ settings: { demoDay?: string } }[]>`select payload->'settings' as settings from toph.workspace_state where farm_id = ${FARM_ID}`;
+    const originalArrivals = await sql<{ id: string; created_at: Date }[]>`select id, created_at from toph.work_logs where farm_id in (${FARM_ID}, ${OTHER_FARM.id})`;
+    const setDemoDay = (day: string | null | undefined) => day
+      ? sql`update toph.workspace_state set payload = jsonb_set(payload, '{settings,demoDay}', to_jsonb(${day}::text)) where farm_id = ${FARM_ID}`
+      : sql`update toph.workspace_state set payload = payload #- '{settings,demoDay}' where farm_id = ${FARM_ID}`;
+    try {
+      await setDemoDay(demoDay);
+      await sql`update toph.work_logs set created_at = '2026-01-15T20:00:00Z' where farm_id in (${FARM_ID}, ${OTHER_FARM.id})`;
+      for (const [id, at] of Object.entries(arrivals)) await sql`update toph.work_logs set created_at = ${at} where id = ${id}`;
+      await run();
+    } finally {
+      await setDemoDay(settings.demoDay);
+      for (const row of originalArrivals) await sql`update toph.work_logs set created_at = ${row.created_at} where id = ${row.id}`;
+    }
+  }
+
+  it("treats the farm's demo day as today, for the cards and the this-month period", async () => {
+    await withFarmDay("2026-04-22", {}, async () => {
+      const { data, meta } = await getDashboard(ctx, { period: "this-month" });
+      expect(data.metrics.asOf).toBe("2026-04-22");
+      expect(meta.filters.dateRange).toEqual({ from: "2026-04-01", to: "2026-04-30" });
+      expect(data.logs).toHaveLength(11);
+    });
+  });
+
+  it("counts recordings that arrived on the farm's day in its timezone, and which of those are still new", async () => {
+    // Los Angeles is UTC-7 in April: the 25th runs from 07:00Z on the 25th to 06:59Z on the 26th.
+    await withFarmDay("2026-04-25", {
+      [recordId("workLog", 2)]: "2026-04-25T07:00:00Z", // new, first minute of the day
+      [recordId("workLog", 3)]: "2026-04-26T06:59:00Z", // new, last minute of the day
+      [recordId("workLog", 7)]: "2026-04-25T18:00:00Z", // already opened
+      [recordId("workLog", 5)]: "2026-04-25T06:59:00Z", // the evening before
+      [recordId("workLog", 6)]: "2026-04-26T07:00:00Z", // the next day
+      [OTHER_FARM.logId]: "2026-04-25T18:00:00Z", // another farm's arrival
+    }, async () => {
+      const { metrics } = (await getDashboard(ctx)).data;
+      expect({ recordingsToday: metrics.recordingsToday, newRecordings: metrics.newRecordings }).toEqual({ recordingsToday: 3, newRecordings: 2 });
+    });
+  });
+
+  it("uses the real date when no demo day is set", async () => {
+    await withFarmDay(null, { [recordId("workLog", 4)]: new Date().toISOString() }, async () => {
+      const today = instantToLocalDate(new Date(), "America/Los_Angeles");
+      const { data, meta } = await getDashboard(ctx, { period: "this-month" });
+      expect(data.metrics).toMatchObject({ asOf: today, recordingsToday: 1, newRecordings: 1 });
+      expect(meta.filters.dateRange?.from).toBe(`${today.slice(0, 7)}-01`);
+    });
   });
 
   it("shapes Isaac's log exactly like the page, including recording metadata", async () => {
@@ -192,7 +255,7 @@ describe("dashboard read services", () => {
     expect(unknownField.data.logs).toEqual([]);
   });
 
-  it("applies inclusive custom date boundaries, the all period, and the real current month", async () => {
+  it("applies inclusive custom date boundaries, the all period, and the farm's current month", async () => {
     const window = await getDashboard(ctx, { period: "custom", from: "2026-04-20", to: "2026-04-22" });
     expect(window.data.logs.map((l) => l.date)).toEqual(["2026-04-20", "2026-04-21", "2026-04-22"]);
     expect(window.meta.filters.dateRange).toEqual({ from: "2026-04-20", to: "2026-04-22" });
@@ -207,11 +270,10 @@ describe("dashboard read services", () => {
     expect(all.data.logs).toHaveLength(11);
     expect(all.meta.filters.dateRange).toBeNull();
 
+    // Bays Ranch's demo day, April 29, 2026, makes April its current month.
     const thisMonth = await getDashboard(ctx, { period: "this-month" });
-    const today = instantToLocalDate(new Date(), "America/Los_Angeles");
-    expect(thisMonth.meta.filters.dateRange?.from).toBe(`${today.slice(0, 7)}-01`);
-    expect(thisMonth.meta.filters.dateRange?.to.slice(0, 7)).toBe(today.slice(0, 7));
-    expect(thisMonth.data.logs.every((l) => l.date.slice(0, 7) === today.slice(0, 7))).toBe(true);
+    expect(thisMonth.meta.filters.dateRange).toEqual({ from: "2026-04-01", to: "2026-04-30" });
+    expect(thisMonth.data.logs).toHaveLength(11);
   });
 
   it("sorts with the documented keys and a stable ID tie-breaker", async () => {

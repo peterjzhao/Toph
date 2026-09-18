@@ -33,6 +33,7 @@ const mockAdapters = {
   api: { confirm: jest.fn(async () => ({ transcript: "Save", intent: "save" })), session: jest.fn() },
   speaker: { speak: jest.fn(async (text: string) => { mockSaid.push(text); }), stop: jest.fn(async () => {}) },
   connect: null as null | jest.Mock, extract: jest.fn(), requestMicrophone: jest.fn(async () => true), prepareCallAudio: jest.fn(), haptic: jest.fn(), keepAwake: jest.fn(),
+  writeRecording: jest.fn(() => ({ uri: "file:///cache/call.wav", mimeType: "audio/wav", extension: "wav" })),
 };
 const mockRecorder = {
   status: "idle" as RecorderStatus, audio: null as RecordingAudio | null, seconds: 0, metering: null as number | null, levels: [3], error: "",
@@ -96,6 +97,23 @@ test("a spoken log is read back and saved through the review form's own save", a
   expect(screen.getByText("Saved")).toBeTruthy();
   const [draft] = await listDrafts();
   expect(draft.sync?.logId).toBe("40000000-0000-4000-8000-000000000001");
+});
+
+test("once the log is complete the screen offers Tap anywhere to save, and a tap saves it to the black Saved screen", async () => {
+  jest.mocked(transcribeRecording).mockResolvedValue(complete);
+  const view = await render(<Workspace />);
+  await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Start call mode" })); await flush(); });
+  expect(screen.getByText("Speak now. Tap anywhere to stop · Turn by turn")).toBeTruthy();
+
+  await speak(view);
+  expect(mockSaid.at(-1)).toBe(readBack.prompt);
+  expect(screen.getByText("Speak now. Tap anywhere to save · Turn by turn")).toBeTruthy();
+  await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Listening. Save hands-free log" })); await flush(); });
+  await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
+  // The spoken confirmation is not waited for.
+  expect(mockAdapters.api.confirm).not.toHaveBeenCalled();
+  expect(mockSubmit.mock.calls[0][0]).toMatchObject({ field: "FIELD A", activity: "Spraying", startTime: "08:00", endTime: "10:00", product: "Neem oil" });
+  await waitFor(() => expect(screen.getByText("Saved")).toBeTruthy());
 });
 
 test("Review on screen stops the session and opens the form with what was extracted", async () => {

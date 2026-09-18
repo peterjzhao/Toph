@@ -2,27 +2,29 @@ import { FileText } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fonts, fontSize, lineHeight, radius, spacing } from "../styles";
-import { isLive, phaseDisplay, type HandsFreeState } from "./machine";
+import { isLive, phaseDisplay, phaseHint, type HandsFreeState } from "./machine";
 
 type Props = HandsFreeState & {
   /** Fills the whole window during a session; sits inside the capture screen while idle. */
   fullScreen: boolean;
+  /** Stops the session, or saves the log once `ready`. */
   onPress: () => void;
   onReview: () => void;
 };
 
 /** One giant tap target whose colour and label give the state at arm's length. */
-export default function HandsFreeScreen({ phase, transport, message, fullScreen, onPress, onReview }: Props) {
+export default function HandsFreeScreen({ phase, transport, message, ready, fullScreen, onPress, onReview }: Props) {
   const insets = useSafeAreaInsets();
   const display = phaseDisplay[phase];
+  const hint = phaseHint({ phase, ready });
   const live = isLive(phase);
-  const action = phase === "idle" ? "Start hands-free log" : live ? "Stop hands-free log" : "Close";
+  const action = phase === "idle" ? "Start hands-free log" : live ? (ready ? "Save hands-free log" : "Stop hands-free log") : "Close";
   return <View style={[fullScreen ? styles.overlay : styles.panel, { backgroundColor: display.background }]} accessibilityViewIsModal={fullScreen}>
     <Pressable style={[styles.target, fullScreen ? { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + 96 } : null]} onPress={onPress}
-      accessibilityRole="button" accessibilityLabel={`${display.label}. ${action}`} accessibilityHint={display.hint} accessibilityState={{ busy: phase === "connecting" || phase === "thinking" }}>
+      accessibilityRole="button" accessibilityLabel={`${display.label}. ${action}`} accessibilityHint={hint} accessibilityState={{ busy: phase === "connecting" || phase === "thinking" }}>
       <Text style={[styles.label, { color: display.foreground }]} accessibilityLiveRegion="assertive" adjustsFontSizeToFit numberOfLines={1}>{display.label}</Text>
       {message ? <Text style={[styles.message, { color: display.foreground }]} numberOfLines={6}>{message}</Text> : null}
-      <Text style={[styles.hint, { color: display.foreground }]}>{display.hint}{live && transport === "turns" ? " · Turn by turn" : ""}</Text>
+      <Text style={[styles.hint, { color: display.foreground }]}>{hint}{live && transport === "turns" ? " · Turn by turn" : ""}</Text>
     </Pressable>
     {/* A sibling of the tap target, not a child, so it stays a separate control for touch and screen readers. */}
     {live && <Pressable style={[styles.review, { bottom: insets.bottom + spacing.xl }]} onPress={onReview} accessibilityRole="button" accessibilityLabel="Review on screen" accessibilityHint="Stops listening and opens the log form with what has been filled in">

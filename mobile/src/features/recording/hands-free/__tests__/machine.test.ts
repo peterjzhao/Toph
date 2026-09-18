@@ -1,12 +1,12 @@
-import { idleState, isLive, phaseDisplay, reduceHandsFree, type HandsFreeEvent, type HandsFreeState } from "../machine";
+import { idleState, isLive, phaseDisplay, phaseHint, reduceHandsFree, type HandsFreeEvent, type HandsFreeState } from "../machine";
 import { createSilenceDetector } from "../silence";
 
 const play = (events: HandsFreeEvent[], from: HandsFreeState = idleState) => events.reduce(reduceHandsFree, from);
 
 test("a session moves through connecting, listening, thinking, speaking and saved", () => {
-  expect(play([{ type: "start" }])).toEqual({ phase: "connecting", transport: null, message: "" });
+  expect(play([{ type: "start" }])).toEqual({ phase: "connecting", transport: null, message: "", ready: false });
   const speaking = play([{ type: "start" }, { type: "transport", transport: "realtime" }, { type: "listening" }, { type: "thinking" }, { type: "speaking", text: "Which field?" }]);
-  expect(speaking).toEqual({ phase: "speaking", transport: "realtime", message: "Which field?" });
+  expect(speaking).toEqual({ phase: "speaking", transport: "realtime", message: "Which field?", ready: false });
   expect(play([{ type: "listening" }], speaking).message).toBe("");
   expect(play([{ type: "saved" }], speaking).phase).toBe("saved");
   expect(play([{ type: "saved" }, { type: "end" }], speaking)).toEqual(idleState);
@@ -18,6 +18,28 @@ test("late adapter events cannot revive an idle, saved or failed session", () =>
   expect(failed).toMatchObject({ phase: "error", message: "Microphone access is blocked." });
   expect(play([{ type: "listening" }, { type: "saved" }], failed)).toBe(failed);
   expect(play([{ type: "start" }], failed).phase).toBe("connecting");
+});
+
+test("once every detail is in, the tap saves instead of stopping, until the log is saved or the call ends", () => {
+  const listening = play([{ type: "start" }, { type: "transport", transport: "realtime" }, { type: "listening" }]);
+  expect(phaseHint(listening)).toBe("Speak now. Tap anywhere to stop");
+  const ready = play([{ type: "ready", ready: true }], listening);
+  expect(ready.ready).toBe(true);
+  expect(phaseHint(ready)).toBe("Speak now. Tap anywhere to save");
+  expect(phaseHint(play([{ type: "thinking" }], ready))).toBe("Tap anywhere to save");
+  expect(phaseHint(play([{ type: "speaking", text: "Spraying in Field A." }], ready))).toBe("Tap anywhere to save");
+  // A correction that leaves something missing goes back to stopping.
+  expect(phaseHint(play([{ type: "ready", ready: false }], ready))).toBe("Speak now. Tap anywhere to stop");
+
+  const saving = play([{ type: "saving" }], ready);
+  expect(saving).toMatchObject({ phase: "saving", ready: false });
+  expect(phaseHint(saving)).toBe(phaseDisplay.saving.hint);
+  expect(play([{ type: "saved" }], saving)).toMatchObject({ phase: "saved", ready: false });
+  // Saving and saved are the same black screen.
+  expect(phaseDisplay.saving.background).toBe(phaseDisplay.saved.background);
+  // A late verdict cannot mark an ended session ready.
+  expect(play([{ type: "ready", ready: true }])).toBe(idleState);
+  expect(play([{ type: "ready", ready: true }], saving)).toBe(saving);
 });
 
 test("start is ignored while a session is live, and every phase has a distinct readable display", () => {

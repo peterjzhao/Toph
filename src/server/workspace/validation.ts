@@ -50,6 +50,7 @@ const settings = z.object({
     try { new Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; }
   }, "Choose a valid IANA timezone."),
   notifications: z.object({ recordings: z.boolean(), weekly: z.boolean(), reminders: z.boolean() }).strict(),
+  demoDay: date.optional(),
 }).strict();
 
 const activity = z.enum(Object.keys(logFormCatalog) as [string, ...string[]]);
