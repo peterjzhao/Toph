@@ -1,0 +1,35 @@
+/* Report documents: filing readiness, gaps, blank and quoted values. Page and sheet layout live in operations.module.css. */
+.formFor { margin: -8px 0 var(--toph-spacing-lg); font-size: var(--toph-font-size-compact); color: #777; }
+.missing { color: #b3b3b3; font-style: italic; }
+.quoted { text-decoration: underline dotted #93a596; text-underline-offset: 3px; cursor: help; }
+.readiness { display: flex; flex-direction: column; gap: 6px; padding: var(--toph-spacing-lg) var(--toph-spacing-xxl); border-bottom: 1px solid var(--toph-color-divider); font-size: var(--toph-font-size-compact); color: #555; }
+.readiness > strong { font-size: var(--toph-font-size-body); font-weight: var(--toph-font-weight-medium); color: #171717; }
+.ready { background: #f3f9f5; }
+.incomplete { background: #fffaf3; }
+.gapList { list-style: none; margin: var(--toph-spacing-sm) 0 0; padding: 0; display: grid; gap: 10px; }
+.gapList li { display: grid; gap: 3px; padding-left: 12px; border-left: 2px solid #e8c9a0; }
+.gapList b { font-weight: var(--toph-font-weight-medium); color: #303030; }
+.gapList li > span:not(.chips) { font-size: var(--toph-font-size-caption); color: #777; line-height: 1.5; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+.chip { font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--toph-color-surface); border: 1px solid #ece4d8; color: #6b6b6b; white-space: nowrap; }
+.section { border-bottom: 1px solid var(--toph-color-divider); }
+.section:last-of-type { border-bottom: 0; }
+.sectionHead { padding: var(--toph-spacing-xl) var(--toph-spacing-lg) var(--toph-spacing-sm); }
+.sectionHead h2 { margin: 0; font-size: var(--toph-font-size-control); font-weight: var(--toph-font-weight-medium); }
+.sectionHead p { margin: 6px 0 0; max-width: 760px; font-size: var(--toph-font-size-caption); color: #888; line-height: 1.55; }
+.sectionEmpty { margin: 0; padding: var(--toph-spacing-xs) var(--toph-spacing-lg) var(--toph-spacing-xl); font-size: var(--toph-font-size-compact); color: #aaa; }
+.sheetFoot { padding: var(--toph-spacing-lg) var(--toph-spacing-xxl); border-top: 1px solid var(--toph-color-divider); font-size: var(--toph-font-size-caption); color: #999; line-height: 1.6; }
+.sheetFoot a { color: inherit; }
+.listStatus { margin: 0; padding: var(--toph-spacing-sm) var(--toph-spacing-xl) var(--toph-spacing-xl); font-size: var(--toph-font-size-compact); color: #999; }
+@media (max-width: 650px) { .readiness, .sheetFoot { padding-left: var(--toph-spacing-lg); padding-right: var(--toph-spacing-lg); } .sectionHead, .sectionEmpty { padding-left: var(--toph-spacing-md); padding-right: var(--toph-spacing-md); } }
+@media print {
+  .readiness { background: none; border: 1px solid #ccc; padding: 10px 12px; margin-bottom: 12px; }
+  .gapList li { border-left-color: #999; break-inside: avoid; }
+  .chip { border-color: #ccc; }
+  .section { border: 0; }
+  .sectionHead { padding: 14px 0 6px; break-after: avoid; }
+  .sectionEmpty { padding: 0 0 8px; }
+  .quoted { text-decoration: none; }
+  .missing { color: #666; }
+  .sheetFoot { padding: 12px 0 0; border-top: 1px solid #ccc; }
+}

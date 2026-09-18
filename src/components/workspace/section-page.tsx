@@ -2,7 +2,8 @@
 import { SwitchUserPage } from "../accounts/account-page";
 import { DashboardPage } from "./dashboard-page";
 import { MapPage, SettingsPage, SupportPage } from "./general-pages";
-import { AuditPage, ReportsPage, SchedulePage } from "./operations-pages";
+import { AuditPage, SchedulePage } from "./operations-pages";
+import { ReportsPage } from "./reports-page";
 import { EmployeesPage, PerformancePage, MessagesPage } from "./team-pages";
 export function SectionPage({ section }: { section: string }) {
   switch (section) {

@@ -410,3 +410,25 @@ export const satelliteUsage = toph.table("satellite_usage", {
   check("satellite_usage_minute_count_check", sql`${t.minuteCount} > 0`),
   check("satellite_usage_day_count_check", sql`${t.dayCount} > 0`),
 ]);
+
+/**
+ * Regulatory reports, each a frozen document (src/contracts/reports.ts). Logs are cited only
+ * inside the document, so deleting or resetting logs never waits on a report.
+ */
+export const farmReports = toph.table("farm_reports", {
+  id: uuid("id").primaryKey(),
+  farmId: uuid("farm_id").notNull().references(() => farms.id),
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  periodFrom: date("period_from", { mode: "string" }).notNull(),
+  periodTo: date("period_to", { mode: "string" }).notNull(),
+  document: jsonb("document").notNull(),
+  createdBy: text("created_by"),
+  createdAt: createdAt(),
+}, t => [
+  index("farm_reports_farm_created").on(t.farmId, t.createdAt.desc()),
+  check("farm_reports_kind", sql`${t.kind} in ('pesticide-use', 'food-safety', 'harvest-traceability', 'labor-hours', 'organic', 'acreage', 'nitrogen')`),
+  check("farm_reports_name", sql`length(btrim(${t.name})) between 1 and 160`),
+  check("farm_reports_period", sql`${t.periodTo} >= ${t.periodFrom}`),
+  check("farm_reports_document", sql`jsonb_typeof(${t.document}) = 'object' and octet_length(${t.document}::text) <= 2097152`),
+]);

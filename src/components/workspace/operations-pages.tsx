@@ -1,17 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowDownToLine, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileText, List, Maximize2, Minimize2, Plus, Printer, Search, ShieldCheck, Trash2, X } from "lucide-react";
-import type { LogDto } from "@/contracts/dashboard";
-import type { Review, SavedReport, ScheduleItem } from "@/contracts/workspace";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileText, List, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
+import type { Review, ScheduleItem } from "@/contracts/workspace";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { Modal, PageHeader } from "@/components/workspace/workspace-ui";
 import styles from "./operations.module.css";
 
 const dateLabel = (value: string, short = false, includeYear = !short) => new Intl.DateTimeFormat("en-US", { month: short ? "short" : "long", day: "numeric", year: includeYear ? "numeric" : undefined, timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
-const duration = (log: LogDto) => Math.max(0, (Date.parse(log.endAt) - Date.parse(log.startAt)) / 3_600_000);
-const reportKinds = { activity: "Activity report", compliance: "Compliance report", hours: "Worker hours" } as const;
 
 function Status({ value }: { value: string }) {
   return <span className={`${styles.badge} ${value === "Approved" || value === "Completed" ? styles.green : value === "Flagged" ? styles.amber : ""}`}>{value === "Approved" || value === "Completed" ? <Check size={12} /> : null}{value}</span>;
@@ -74,158 +71,6 @@ export function AuditPage() {
         <div className={styles.formActions}><button type="button" className={styles.button} onClick={() => setSelected(null)}>Cancel</button><button type="submit" className={styles.primaryButton} disabled={saving}>{saving ? "Saving…" : "Save review"}</button></div>
       </form>
     </Modal>}
-  </div>;
-}
-
-function csvCell(value: string | number) {
-  const text = String(value);
-  const safe = /^[\s\uFEFF]*[=+@\-]|^[\t\r\n]/.test(text) ? `'${text}` : text;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
-
-function reportRows(report: SavedReport, logs: LogDto[], reviews: Review[]): (string | number)[][] {
-  const matching = logs.filter((log) => log.date >= report.from && log.date <= report.to);
-  if (report.kind === "hours") {
-    const grouped = new Map<string, { name: string; logs: number; hours: number }>();
-    matching.forEach((log) => { const current = grouped.get(log.employee.id) ?? { name: log.employee.name, logs: 0, hours: 0 }; current.logs++; current.hours += duration(log); grouped.set(log.employee.id, current); });
-    return [["Employee", "Activity logs", "Recorded hours", "From", "To"], ...Array.from(grouped.values()).map((employee) => [employee.name, employee.logs, employee.hours.toFixed(2), report.from, report.to])];
-  }
-  if (report.kind === "compliance") {
-    const reviewMap = new Map(reviews.map((review) => [review.logId, review]));
-    return [["Log ID", "Employee", "Activity", "Date", "Field", "Review status", "Review notes", "Reviewed at"], ...matching.map((log) => { const review = reviewMap.get(log.id); return [log.id, log.employee.name, log.activity, log.date, log.field.name, review?.status ?? "Pending", review?.note ?? "", review?.updatedAt ?? ""]; })];
-  }
-  return [["Log ID", "Employee", "Activity", "Date", "Field", "Start", "End", "Hours", "Summary", "Tags"], ...matching.map((log) => [log.id, log.employee.name, log.activity, log.date, log.field.name, log.startAt, log.endAt, duration(log).toFixed(2), log.summary, log.tags.map((tag) => tag.label).join("; ")])];
-}
-
-function downloadReport(report: SavedReport, logs: LogDto[], reviews: Review[]) {
-  const csv = reportRows(report, logs, reviews).map((row) => row.map(csvCell).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${report.name.replace(/[^a-z0-9 -]/gi, "").trim().replaceAll(" ", "-").toLowerCase() || "toph-report"}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/** Reads a saved report on the page. `rows` is `reportRows` output: row 0 is the header. */
-function ReportViewer({ report, farmName, rows, onClose, onDownload }: { report: SavedReport; farmName: string; rows: (string | number)[][]; onClose: () => void; onDownload: () => void }) {
-  const overlay = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  // `document.fullscreenEnabled` can be true where the request is still refused (embedded viewers), so we only learn on use.
-  const [fullscreenBlocked, setFullscreenBlocked] = useState(false);
-  const [header = [], ...body] = rows;
-  const generatedAt = useMemo(() => new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" }).format(new Date()), []);
-  const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled;
-
-  useEffect(() => {
-    const element = overlay.current;
-    const syncFullscreen = () => setFullscreen(document.fullscreenElement === element);
-    // Esc exits full screen first; the browser owns that, so only close once we are back in the page.
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.fullscreenElement) { event.preventDefault(); onClose(); } };
-    const previousOverflow = document.body.style.overflow;
-    document.addEventListener("fullscreenchange", syncFullscreen);
-    document.addEventListener("keydown", onKeyDown);
-    document.body.classList.add("toph-report-open");
-    document.body.style.overflow = "hidden";
-    element?.focus();
-    return () => {
-      document.removeEventListener("fullscreenchange", syncFullscreen);
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.classList.remove("toph-report-open");
-      document.body.style.overflow = previousOverflow;
-      if (document.fullscreenElement === element) void document.exitFullscreen().catch(() => {});
-    };
-  }, [onClose]);
-
-  function toggleFullscreen() {
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-    else void overlay.current?.requestFullscreen().catch(() => setFullscreenBlocked(true));
-  }
-
-  return <div ref={overlay} className={`${styles.viewerOverlay} toph-report-sheet`} role="dialog" aria-modal="true" aria-label={`${report.name}, ${reportKinds[report.kind]}`} tabIndex={-1}>
-    <div className={styles.viewerBar}>
-      <div className={styles.viewerTitle}><FileText size={16} /><strong>{report.name}</strong><span className={styles.badge}>{reportKinds[report.kind]}</span></div>
-      <div className={styles.viewerActions}>
-        {canFullscreen && <button type="button" className={styles.iconButton} onClick={toggleFullscreen} disabled={fullscreenBlocked} aria-label={fullscreen ? "Exit full screen" : "View full screen"} title={fullscreenBlocked ? "Full screen is not available in this browser" : fullscreen ? "Exit full screen" : "Full screen"}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>}
-        <button type="button" className={styles.iconButton} onClick={() => window.print()} aria-label="Print or save as PDF" title="Print / save as PDF"><Printer size={16} /></button>
-        <button type="button" className={styles.iconButton} onClick={onDownload} aria-label={`Download ${report.name} as CSV`} title="Download CSV"><ArrowDownToLine size={16} /></button>
-        <button type="button" className={styles.iconButton} onClick={onClose} aria-label="Close report" title="Close"><X size={16} /></button>
-      </div>
-    </div>
-    <div className={styles.viewerScroll} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <article className={styles.sheet}>
-        <header className={styles.sheetHead}>
-          <p className={styles.sheetFarm}>{farmName}</p>
-          <h1>{report.name}</h1>
-          <dl className={styles.sheetMeta}>
-            <div><dt>Report type</dt><dd>{reportKinds[report.kind]}</dd></div>
-            <div><dt>Period</dt><dd>{dateLabel(report.from)} – {dateLabel(report.to)}</dd></div>
-            <div><dt>Records</dt><dd>{body.length}</dd></div>
-            <div><dt>Generated</dt><dd>{generatedAt}</dd></div>
-          </dl>
-          <p className={styles.sheetNote}>Generated from current activity data, not a frozen historical snapshot. Values change if the underlying logs are edited.</p>
-        </header>
-        {body.length
-          ? <div className={styles.sheetTableScroll}><table className={styles.sheetTable}><thead><tr>{header.map((cell, index) => <th key={index} scope="col">{cell}</th>)}</tr></thead><tbody>{body.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell === "" ? "—" : cell}</td>)}</tr>)}</tbody></table></div>
-          : <p className={styles.sheetEmpty}>No activity logs fall within {dateLabel(report.from)} – {dateLabel(report.to)}, so this report has no records to show.</p>}
-      </article>
-    </div>
-  </div>;
-}
-
-export function ReportsPage() {
-  const { data, workspace, update, saving, notify } = useWorkspace();
-  const [kind, setKind] = useState<SavedReport["kind"]>("activity");
-  const [name, setName] = useState("April activity report");
-  const [from, setFrom] = useState("2026-04-01");
-  const [to, setTo] = useState("2026-04-30");
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [viewing, setViewing] = useState<SavedReport | null>(null);
-  const invalidRange = Boolean(from && to && to < from);
-  const matching = invalidRange ? [] : data.logs.filter((log) => log.date >= from && log.date <= to);
-  const reports = workspace.reports.filter((report) => `${report.name} ${reportKinds[report.kind]}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-  async function generate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!name.trim()) { setError("Give your report a name."); return; }
-    if (to < from) { setError("End date must be on or after the start date."); return; }
-    const report: SavedReport = { id: crypto.randomUUID(), name: name.trim(), kind, from, to, createdAt: new Date().toISOString() };
-    setError("");
-    if (await update("reports", (previous) => [report, ...previous])) { downloadReport(report, data.logs, workspace.reviews); notify("Report saved and CSV downloaded."); }
-    else setError("The report could not be saved. Your settings are still here; please try again.");
-  }
-
-  async function remove(report: SavedReport) {
-    if (await update("reports", (previous) => previous.filter((item) => item.id !== report.id))) notify(`“${report.name}” removed from saved reports.`);
-  }
-
-  return <div className={styles.page}>
-    <PageHeader title="Reports" />
-    <div className={styles.reportLayout}>
-      <section className={styles.panel}><div className={styles.toolbar}><h2><FileText size={17} /> Create report</h2><span className={styles.badge}>CSV export</span></div>
-        <form className={`${styles.form} ${styles.padded}`} onSubmit={generate}>
-          <fieldset className={styles.reportTypes}><legend>Report type</legend>{(Object.entries(reportKinds) as [SavedReport["kind"], string][]).map(([value, label]) => <label key={value} className={`${styles.reportType} ${kind === value ? styles.selectedType : ""}`}><input type="radio" name="report-kind" value={value} checked={kind === value} onChange={() => setKind(value)} /><span><strong>{label}</strong><small>{value === "activity" ? "Field work, summaries, and tags" : value === "compliance" ? "Review decisions and notes" : "Recorded hours by employee"}</small></span></label>)}</fieldset>
-          <label>Report name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} placeholder="Name your report" /></label>
-          <div className={styles.formGrid}><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required /></label><label>To<input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} required /></label></div>
-          {(error || invalidRange) && <p className={styles.error} role="alert">{invalidRange ? "End date must be on or after the start date." : error}</p>}
-          <div className={styles.reportPreview}><span><strong>{matching.length}</strong> matching logs</span><span><strong>{matching.reduce((sum, log) => sum + duration(log), 0).toFixed(1)}</strong> recorded hours</span></div>
-          <button type="submit" className={styles.primaryButton} disabled={saving || !matching.length}><ArrowDownToLine size={15} />{saving ? "Preparing…" : "Generate & download CSV"}</button>
-          <p className={styles.help}>{matching.length ? "Exports use your stored activity logs and review decisions." : "No activity logs fall within this period. Choose a different date range."}</p>
-        </form>
-      </section>
-      <section className={styles.panel}><div className={styles.toolbar}><h2>Saved reports <span>({workspace.reports.length})</span></h2></div>
-        <div className={styles.savedSearch}><label className={styles.search}><Search size={15} /><input type="search" aria-label="Search saved reports" placeholder="Find a report" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div>
-        {reports.length ? <div className={styles.reportList}>{reports.map((report) => <article className={styles.savedReport} key={report.id}>
-          <button type="button" className={styles.reportOpen} onClick={() => setViewing(report)} aria-label={`Open ${report.name}`}><span className={styles.fileIcon}><FileText size={19} strokeWidth={1.4} /></span><span className={styles.reportInfo}><strong>{report.name}</strong><span>{reportKinds[report.kind]}</span><small>{dateLabel(report.from, true, true)} – {dateLabel(report.to, true, true)}</small></span></button>
-          <div className={styles.reportActions}><button className={styles.iconButton} aria-label={`Download ${report.name}`} title="Download latest matching data" onClick={() => { downloadReport(report, data.logs, workspace.reviews); notify("CSV downloaded using the latest matching data."); }}><ArrowDownToLine size={16} /></button><button className={styles.iconButton} aria-label={`Delete ${report.name}`} title="Delete saved report" disabled={saving} onClick={() => void remove(report)}><Trash2 size={16} /></button></div>
-        </article>)}</div> : <Empty title={query ? "No reports found" : "Your reports, all in one place"} text={query ? "Try another report name." : "Create your first report to save its date range and export settings here."} />}
-        <div className={styles.panelFoot}>Saved reports keep your export settings. Open one to read it here, or download the latest matching data.</div>
-      </section>
-    </div>
-    {viewing && <ReportViewer report={viewing} farmName={data.farm.name} rows={reportRows(viewing, data.logs, workspace.reviews)} onClose={() => setViewing(null)} onDownload={() => { downloadReport(viewing, data.logs, workspace.reviews); notify("CSV downloaded using the latest matching data."); }} />}
   </div>;
 }
 

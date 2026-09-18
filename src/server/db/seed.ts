@@ -9,6 +9,7 @@ import type postgres from "postgres";
 import { BAYS_AERIAL, BAYS_FIELD_BOUNDARIES, BAYS_PLACEHOLDER_EXTENT } from "./bays-field-map";
 import { FARM, INITIAL_EMPLOYEES, INITIAL_ROWS, RECORDING, recordId } from "./initial-data";
 import * as schema from "./schema";
+import { SAMPLE_REPORTS } from "./sample-reports";
 import { hashPassword, initialPassword } from "@/server/accounts/password";
 import { instantToLocalDate, localDateTimeToInstant } from "@/server/time/zoned";
 import { randomBytes } from "node:crypto";
@@ -150,6 +151,11 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
       : { logId: recordId("workLog", row.n), status: "Approved" as const, note: "", updatedAt: "2026-04-29T16:00:00.000Z" });
     await tx.execute(sql`insert into toph.workspace_state (farm_id, payload, revision)
       values (${FARM.id}, ${JSON.stringify(workspace)}::jsonb, 0) on conflict (farm_id) do nothing`);
+    // Premade April reports; migration 0014 inserts the same rows into databases that already had this farm.
+    await tx.insert(schema.farmReports).values(SAMPLE_REPORTS.map(report => ({
+      id: report.id, farmId: FARM.id, kind: report.kind, name: report.name, periodFrom: report.from, periodTo: report.to,
+      document: report.document, createdBy: report.createdBy, createdAt: new Date(report.createdAt),
+    }))).onConflictDoNothing({ target: schema.farmReports.id });
 
     return {
       farm: existingFarm ? "existing" : "inserted",

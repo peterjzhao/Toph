@@ -123,6 +123,15 @@ async function checkRuntimePrivileges(sql: postgres.Sql): Promise<void> {
     `runtime role ${user}: cannot reassign or delete satellite readings`);
   }
 
+  // Regulatory reports are frozen documents: the app saves and deletes them but never rewrites one.
+  const [reportsTable] = await sql`select to_regclass('toph.farm_reports') is not null as present`;
+  report(reportsTable.present, `runtime role ${user}: regulatory reports table exists (migration 0014)`);
+  if (reportsTable.present) {
+    const [reports] = await sql`select has_table_privilege('toph.farm_reports', 'INSERT') as save,
+      has_table_privilege('toph.farm_reports', 'DELETE') as remove, has_table_privilege('toph.farm_reports', 'UPDATE') as rewrite`;
+    report(reports.save && reports.remove && !reports.rewrite, `runtime role ${user}: can save and delete reports but not rewrite them`);
+  }
+
   // A farm whose raster has no extent simply has no timeline; the map page behaves as before.
   const located = await sql`select f.name, i.extent_source from toph.farm_images i
     join toph.farms f on f.id = i.farm_id where i.extent_source is not null`;
