@@ -8,11 +8,11 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "pesticide-use",
       "form": {
         "formTitle": "Production Agricultural Pesticide Use Report",
-        "authority": "California DPR · 3 CCR §§ 6626–6627",
+        "authority": "California DPR, 3 CCR §§ 6626–6627",
         "recipient": "County Agricultural Commissioner",
         "cadence": "Monthly, due the 10th of the following month",
         "sourceUrl": "https://www.cdpr.ca.gov/wp-content/uploads/2026/04/volume_1_chapter_4.pdf"
@@ -42,13 +42,23 @@
         {
           "label": "Operator ID number (OIN)",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "county permit",
+              "note": "Issued by the County Agricultural Commissioner. Toph doesn't store it."
+            }
           }
         },
         {
           "label": "County",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "your records",
+              "note": "The county where the work was done. Toph doesn't store it."
+            }
           }
         },
         {
@@ -77,28 +87,62 @@
                   "value": "FIELD A"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "county permit",
+                    "note": "The field's site ID is on your restricted materials permit or operator ID. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop was treated."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were treated."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "field records",
+                    "note": "Planted acres at the site come from your field records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say which product was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the product's EPA or California registration number."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much undiluted product was used, with a unit."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how it was applied (air, ground or other)."
+                  }
                 },
                 {
                   "value": "Isaac Wang"
@@ -117,28 +161,62 @@
                   "value": "FIELD K"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "county permit",
+                    "note": "The field's site ID is on your restricted materials permit or operator ID. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop was treated."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were treated."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "field records",
+                    "note": "Planted acres at the site come from your field records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say which product was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the product's EPA or California registration number."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much undiluted product was used, with a unit."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how it was applied (air, ground or other)."
+                  }
                 },
                 {
                   "value": "Benjamin Moore"
@@ -168,12 +246,12 @@
       "gaps": [
         {
           "label": "Operator ID number (OIN)",
-          "detail": "Issued by the County Agricultural Commissioner. Not on file in Toph. Add it before filing.",
+          "detail": "Issued by the County Agricultural Commissioner. Toph doesn't store it.",
           "logIds": []
         },
         {
           "label": "County",
-          "detail": "Not on file in Toph. Add it before filing.",
+          "detail": "The county where the work was done. Toph doesn't store it.",
           "logIds": []
         },
         {
@@ -243,7 +321,8 @@
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "2 applications found. 10 required items are missing."
+        "message": "2 applications found. 18 values are missing.",
+        "missing": 18
       }
     }
   },
@@ -256,13 +335,13 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "food-safety",
       "form": {
         "formTitle": "Harmonized GAP Records Packet",
         "authority": "USDA Harmonized GAP",
         "recipient": "Third-party food safety auditor",
-        "cadence": "At each audit, usually yearly",
+        "cadence": "Yearly, at each audit",
         "sourceUrl": "https://www.ams.usda.gov/services/auditing/gap-ghp/harmonized"
       },
       "farm": {
@@ -317,19 +396,39 @@
                   "value": "FIELD A"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop it was."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what material was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the application rate."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how it was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the product's pre-harvest interval."
+                  }
                 },
                 {
                   "value": "Isaac Wang"
@@ -348,16 +447,32 @@
                   "value": "FIELD E"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop it was."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what material was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the application rate."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how it was applied."
+                  }
                 },
                 {
                   "value": "Not applicable"
@@ -379,19 +494,39 @@
                   "value": "FIELD K"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop it was."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what material was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the application rate."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how it was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the product's pre-harvest interval."
+                  }
                 },
                 {
                   "value": "Benjamin Moore"
@@ -424,7 +559,11 @@
                   "value": "FIELD B"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop was harvested."
+                  }
                 },
                 {
                   "value": "None recorded"
@@ -462,7 +601,11 @@
                   "quote": "Checked the drip lines along the west edge"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say where the water came from."
+                  }
                 }
               ],
               "logIds": [
@@ -480,7 +623,12 @@
             "Result"
           ],
           "rows": [],
-          "emptyText": "Toph does not store water test results."
+          "emptyText": "Add your water test results here.",
+          "missing": {
+            "from": "records",
+            "source": "lab reports",
+            "note": "Microbial test results for irrigation and spray water come from your lab reports. Toph doesn't store it."
+          }
         },
         {
           "title": "Worker food safety training",
@@ -490,7 +638,12 @@
             "Topic"
           ],
           "rows": [],
-          "emptyText": "Toph does not store training records."
+          "emptyText": "Add your training records here.",
+          "missing": {
+            "from": "records",
+            "source": "training records",
+            "note": "Training and retraining records come from your food safety program. Toph doesn't store it."
+          }
         }
       ],
       "gaps": [
@@ -548,18 +701,19 @@
         },
         {
           "label": "Water test results",
-          "detail": "Microbial test results for irrigation and spray water are not stored in Toph.",
+          "detail": "Microbial test results for irrigation and spray water come from your lab reports. Toph doesn't store it.",
           "logIds": []
         },
         {
           "label": "Worker food safety training",
-          "detail": "Training and retraining records are not stored in Toph.",
+          "detail": "Training and retraining records come from your food safety program. Toph doesn't store it.",
           "logIds": []
         }
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "5 records found. 8 required items are missing."
+        "message": "5 records found. 18 values are missing.",
+        "missing": 18
       }
     }
   },
@@ -572,11 +726,11 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "harvest-traceability",
       "form": {
         "formTitle": "Harvesting Key Data Elements",
-        "authority": "FDA Food Traceability Rule · 21 CFR 1.1325(a)",
+        "authority": "FDA Food Traceability Rule, 21 CFR 1.1325(a)",
         "recipient": "Initial packer; FDA within 24 hours on request",
         "cadence": "Every harvest, and for mock recalls",
         "sourceUrl": "https://www.law.cornell.edu/cfr/text/21/1.1325"
@@ -606,13 +760,23 @@
         {
           "label": "Farm location",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "your records",
+              "note": "The street address of the farm where the food was harvested. Toph doesn't store it."
+            }
           }
         },
         {
           "label": "Phone number",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "your records",
+              "note": "Your business phone, given to the initial packer. Toph doesn't store it."
+            }
           }
         }
       ],
@@ -634,10 +798,18 @@
             {
               "cells": [
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what was harvested."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much was harvested, with a unit."
+                  }
                 },
                 {
                   "value": "Bays Ranch"
@@ -649,7 +821,11 @@
                   "value": "Apr 20, 2026"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say who received the harvest (a buyer, packer or cooler)."
+                  }
                 },
                 {
                   "value": "Toph harvest log 30000000-0000-4000-8000-000000000002"
@@ -684,12 +860,12 @@
       "gaps": [
         {
           "label": "Farm location (address)",
-          "detail": "The street address of the farm where the food was harvested. Not on file in Toph. Add it before filing.",
+          "detail": "The street address of the farm where the food was harvested. Toph doesn't store it.",
           "logIds": []
         },
         {
           "label": "Phone number",
-          "detail": "The harvester's business phone, given to the initial packer. Not on file in Toph. Add it before filing.",
+          "detail": "Your business phone, given to the initial packer. Toph doesn't store it.",
           "logIds": []
         },
         {
@@ -716,7 +892,8 @@
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "1 harvest found. 5 required items are missing."
+        "message": "1 harvest found. 5 values are missing.",
+        "missing": 5
       }
     }
   },
@@ -729,13 +906,13 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "labor-hours",
       "form": {
         "formTitle": "Worker Hours Record",
-        "authority": "H-2A · 20 CFR 655.122(j)–(k)",
+        "authority": "H-2A, 20 CFR 655.122(j)–(k)",
         "recipient": "Payroll; DOL Wage and Hour on request",
-        "cadence": "Every pay period",
+        "cadence": "Every pay period; H-2A workers are paid at least twice a month",
         "sourceUrl": "https://www.law.cornell.edu/cfr/text/20/655.122"
       },
       "farm": {
@@ -763,13 +940,23 @@
         {
           "label": "Employer address",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "your records",
+              "note": "Your business address. Toph doesn't store it."
+            }
           }
         },
         {
           "label": "Employer FEIN",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "tax records",
+              "note": "Your federal employer identification number. Toph doesn't store it."
+            }
           }
         },
         {
@@ -1071,11 +1258,15 @@
           "emptyText": "No work was recorded in this period."
         },
         {
-          "title": "Totals by worker",
+          "title": "Pay period totals by worker",
           "columns": [
             "Worker",
             "Days worked",
-            "Hours worked"
+            "Hours worked",
+            "Hours offered",
+            "Rate of pay",
+            "Earnings",
+            "Deductions"
           ],
           "rows": [
             {
@@ -1088,6 +1279,38 @@
                 },
                 {
                   "value": 4
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1104,6 +1327,38 @@
                 },
                 {
                   "value": 4.5
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1120,6 +1375,38 @@
                 },
                 {
                   "value": 3.25
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1136,6 +1423,38 @@
                 },
                 {
                   "value": 4.67
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1152,6 +1471,38 @@
                 },
                 {
                   "value": 3.25
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1168,6 +1519,38 @@
                 },
                 {
                   "value": 3
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1184,6 +1567,38 @@
                 },
                 {
                   "value": 4
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1200,6 +1615,38 @@
                 },
                 {
                   "value": 3.75
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1216,6 +1663,38 @@
                 },
                 {
                   "value": 4.5
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1232,6 +1711,38 @@
                 },
                 {
                   "value": 3.75
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1248,6 +1759,38 @@
                 },
                 {
                   "value": 3
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hours offered each day, split at the three-fourths guarantee, come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Hourly and piece rates come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Total earnings for the pay period come from payroll. Toph doesn't store it."
+                  }
+                },
+                {
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "payroll",
+                    "note": "Each deduction and its reason come from payroll. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1260,39 +1803,88 @@
       ],
       "gaps": [
         {
+          "label": "Hours offered",
+          "detail": "Not recorded on 11 of 11 workers.",
+          "logIds": [
+            "30000000-0000-4000-8000-000000000011",
+            "30000000-0000-4000-8000-000000000008",
+            "30000000-0000-4000-8000-000000000005",
+            "30000000-0000-4000-8000-000000000001",
+            "30000000-0000-4000-8000-000000000010",
+            "30000000-0000-4000-8000-000000000009",
+            "30000000-0000-4000-8000-000000000003",
+            "30000000-0000-4000-8000-000000000002",
+            "30000000-0000-4000-8000-000000000007",
+            "30000000-0000-4000-8000-000000000006",
+            "30000000-0000-4000-8000-000000000004"
+          ]
+        },
+        {
+          "label": "Rate of pay",
+          "detail": "Not recorded on 11 of 11 workers.",
+          "logIds": [
+            "30000000-0000-4000-8000-000000000011",
+            "30000000-0000-4000-8000-000000000008",
+            "30000000-0000-4000-8000-000000000005",
+            "30000000-0000-4000-8000-000000000001",
+            "30000000-0000-4000-8000-000000000010",
+            "30000000-0000-4000-8000-000000000009",
+            "30000000-0000-4000-8000-000000000003",
+            "30000000-0000-4000-8000-000000000002",
+            "30000000-0000-4000-8000-000000000007",
+            "30000000-0000-4000-8000-000000000006",
+            "30000000-0000-4000-8000-000000000004"
+          ]
+        },
+        {
+          "label": "Earnings",
+          "detail": "Not recorded on 11 of 11 workers.",
+          "logIds": [
+            "30000000-0000-4000-8000-000000000011",
+            "30000000-0000-4000-8000-000000000008",
+            "30000000-0000-4000-8000-000000000005",
+            "30000000-0000-4000-8000-000000000001",
+            "30000000-0000-4000-8000-000000000010",
+            "30000000-0000-4000-8000-000000000009",
+            "30000000-0000-4000-8000-000000000003",
+            "30000000-0000-4000-8000-000000000002",
+            "30000000-0000-4000-8000-000000000007",
+            "30000000-0000-4000-8000-000000000006",
+            "30000000-0000-4000-8000-000000000004"
+          ]
+        },
+        {
+          "label": "Deductions",
+          "detail": "Not recorded on 11 of 11 workers.",
+          "logIds": [
+            "30000000-0000-4000-8000-000000000011",
+            "30000000-0000-4000-8000-000000000008",
+            "30000000-0000-4000-8000-000000000005",
+            "30000000-0000-4000-8000-000000000001",
+            "30000000-0000-4000-8000-000000000010",
+            "30000000-0000-4000-8000-000000000009",
+            "30000000-0000-4000-8000-000000000003",
+            "30000000-0000-4000-8000-000000000002",
+            "30000000-0000-4000-8000-000000000007",
+            "30000000-0000-4000-8000-000000000006",
+            "30000000-0000-4000-8000-000000000004"
+          ]
+        },
+        {
           "label": "Employer address",
-          "detail": "Not on file in Toph. Add it before filing.",
+          "detail": "Your business address. Toph doesn't store it.",
           "logIds": []
         },
         {
           "label": "Employer FEIN",
-          "detail": "Not on file in Toph. Add it before filing.",
-          "logIds": []
-        },
-        {
-          "label": "Hours offered",
-          "detail": "Hours offered each day, split at the three-fourths guarantee. Not tracked in Toph. Add it from payroll.",
-          "logIds": []
-        },
-        {
-          "label": "Rate of pay",
-          "detail": "Hourly and piece rates. Not tracked in Toph. Add it from payroll.",
-          "logIds": []
-        },
-        {
-          "label": "Earnings",
-          "detail": "Total earnings for the pay period. Not tracked in Toph. Add it from payroll.",
-          "logIds": []
-        },
-        {
-          "label": "Deductions",
-          "detail": "Each deduction and its reason. Not tracked in Toph. Add it from payroll.",
+          "detail": "Your federal employer identification number. Toph doesn't store it.",
           "logIds": []
         }
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "11 worker-days found. 6 required items are missing."
+        "message": "11 worker-days found. 46 values are missing.",
+        "missing": 46
       }
     }
   },
@@ -1305,11 +1897,11 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "organic",
       "form": {
         "formTitle": "Input Application and Field Activity Log",
-        "authority": "USDA National Organic Program · 7 CFR 205.103",
+        "authority": "USDA National Organic Program, 7 CFR 205.103",
         "recipient": "Organic certifier",
         "cadence": "Yearly inspection; keep for 5 years",
         "sourceUrl": "https://www.law.cornell.edu/cfr/text/7/205.103"
@@ -1372,10 +1964,18 @@
                   "value": "FIELD A"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what material was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much was applied."
+                  }
                 },
                 {
                   "value": null
@@ -1387,7 +1987,12 @@
                   "value": null
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "certifier",
+                    "note": "Whether the input is allowed for organic use comes from your certifier's list (for example, OMRI). Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1403,10 +2008,18 @@
                   "value": "FIELD E"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what material was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much was applied."
+                  }
                 },
                 {
                   "value": null
@@ -1419,7 +2032,12 @@
                   "quote": "before the wind picked up mid-morning"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "certifier",
+                    "note": "Whether the input is allowed for organic use comes from your certifier's list (for example, OMRI). Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1435,10 +2053,18 @@
                   "value": "FIELD K"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what material was applied."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much was applied."
+                  }
                 },
                 {
                   "value": null
@@ -1450,7 +2076,12 @@
                   "value": null
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "certifier",
+                    "note": "Whether the input is allowed for organic use comes from your certifier's list (for example, OMRI). Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1479,13 +2110,22 @@
                   "value": "FIELD C"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what was planted or seeded."
+                  }
                 },
                 {
                   "value": null
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "seed receipts",
+                    "note": "Whether the seed or stock was organic comes from your purchase records. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1501,13 +2141,22 @@
                   "value": "FIELD J"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what was planted or seeded."
+                  }
                 },
                 {
                   "value": null
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "seed receipts",
+                    "note": "Whether the seed or stock was organic comes from your purchase records. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -1536,13 +2185,25 @@
                   "value": "FIELD B"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what was harvested."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how much was harvested, with a unit."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say where the harvest was sold or moved to."
+                  }
                 }
               ],
               "logIds": [
@@ -1910,7 +2571,8 @@
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "11 logs found. 8 required items are missing."
+        "message": "11 logs found. 16 values are missing.",
+        "missing": 16
       }
     }
   },
@@ -1923,13 +2585,13 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "acreage",
       "form": {
         "formTitle": "Report of Acreage (FSA-578)",
         "authority": "USDA Farm Service Agency",
         "recipient": "County FSA office",
-        "cadence": "By each crop's deadline, often July 15",
+        "cadence": "Yearly, by each crop's FSA deadline",
         "sourceUrl": "https://www.fsa.usda.gov/sites/default/files/2025-03/FSA-578.pdf"
       },
       "farm": {
@@ -1951,7 +2613,12 @@
         {
           "label": "FSA farm number",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "FSA",
+              "note": "Assigned by your county FSA office. Toph doesn't store it."
+            }
           }
         },
         {
@@ -1977,28 +2644,60 @@
                   "value": "FIELD C"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "Tract and field numbers come from your FSA farm records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "Tract and field numbers come from your FSA farm records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop was planted."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "How the crop will be used (for example fresh, processing or grain) is declared to FSA. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were planted."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "No irrigation log exists for this field in this period, so its practice isn't known."
+                  }
                 },
                 {
                   "value": "Apr 21, 2026"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "Each producer's share comes from your FSA records. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -2011,28 +2710,60 @@
                   "value": "FIELD J"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "Tract and field numbers come from your FSA farm records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "Tract and field numbers come from your FSA farm records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop was planted."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "How the crop will be used (for example fresh, processing or grain) is declared to FSA. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were planted."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "No irrigation log exists for this field in this period, so its practice isn't known."
+                  }
                 },
                 {
                   "value": "Apr 28, 2026"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "FSA",
+                    "note": "Each producer's share comes from your FSA records. Toph doesn't store it."
+                  }
                 }
               ],
               "logIds": [
@@ -2114,13 +2845,14 @@
         },
         {
           "label": "FSA farm number",
-          "detail": "Assigned by the county FSA office. Not on file in Toph. Add it before filing.",
+          "detail": "Assigned by your county FSA office. Toph doesn't store it.",
           "logIds": []
         }
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "2 plantings found. 8 required items are missing."
+        "message": "2 plantings found. 15 values are missing.",
+        "missing": 15
       }
     }
   },
@@ -2133,7 +2865,7 @@
     "createdAt": "2026-09-18T00:48:17.361Z",
     "createdBy": "Toph",
     "document": {
-      "version": 1,
+      "version": 2,
       "kind": "nitrogen",
       "form": {
         "formTitle": "Irrigation and Nitrogen Management Plan Summary Report",
@@ -2161,7 +2893,12 @@
         {
           "label": "Member ID",
           "cell": {
-            "value": null
+            "value": null,
+            "missing": {
+              "from": "records",
+              "source": "coalition",
+              "note": "Issued by your water quality coalition. Toph doesn't store it."
+            }
           }
         },
         {
@@ -2181,16 +2918,33 @@
                   "value": "FIELD B"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "county records",
+                    "note": "The assessor's parcel number comes from county records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop is grown here."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were irrigated."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how the field was irrigated."
+                  }
                 },
                 {
                   "value": "None"
@@ -2199,7 +2953,11 @@
                   "value": "None recorded"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the harvested yield, with a unit."
+                  }
                 }
               ],
               "logIds": [
@@ -2212,13 +2970,26 @@
                   "value": "FIELD D"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "county records",
+                    "note": "The assessor's parcel number comes from county records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop is grown here."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were irrigated."
+                  }
                 },
                 {
                   "value": "drip",
@@ -2231,7 +3002,11 @@
                   "value": "None recorded"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the harvested yield, with a unit."
+                  }
                 }
               ],
               "logIds": [
@@ -2244,25 +3019,50 @@
                   "value": "FIELD E"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "records",
+                    "source": "county records",
+                    "note": "The assessor's parcel number comes from county records. Toph doesn't store it."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say what crop is grown here."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how many acres were irrigated."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say how the field was irrigated."
+                  }
                 },
                 {
                   "value": "1 application, product not recorded"
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the fertilizer amount, its grade (such as 46-0-0) and the acres covered, which nitrogen is calculated from."
+                  }
                 },
                 {
-                  "value": null
+                  "value": null,
+                  "missing": {
+                    "from": "log",
+                    "note": "The worker's log doesn't say the harvested yield, with a unit."
+                  }
                 }
               ],
               "logIds": [
@@ -2338,13 +3138,14 @@
         },
         {
           "label": "Coalition member ID",
-          "detail": "Issued by your water quality coalition. Not on file in Toph. Add it before filing.",
+          "detail": "Issued by your water quality coalition. Toph doesn't store it.",
           "logIds": []
         }
       ],
       "readiness": {
         "status": "incomplete",
-        "message": "3 fields found. 7 required items are missing."
+        "message": "3 fields found. 16 values are missing.",
+        "missing": 16
       }
     }
   }

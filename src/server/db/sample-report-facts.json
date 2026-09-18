@@ -1,0 +1,48 @@
+{
+  "model": "gpt-4.1-mini",
+  "detectedAt": "2026-09-18T00:48:17.361Z",
+  "output": {
+    "logs": [
+      {
+        "logId": "30000000-0000-4000-8000-000000000001",
+        "facts": []
+      },
+      {
+        "logId": "30000000-0000-4000-8000-000000000011",
+        "facts": []
+      },
+      {
+        "logId": "30000000-0000-4000-8000-000000000002",
+        "facts": []
+      },
+      {
+        "logId": "30000000-0000-4000-8000-000000000004",
+        "facts": [
+          {
+            "key": "irrigationMethod",
+            "value": "drip",
+            "quote": "Checked the drip lines along the west edge"
+          }
+        ]
+      },
+      {
+        "logId": "30000000-0000-4000-8000-000000000005",
+        "facts": [
+          {
+            "key": "weather",
+            "value": "wind picked up mid-morning",
+            "quote": "before the wind picked up mid-morning"
+          }
+        ]
+      },
+      {
+        "logId": "30000000-0000-4000-8000-000000000003",
+        "facts": []
+      },
+      {
+        "logId": "30000000-0000-4000-8000-000000000010",
+        "facts": []
+      }
+    ]
+  }
+}

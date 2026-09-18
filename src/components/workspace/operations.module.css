@@ -58,7 +58,9 @@
 .reportType input { accent-color: var(--toph-color-action); margin: 0; }
 .reportType strong { display: block; font-size: var(--toph-font-size-compact); font-weight: var(--toph-font-weight-medium); }
 .reportType small { display: block; margin-top: 5px; font-size: var(--toph-font-size-caption); color: #999; }
-.selectedType { border-color: #bfd7c9; background: #f8fbf9; }
+.selectedType { border-color: var(--toph-color-action); background: var(--toph-color-action); color: var(--toph-color-surface); }
+.selectedType small { color: rgba(255, 255, 255, .72); }
+.selectedType input { accent-color: var(--toph-color-surface); }
 .reportPreview { display: flex; justify-content: space-between; gap: 14px; padding: 15px; border-radius: var(--toph-radius-control); background: #f7f8f7; font-size: var(--toph-font-size-caption); color: #888; }
 .reportPreview strong { font-weight: var(--toph-font-weight-medium); color: #444; }
 .help { margin: -8px 0 0; font-size: var(--toph-font-size-caption); color: #999; line-height: 1.6; }

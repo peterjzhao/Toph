@@ -43,14 +43,19 @@ describe("pesticide use report", () => {
     expect(document.sections[0].rows[0].cells[4]).toEqual({ value: "12 acres", quote: "12 acres" });
     expect(document.header.find(field => field.label === "Due to the county")?.cell.value).toBe("May 10, 2026");
     expect(document.gaps.map(item => item.label)).toEqual(["Operator ID number (OIN)", "County", "Site ID number", "Acres planted"]);
-    expect(document.readiness).toEqual({ status: "incomplete", message: "1 application found. 4 required items are missing." });
+    expect(document.readiness).toEqual({ status: "incomplete", message: "1 application found. 4 values are missing.", missing: 4 });
+    expect(document.version).toBe(2);
     expect(document.form.authority).toMatch(/DPR/);
+    // Blanks say where the value would come from, right where it belongs.
+    expect(document.header[1].cell).toEqual({ value: null, missing: { from: "records", source: "county permit", note: "Issued by the County Agricultural Commissioner. Toph doesn't store it." } });
+    expect(document.sections[0].rows[0].cells[2].missing).toMatchObject({ from: "records", source: "county permit" });
   });
 
   test("lists each missing element with the logs it is missing from", () => {
     const bare = log("Pest Control", "FIELD K", "2026-04-29");
     const document = build("pesticide-use", [bare, log("Spraying", "FIELD A", "2026-04-19", { product: said("Copper"), applicationMethod: said("Drone") })]);
     expect(gap(document, "Product name")).toEqual({ label: "Product name", detail: "Not recorded on 1 of 2 applications.", logIds: [bare.id] });
+    expect(document.sections[0].rows[0].cells[6]).toEqual({ value: null, missing: { from: "log", note: "The worker's log doesn't say which product was applied." } });
     expect(values(document)[1][9]).toBe("Air (Drone)");
   });
 
@@ -74,6 +79,7 @@ describe("pre-harvest intervals", () => {
     expect(values(document, 1)[0][4]).toBeNull();
     expect(gap(document, "Pre-harvest interval check")?.logIds).toHaveLength(1);
     expect(gap(document, "Water test results")?.logIds).toEqual([]);
+    expect(document.sections[3]).toMatchObject({ title: "Water tests", rows: [], missing: { from: "records", source: "lab reports" } });
   });
 
   test("traceability lists each harvest's elements and the applications one step back", () => {
@@ -96,9 +102,11 @@ test("labor hours groups each worker's day and lists payroll items Toph does not
     ["Apr 19, 2026", "Isaac Wang", "6:00 AM", "3:30 PM", 4.5, "Spraying (FIELD A); Weeding (FIELD F)"],
     ["Apr 20, 2026", "Noah Brown", "7:00 AM", "11:30 AM", 4.5, "Pruning (FIELD G)"],
   ]);
-  expect(values(document, 1)).toEqual([["Isaac Wang", 1, 4.5], ["Noah Brown", 1, 4.5]]);
-  expect(document.gaps.map(item => item.label)).toEqual(["Employer address", "Employer FEIN", "Hours offered", "Rate of pay", "Earnings", "Deductions"]);
-  expect(document.readiness.message).toBe("2 worker-days found. 6 required items are missing.");
+  expect(document.sections[1].columns).toEqual(["Worker", "Days worked", "Hours worked", "Hours offered", "Rate of pay", "Earnings", "Deductions"]);
+  expect(values(document, 1)).toEqual([["Isaac Wang", 1, 4.5, null, null, null, null], ["Noah Brown", 1, 4.5, null, null, null, null]]);
+  expect(document.sections[1].rows[0].cells[4].missing).toMatchObject({ from: "records", source: "payroll" });
+  expect(document.gaps.map(item => item.label)).toEqual(["Hours offered", "Rate of pay", "Earnings", "Deductions", "Employer address", "Employer FEIN"]);
+  expect(document.readiness).toMatchObject({ message: "2 worker-days found. 10 values are missing.", missing: 10 });
 });
 
 test("acreage marks a field irrigated only from an irrigation log on that field", () => {

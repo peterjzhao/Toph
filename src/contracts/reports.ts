@@ -12,10 +12,13 @@
  */
 import { z } from "zod";
 
-export const REPORT_DOCUMENT_VERSION = 1 as const;
+export const REPORT_DOCUMENT_VERSION = 2 as const;
 
 export const reportKinds = ["pesticide-use", "food-safety", "harvest-traceability", "labor-hours", "organic", "acreage", "nitrogen"] as const;
 export type ReportKind = (typeof reportKinds)[number];
+
+/** How long one report usually covers: a calendar month, a half-month pay period, or a year. */
+export type ReportPeriod = "month" | "pay-period" | "year";
 
 export type ReportDefinition = {
   /** Short name on the Reports page. */
@@ -29,6 +32,8 @@ export type ReportDefinition = {
   cadence: string;
   /** Primary source for the document's structure. */
   sourceUrl: string;
+  /** The period the Reports page suggests; see suggestedPeriod. */
+  period: ReportPeriod;
 };
 
 export const reportCatalog = {
@@ -36,10 +41,11 @@ export const reportCatalog = {
     name: "Pesticide Use Report",
     description: "Monthly pesticide applications for the county",
     formTitle: "Production Agricultural Pesticide Use Report",
-    authority: "California DPR · 3 CCR §§ 6626–6627",
+    authority: "California DPR, 3 CCR §§ 6626–6627",
     recipient: "County Agricultural Commissioner",
     cadence: "Monthly, due the 10th of the following month",
     sourceUrl: "https://www.cdpr.ca.gov/wp-content/uploads/2026/04/volume_1_chapter_4.pdf",
+    period: "month",
   },
   "food-safety": {
     name: "Food Safety Audit",
@@ -47,35 +53,39 @@ export const reportCatalog = {
     formTitle: "Harmonized GAP Records Packet",
     authority: "USDA Harmonized GAP",
     recipient: "Third-party food safety auditor",
-    cadence: "At each audit, usually yearly",
+    cadence: "Yearly, at each audit",
     sourceUrl: "https://www.ams.usda.gov/services/auditing/gap-ghp/harmonized",
+    period: "year",
   },
   "harvest-traceability": {
     name: "Harvest Traceability",
     description: "Trace each harvest to its field, date, and buyer",
     formTitle: "Harvesting Key Data Elements",
-    authority: "FDA Food Traceability Rule · 21 CFR 1.1325(a)",
+    authority: "FDA Food Traceability Rule, 21 CFR 1.1325(a)",
     recipient: "Initial packer; FDA within 24 hours on request",
     cadence: "Every harvest, and for mock recalls",
     sourceUrl: "https://www.law.cornell.edu/cfr/text/21/1.1325",
+    period: "year",
   },
   "labor-hours": {
     name: "Labor Hours",
     description: "Daily hours per worker for payroll and H-2A",
     formTitle: "Worker Hours Record",
-    authority: "H-2A · 20 CFR 655.122(j)–(k)",
+    authority: "H-2A, 20 CFR 655.122(j)–(k)",
     recipient: "Payroll; DOL Wage and Hour on request",
-    cadence: "Every pay period",
+    cadence: "Every pay period; H-2A workers are paid at least twice a month",
     sourceUrl: "https://www.law.cornell.edu/cfr/text/20/655.122",
+    period: "pay-period",
   },
   organic: {
     name: "Organic Records",
     description: "Inputs and field activities for organic inspection",
     formTitle: "Input Application and Field Activity Log",
-    authority: "USDA National Organic Program · 7 CFR 205.103",
+    authority: "USDA National Organic Program, 7 CFR 205.103",
     recipient: "Organic certifier",
     cadence: "Yearly inspection; keep for 5 years",
     sourceUrl: "https://www.law.cornell.edu/cfr/text/7/205.103",
+    period: "year",
   },
   acreage: {
     name: "Acreage Report",
@@ -83,8 +93,9 @@ export const reportCatalog = {
     formTitle: "Report of Acreage (FSA-578)",
     authority: "USDA Farm Service Agency",
     recipient: "County FSA office",
-    cadence: "By each crop's deadline, often July 15",
+    cadence: "Yearly, by each crop's FSA deadline",
     sourceUrl: "https://www.fsa.usda.gov/sites/default/files/2025-03/FSA-578.pdf",
+    period: "year",
   },
   nitrogen: {
     name: "Nitrogen Summary",
@@ -94,8 +105,23 @@ export const reportCatalog = {
     recipient: "Water quality coalition",
     cadence: "Yearly, per crop year",
     sourceUrl: "https://wwd.ca.gov/wp-content/uploads/2019/11/inmp-worksheet-instructions.pdf",
+    period: "year",
   },
 } as const satisfies Record<ReportKind, ReportDefinition>;
+
+const pad = (value: number) => String(value).padStart(2, "0");
+const lastDay = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+/** The report period that contains `today` (YYYY-MM-DD): its month, its half-month pay period, or its year. */
+export function suggestedPeriod(kind: ReportKind, today: string): { from: string; to: string } {
+  const [year, month, day] = today.split("-").map(Number);
+  const prefix = `${year}-${pad(month)}`;
+  switch (reportCatalog[kind].period) {
+    case "month": return { from: `${prefix}-01`, to: `${prefix}-${pad(lastDay(year, month))}` };
+    case "pay-period": return day <= 15 ? { from: `${prefix}-01`, to: `${prefix}-15` } : { from: `${prefix}-16`, to: `${prefix}-${pad(lastDay(year, month))}` };
+    case "year": return { from: `${year}-01-01`, to: `${year}-12-31` };
+  }
+}
 
 /**
  * Facts a report can use from one log. Keys shared with the log-form catalog mean the same thing
@@ -110,19 +136,31 @@ export const reportFactKeys = [
 export type ReportFactKey = (typeof reportFactKeys)[number];
 export const numericReportFacts: ReadonlySet<ReportFactKey> = new Set<ReportFactKey>(["amount", "areaCovered", "nitrogenPercent", "preHarvestDays", "reentryHours"]);
 
-/** A value on a report. `quote` holds the log's own words when the value was detected rather than recorded. */
-export type ReportCell = { value: string | number | null; quote?: string };
+/**
+ * Why a required value is blank, shown where the value belongs. `log`: the worker's log does not
+ * say it. `records`: Toph does not hold it; `source` names where it comes from instead (for
+ * example "payroll" or "FSA"). `note` is the full explanation.
+ */
+export type ReportMissing = { from: "log" | "records"; source?: string; note: string };
+/**
+ * A value on a report. `quote` holds the log's own words when the value was detected rather than
+ * recorded. A required value that is blank carries `missing`; an optional blank has neither.
+ */
+export type ReportCell = { value: string | number | null; quote?: string; missing?: ReportMissing };
 export type ReportRow = { cells: ReportCell[]; logIds: string[] };
-export type ReportSection = { title: string; note?: string; columns: string[]; rows: ReportRow[]; emptyText: string };
+/** `missing` marks a whole section Toph does not hold, such as water test results. */
+export type ReportSection = { title: string; note?: string; columns: string[]; rows: ReportRow[]; emptyText: string; missing?: ReportMissing };
 export type ReportHeaderField = { label: string; cell: ReportCell };
 /** A required item no record states. `logIds` are the records it is missing from; empty for farm-level items. */
 export type ReportGap = { label: string; detail: string; logIds: string[] };
-export type ReportReadiness = { status: "ready" | "incomplete" | "no-records"; message: string };
+/** `missing` counts the marked blanks in the document (version 2 and later). */
+export type ReportReadiness = { status: "ready" | "incomplete" | "no-records"; message: string; missing?: number };
 
 export type ReportDocument = {
-  version: typeof REPORT_DOCUMENT_VERSION;
+  /** 1: blanks are plain nulls. 2: required blanks carry `missing`. */
+  version: 1 | typeof REPORT_DOCUMENT_VERSION;
   kind: ReportKind;
-  form: Omit<ReportDefinition, "name" | "description">;
+  form: Omit<ReportDefinition, "name" | "description" | "period">;
   farm: { name: string; timezone: string };
   period: { from: string; to: string };
   generatedAt: string;

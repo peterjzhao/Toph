@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type postgres from "postgres";
 import { reportKinds } from "@/contracts/reports";
@@ -74,8 +76,8 @@ describe("regulatory reports", () => {
     const created = await generateReport(asAdmin(ctx), { kind: "harvest-traceability", name: "April harvests", ...april }, { apiKey: "test-key", signal: signal(), fetcher: fetcher as unknown as typeof fetch });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(created.document.detection).toEqual({ method: "ai", model: "gpt-4.1-mini", logsRead: 1, factsDetected: 1 });
-    // The invented crop is dropped; a unit without a count is not a quantity.
-    expect(created.document.sections[0].rows[0].cells.slice(0, 2)).toEqual([{ value: null }, { value: null }]);
+    // The invented crop is dropped; a unit without a count is not a quantity. Both are marked where they belong.
+    expect(created.document.sections[0].rows[0].cells.slice(0, 2)).toMatchObject([{ value: null, missing: { from: "log" } }, { value: null, missing: { from: "log" } }]);
     await deleteReport(ctx, created.id);
   });
 
@@ -100,6 +102,16 @@ describe("regulatory reports", () => {
     } finally {
       await app.close();
     }
+  });
+
+  it("migration 0015 brings a stored first-version sample up to date", async () => {
+    const report = SAMPLE_REPORTS[0];
+    const statementFor = (file: string) => readFileSync(path.resolve("drizzle", file), "utf8").split("--> statement-breakpoint").find(statement => statement.includes(`'${report.id}'`))!;
+    const first = /\$report\$([\s\S]*?)\$report\$/.exec(statementFor("0014_farm_reports.sql"))![1];
+    await sql`update toph.farm_reports set document = ${first}::jsonb where id = ${report.id}`;
+    expect((await getReport(ctx, report.id)).document.version).toBe(1);
+    for (const statement of readFileSync(path.resolve("drizzle/0015_sample_reports_v2.sql"), "utf8").split("--> statement-breakpoint")) await sql.unsafe(statement);
+    expect((await getReport(ctx, report.id)).document).toEqual(report.document);
   });
 
   it("restores the premade reports when the sample farm is reset", async () => {

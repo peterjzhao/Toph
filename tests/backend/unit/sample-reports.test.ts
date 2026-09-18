@@ -1,25 +1,43 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { reportKinds } from "@/contracts/reports";
+import { REPORT_DOCUMENT_VERSION, reportKinds } from "@/contracts/reports";
 import { INITIAL_ROWS, recordId } from "@/server/db/initial-data";
 import { SAMPLE_REPORTS } from "@/server/db/sample-reports";
+import { countMissing } from "@/server/reports/assemble";
 import { normalizeForQuote } from "@/server/reports/detect";
 
-const migration = readFileSync(path.resolve("drizzle/0014_farm_reports.sql"), "utf8");
+const journal: { entries: { tag: string }[] } = JSON.parse(readFileSync(path.resolve("drizzle/meta/_journal.json"), "utf8"));
+const migrations = journal.entries.map(entry => readFileSync(path.resolve(`drizzle/${entry.tag}.sql`), "utf8"));
 
-test("migration 0014 inserts exactly the frozen sample reports", () => {
-  const documents = [...migration.matchAll(/\$report\$([\s\S]*?)\$report\$/g)].map(match => JSON.parse(match[1]));
-  expect(documents).toEqual(SAMPLE_REPORTS.map(report => report.document));
-  for (const report of SAMPLE_REPORTS) {
-    expect(migration).toContain(`SELECT '${report.id}', f."id", '${report.kind}', '${report.name.replaceAll("'", "''")}', '${report.from}', '${report.to}'`);
+test("the migrations, applied in order, leave exactly the frozen sample reports", () => {
+  // 0014 inserts the first version; later migrations update documents by ID.
+  const stored = new Map<string, unknown>();
+  for (const statement of migrations.flatMap(sql => sql.split("--> statement-breakpoint"))) {
+    const document = /\$report\$([\s\S]*?)\$report\$/.exec(statement)?.[1];
+    const id = /'(80000000-[0-9a-f-]+)'/.exec(statement)?.[1];
+    if (document && id) stored.set(id, JSON.parse(document));
   }
-  expect(migration).toMatch(/WHERE f\."id" = '00000000-0000-4000-8000-000000000001'\s+ON CONFLICT \("id"\) DO NOTHING;/);
+  expect(Object.fromEntries(stored)).toEqual(Object.fromEntries(SAMPLE_REPORTS.map(report => [report.id, report.document])));
+  const insert = migrations.find(sql => sql.includes('CREATE TABLE "toph"."farm_reports"'))!;
+  for (const report of SAMPLE_REPORTS) {
+    expect(insert).toContain(`SELECT '${report.id}', f."id", '${report.kind}', '${report.name.replaceAll("'", "''")}', '${report.from}', '${report.to}'`);
+  }
+  expect(insert).toMatch(/WHERE f\."id" = '00000000-0000-4000-8000-000000000001'\s+ON CONFLICT \("id"\) DO NOTHING;/);
 });
 
-test("Bays Ranch has one premade April report of each kind", () => {
+test("the saved detections still match the Bays Ranch logs they came from", () => {
+  const saved: { output: { logs: { logId: string; facts: { quote: string }[] }[] } } = JSON.parse(readFileSync(path.resolve("src/server/db/sample-report-facts.json"), "utf8"));
+  const notes = new Map(INITIAL_ROWS.map(row => [recordId("workLog", row.n), normalizeForQuote(row.summary)]));
+  for (const entry of saved.output.logs) for (const fact of entry.facts) expect(notes.get(entry.logId)).toContain(normalizeForQuote(fact.quote));
+});
+
+test("Bays Ranch has one premade April report of each kind, with every blank marked", () => {
   expect(SAMPLE_REPORTS.map(report => report.kind)).toEqual([...reportKinds]);
   for (const report of SAMPLE_REPORTS) {
+    expect(report.document.version).toBe(REPORT_DOCUMENT_VERSION);
+    expect(report.document.readiness.missing).toBe(countMissing(report.document.header, report.document.sections));
+    expect(JSON.stringify(report.document)).not.toContain("·");
     expect(report.document.kind).toBe(report.kind);
     expect(report.document.period).toEqual({ from: "2026-04-01", to: "2026-04-30" });
     expect(report.document.farm.name).toBe("Bays Ranch");

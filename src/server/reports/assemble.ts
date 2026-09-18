@@ -2,12 +2,13 @@
  * Builds each report's frozen document from logs and their facts.
  *
  * Pure and deterministic, so it is tested without a model. Each builder follows its official
- * record (reportCatalog[kind].sourceUrl). A required value no log states is null and becomes a
- * gap. A value is computed only when every input to the computation is stated.
+ * record (reportCatalog[kind].sourceUrl). A required value no log states is null, carries a
+ * `missing` note saying where it would come from, and becomes a gap. A value is computed only
+ * when every input to the computation is stated.
  */
 import {
   REPORT_DOCUMENT_VERSION, reportCatalog,
-  type ReportCell, type ReportDocument, type ReportFactKey, type ReportGap, type ReportHeaderField, type ReportKind, type ReportRow, type ReportSection,
+  type ReportCell, type ReportDocument, type ReportFactKey, type ReportGap, type ReportHeaderField, type ReportKind, type ReportMissing, type ReportRow, type ReportSection,
 } from "@/contracts/reports";
 
 export type ReportFacts = Partial<Record<ReportFactKey, ReportCell>>;
@@ -77,7 +78,8 @@ const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); re
 const daysBetween = (from: string, to: string) => Math.round((asDate(to).getTime() - asDate(from).getTime()) / 86_400_000);
 const lastDayOfMonth = (iso: string) => { const d = asDate(iso); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10); };
 const isWholeMonth = (from: string, to: string) => from.endsWith("-01") && to === lastDayOfMonth(from);
-export const periodLabel = (from: string, to: string) => isWholeMonth(from, to) ? monthFormat.format(asDate(from)) : `${dayLabel(from)} – ${dayLabel(to)}`;
+const isWholeYear = (from: string, to: string) => from.endsWith("-01-01") && to === `${from.slice(0, 4)}-12-31`;
+export const periodLabel = (from: string, to: string) => isWholeYear(from, to) ? from.slice(0, 4) : isWholeMonth(from, to) ? monthFormat.format(asDate(from)) : `${dayLabel(from)} – ${dayLabel(to)}`;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 const said = (value: string | number | null): ReportCell => ({ value });
@@ -86,6 +88,11 @@ const fact = (log: ReportLog, key: ReportFactKey): ReportCell => log.facts[key] 
 const quoteOf = (...cells: (ReportCell | undefined)[]) => [...new Set(cells.map(cell => cell?.quote).filter(Boolean))].join(" … ") || undefined;
 const withQuote = (value: string | number, quote: string | undefined): ReportCell => quote ? { value, quote } : { value };
 const orSaid = (cell: ReportCell, fallback: string): ReportCell => cell.value === null ? said(fallback) : cell;
+
+/** The worker's log does not say it. `what` completes "The worker's log doesn't say …". */
+const inLog = (what: string): ReportMissing => ({ from: "log", note: `The worker's log doesn't say ${what}.` });
+/** Toph does not hold it: it comes from `source`, one of the farm's own records. */
+const inRecords = (source: string, note: string): ReportMissing => ({ from: "records", source, note: `${note} Toph doesn't store it.` });
 
 /** Amount and unit together; a number without its unit is not a quantity. */
 function quantity(log: ReportLog): ReportCell {
@@ -129,19 +136,18 @@ const inDays = (cell: ReportCell): ReportCell => cell.value === null ? unknown :
 type GapBucket = { detail?: string; logIds: string[] };
 class Gaps {
   private readonly buckets = new Map<string, GapBucket>();
-  /** Marks `cell` missing from `logId` when it has no value; returns the cell for inline use. */
-  need(label: string, cell: ReportCell, logId: string): ReportCell {
-    if (cell.value === null) {
-      const bucket = this.buckets.get(label) ?? { logIds: [] };
-      if (!bucket.logIds.includes(logId)) bucket.logIds.push(logId);
-      this.buckets.set(label, bucket);
-    }
-    return cell;
+  /** A required value: when blank, it is marked where it belongs and listed as missing from `logId`. */
+  need(label: string, cell: ReportCell, logId: string, missing: ReportMissing): ReportCell {
+    if (cell.value !== null) return cell;
+    const bucket = this.buckets.get(label) ?? { logIds: [] };
+    if (!bucket.logIds.includes(logId)) bucket.logIds.push(logId);
+    this.buckets.set(label, bucket);
+    return { value: null, missing };
   }
   /** A farm-level item Toph does not hold, such as a permit number. */
-  farm(label: string, detail: string): ReportCell {
-    this.buckets.set(label, { detail, logIds: [] });
-    return unknown;
+  farm(label: string, missing: ReportMissing): ReportCell {
+    this.buckets.set(label, { detail: missing.note, logIds: [] });
+    return { value: null, missing };
   }
   /** `totals` gives, per label, how many records needed it. */
   list(noun: string, totals: ReadonlyMap<string, number>): ReportGap[] {
@@ -155,7 +161,6 @@ class Gaps {
 
 type Built = { header: ReportHeaderField[]; sections: ReportSection[]; gaps: ReportGap[]; count: number; noun: string };
 const row = (logIds: string[], cells: ReportCell[]): ReportRow => ({ cells, logIds });
-const NOT_ON_FILE = "Not on file in Toph. Add it before filing.";
 const everyLabel = (labels: readonly string[], count: number) => new Map(labels.map(label => [label, count]));
 
 function priorApplications(input: AssembleInput, harvest: ReportLog): ReportLog[] {
@@ -173,22 +178,22 @@ function pesticideUse(input: AssembleInput): Built {
   const due = new Date(Date.UTC(Number(to.slice(0, 4)), Number(to.slice(5, 7)), 10)).toISOString().slice(0, 10);
   const header: ReportHeaderField[] = [
     { label: "Operator of the property", cell: said(input.farm.name) },
-    { label: "Operator ID number (OIN)", cell: gaps.farm("Operator ID number (OIN)", `Issued by the County Agricultural Commissioner. ${NOT_ON_FILE}`) },
-    { label: "County", cell: gaps.farm("County", NOT_ON_FILE) },
+    { label: "Operator ID number (OIN)", cell: gaps.farm("Operator ID number (OIN)", inRecords("county permit", "Issued by the County Agricultural Commissioner.")) },
+    { label: "County", cell: gaps.farm("County", inRecords("your records", "The county where the work was done.")) },
     { label: oneMonth ? "Month of application" : "Period", cell: said(periodLabel(from, to)) },
     { label: "Due to the county", cell: said(oneMonth ? longDayFormat.format(asDate(due)) : "The 10th of the month after each month of use") },
   ];
   const rows = apps.map(log => row([log.id], [
     said(`${dayLabel(log.date)}, ${clock(log.end)}`),
     said(log.field),
-    gaps.need("Site ID number", unknown, log.id),
-    gaps.need("Commodity treated", commodity(log), log.id),
-    gaps.need("Acres treated", area(log), log.id),
-    gaps.need("Acres planted", unknown, log.id),
-    gaps.need("Product name", fact(log, "product"), log.id),
-    gaps.need("EPA or California registration number", fact(log, "epaRegNumber"), log.id),
-    gaps.need("Amount of undiluted product", quantity(log), log.id),
-    gaps.need("Application method", purMethod(log), log.id),
+    gaps.need("Site ID number", unknown, log.id, inRecords("county permit", "The field's site ID is on your restricted materials permit or operator ID.")),
+    gaps.need("Commodity treated", commodity(log), log.id, inLog("what crop was treated")),
+    gaps.need("Acres treated", area(log), log.id, inLog("how many acres were treated")),
+    gaps.need("Acres planted", unknown, log.id, inRecords("field records", "Planted acres at the site come from your field records.")),
+    gaps.need("Product name", fact(log, "product"), log.id, inLog("which product was applied")),
+    gaps.need("EPA or California registration number", fact(log, "epaRegNumber"), log.id, inLog("the product's EPA or California registration number")),
+    gaps.need("Amount of undiluted product", quantity(log), log.id, inLog("how much undiluted product was used, with a unit")),
+    gaps.need("Application method", purMethod(log), log.id, inLog("how it was applied (air, ground or other)")),
     log.facts.pestControlBusiness?.value ? withQuote(`${log.facts.pestControlBusiness.value} (pest control business)`, log.facts.pestControlBusiness.quote) : said(log.employee),
   ]));
   const byBusiness = apps.some(log => log.facts.pestControlBusiness?.value);
@@ -213,11 +218,11 @@ function foodSafety(input: AssembleInput): Built {
   const irrigations = input.logs.filter(log => log.activity === "Irrigation");
   const applicationRows = inputs.map(log => row([log.id], [
     said(dayLabel(log.date)), said(log.field),
-    gaps.need("Crop", commodity(log), log.id),
-    gaps.need("Material applied", fact(log, "product"), log.id),
-    gaps.need("Application rate", rate(log), log.id),
-    gaps.need("Application method", fact(log, "applicationMethod"), log.id),
-    PESTICIDE_ACTIVITIES.has(log.activity) ? gaps.need("Pre-harvest interval", inDays(fact(log, "preHarvestDays")), log.id) : said("Not applicable"),
+    gaps.need("Crop", commodity(log), log.id, inLog("what crop it was")),
+    gaps.need("Material applied", fact(log, "product"), log.id, inLog("what material was applied")),
+    gaps.need("Application rate", rate(log), log.id, inLog("the application rate")),
+    gaps.need("Application method", fact(log, "applicationMethod"), log.id, inLog("how it was applied")),
+    PESTICIDE_ACTIVITIES.has(log.activity) ? gaps.need("Pre-harvest interval", inDays(fact(log, "preHarvestDays")), log.id, inLog("the product's pre-harvest interval")) : said("Not applicable"),
     said(log.employee),
   ]));
   const harvestRows = harvests.map(log => {
@@ -225,24 +230,24 @@ function foodSafety(input: AssembleInput): Built {
     const last = prior.at(-1);
     let check: ReportCell;
     if (!prior.length) check = said(`No pesticide application on ${log.field} in the ${LOOKBACK_DAYS} days before`);
-    else if (prior.some(app => app.facts.preHarvestDays?.value == null)) check = gaps.need("Pre-harvest interval check", unknown, log.id);
+    else if (prior.some(app => app.facts.preHarvestDays?.value == null)) check = gaps.need("Pre-harvest interval check", unknown, log.id, inLog("the pre-harvest intervals of the earlier applications on this field, so this harvest can't be checked"));
     else {
       const early = prior.filter(app => daysBetween(app.date, log.date) < Number(app.facts.preHarvestDays!.value));
       check = said(early.length ? `Not met: ${early.map(app => `the ${dayLabel(app.date)} application needs ${app.facts.preHarvestDays!.value} days`).join("; ")}` : "Met for every prior application");
     }
     return row([log.id, ...prior.map(app => app.id)], [
       said(dayLabel(log.date)), said(log.field),
-      gaps.need("Crop", commodity(log), log.id),
+      gaps.need("Crop", commodity(log), log.id, inLog("what crop was harvested")),
       last ? said(`${dayLabel(last.date)}: ${last.facts.product?.value ?? "product not recorded"}`) : said("None recorded"),
       check,
     ]);
   });
   const irrigationRows = irrigations.map(log => row([log.id], [
     said(dayLabel(log.date)), said(log.field), fact(log, "irrigationMethod"),
-    gaps.need("Irrigation water source", fact(log, "waterSource"), log.id),
+    gaps.need("Irrigation water source", fact(log, "waterSource"), log.id, inLog("where the water came from")),
   ]));
-  gaps.farm("Water test results", "Microbial test results for irrigation and spray water are not stored in Toph.");
-  gaps.farm("Worker food safety training", "Training and retraining records are not stored in Toph.");
+  const waterTests = gaps.farm("Water test results", inRecords("lab reports", "Microbial test results for irrigation and spray water come from your lab reports.")).missing;
+  const training = gaps.farm("Worker food safety training", inRecords("training records", "Training and retraining records come from your food safety program.")).missing;
   const totals = new Map<string, number>([
     ["Crop", inputs.length + harvests.length], ["Material applied", inputs.length], ["Application rate", inputs.length], ["Application method", inputs.length],
     ["Pre-harvest interval", pesticides.length], ["Pre-harvest interval check", harvests.length], ["Irrigation water source", irrigations.length],
@@ -257,8 +262,8 @@ function foodSafety(input: AssembleInput): Built {
       { title: "Chemical and fertilizer applications", columns: ["Date", "Field", "Crop", "Material", "Rate", "Method", "Pre-harvest interval", "Applied by"], rows: applicationRows, emptyText: "No applications were recorded in this period." },
       { title: "Harvests and pre-harvest intervals", note: `Each harvest is checked against pesticide applications on the same field in the ${LOOKBACK_DAYS} days before it.`, columns: ["Harvest date", "Field", "Crop", "Last application on field", "Interval check"], rows: harvestRows, emptyText: "No harvests were recorded in this period." },
       { title: "Irrigation water", columns: ["Date", "Field", "Method", "Water source"], rows: irrigationRows, emptyText: "No irrigation was recorded in this period." },
-      { title: "Water tests", columns: ["Date", "Source", "Result"], rows: [], emptyText: "Toph does not store water test results." },
-      { title: "Worker food safety training", columns: ["Date", "Worker", "Topic"], rows: [], emptyText: "Toph does not store training records." },
+      { title: "Water tests", columns: ["Date", "Source", "Result"], rows: [], emptyText: "Add your water test results here.", missing: waterTests },
+      { title: "Worker food safety training", columns: ["Date", "Worker", "Topic"], rows: [], emptyText: "Add your training records here.", missing: training },
     ],
     gaps: gaps.list("record", totals),
   };
@@ -269,16 +274,16 @@ function harvestTraceability(input: AssembleInput): Built {
   const harvests = input.logs.filter(log => log.activity === "Harvesting");
   const header: ReportHeaderField[] = [
     { label: "Business name", cell: said(input.farm.name) },
-    { label: "Farm location", cell: gaps.farm("Farm location (address)", `The street address of the farm where the food was harvested. ${NOT_ON_FILE}`) },
-    { label: "Phone number", cell: gaps.farm("Phone number", `The harvester's business phone, given to the initial packer. ${NOT_ON_FILE}`) },
+    { label: "Farm location", cell: gaps.farm("Farm location (address)", inRecords("your records", "The street address of the farm where the food was harvested.")) },
+    { label: "Phone number", cell: gaps.farm("Phone number", inRecords("your records", "Your business phone, given to the initial packer.")) },
   ];
   const kdeRows = harvests.map(log => row([log.id], [
-    gaps.need("Commodity and variety", commodity(log), log.id),
-    gaps.need("Quantity and unit of measure", quantity(log), log.id),
+    gaps.need("Commodity and variety", commodity(log), log.id, inLog("what was harvested")),
+    gaps.need("Quantity and unit of measure", quantity(log), log.id, inLog("how much was harvested, with a unit")),
     said(input.farm.name),
     said(log.field),
     said(dayLabel(log.date)),
-    gaps.need("Immediate subsequent recipient", fact(log, "destination"), log.id),
+    gaps.need("Immediate subsequent recipient", fact(log, "destination"), log.id, inLog("who received the harvest (a buyer, packer or cooler)")),
     said(`Toph harvest log ${log.id}`),
     orSaid(fact(log, "lotNumber"), "Not required at harvest"),
   ]));
@@ -298,6 +303,13 @@ function harvestTraceability(input: AssembleInput): Built {
     gaps: gaps.list("harvest", everyLabel(labels, harvests.length)),
   };
 }
+
+const PAYROLL: readonly [label: string, note: string][] = [
+  ["Hours offered", "Hours offered each day, split at the three-fourths guarantee, come from payroll."],
+  ["Rate of pay", "Hourly and piece rates come from payroll."],
+  ["Earnings", "Total earnings for the pay period come from payroll."],
+  ["Deductions", "Each deduction and its reason come from payroll."],
+];
 
 function laborHours(input: AssembleInput): Built {
   const gaps = new Gaps();
@@ -325,28 +337,23 @@ function laborHours(input: AssembleInput): Built {
     worker.logIds.push(log.id);
     workers.set(log.employee, worker);
   }
-  const totalRows = [...workers].sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, worker]) => row(worker.logIds, [said(name), said(worker.days.size), said(Math.round(worker.hours * 100) / 100)]));
-  const payroll = "Not tracked in Toph. Add it from payroll.";
+  const totalRows = [...workers].sort(([a], [b]) => a.localeCompare(b)).map(([name, worker]) => row(worker.logIds, [
+    said(name), said(worker.days.size), said(Math.round(worker.hours * 100) / 100),
+    ...PAYROLL.map(([label, note]) => gaps.need(label, unknown, worker.logIds[0], inRecords("payroll", note))),
+  ]));
   const header: ReportHeaderField[] = [
     { label: "Employer", cell: said(input.farm.name) },
-    { label: "Employer address", cell: gaps.farm("Employer address", NOT_ON_FILE) },
-    { label: "Employer FEIN", cell: gaps.farm("Employer FEIN", NOT_ON_FILE) },
+    { label: "Employer address", cell: gaps.farm("Employer address", inRecords("your records", "Your business address.")) },
+    { label: "Employer FEIN", cell: gaps.farm("Employer FEIN", inRecords("tax records", "Your federal employer identification number.")) },
     { label: "Pay period", cell: said(periodLabel(input.period.from, input.period.to)) },
   ];
   return {
     header, count: dayRows.length, noun: "worker-day",
     sections: [
       { title: "Hours actually worked each day", note: "Recorded work time from activity logs. Time a worker spent without logging is not counted.", columns: ["Date", "Worker", "Began", "Ended", "Hours worked", "Work performed"], rows: dayRows, emptyText: "No work was recorded in this period." },
-      { title: "Totals by worker", columns: ["Worker", "Days worked", "Hours worked"], rows: totalRows, emptyText: "No work was recorded in this period." },
+      { title: "Pay period totals by worker", columns: ["Worker", "Days worked", "Hours worked", ...PAYROLL.map(([label]) => label)], rows: totalRows, emptyText: "No work was recorded in this period." },
     ],
-    gaps: [
-      ...gaps.list("worker-day", new Map()),
-      { label: "Hours offered", detail: `Hours offered each day, split at the three-fourths guarantee. ${payroll}`, logIds: [] },
-      { label: "Rate of pay", detail: `Hourly and piece rates. ${payroll}`, logIds: [] },
-      { label: "Earnings", detail: `Total earnings for the pay period. ${payroll}`, logIds: [] },
-      { label: "Deductions", detail: `Each deduction and its reason. ${payroll}`, logIds: [] },
-    ],
+    gaps: gaps.list("worker", new Map(PAYROLL.map(([label]) => [label, workers.size]))),
   };
 }
 
@@ -357,24 +364,24 @@ function organic(input: AssembleInput): Built {
   const harvests = input.logs.filter(log => log.activity === "Harvesting");
   const inputRows = inputs.map(log => row([log.id], [
     said(dayLabel(log.date)), said(log.field),
-    gaps.need("Material applied", fact(log, "product"), log.id),
-    gaps.need("Amount or rate", rate(log).value !== null ? rate(log) : quantity(log), log.id),
+    gaps.need("Material applied", fact(log, "product"), log.id, inLog("what material was applied")),
+    gaps.need("Amount or rate", rate(log).value !== null ? rate(log) : quantity(log), log.id, inLog("how much was applied")),
     fact(log, "equipmentUsed").value !== null ? fact(log, "equipmentUsed") : fact(log, "applicationMethod"),
     said(log.employee),
     fact(log, "weather"),
-    gaps.need("Organic approval of each input", unknown, log.id),
+    gaps.need("Organic approval of each input", unknown, log.id, inRecords("certifier", "Whether the input is allowed for organic use comes from your certifier's list (for example, OMRI).")),
   ]));
   const plantingRows = plantings.map(log => row([log.id], [
     said(dayLabel(log.date)), said(log.field),
-    gaps.need("Seed or planting stock", commodity(log), log.id),
+    gaps.need("Seed or planting stock", commodity(log), log.id, inLog("what was planted or seeded")),
     quantity(log),
-    gaps.need("Organic status of seed", unknown, log.id),
+    gaps.need("Organic status of seed", unknown, log.id, inRecords("seed receipts", "Whether the seed or stock was organic comes from your purchase records.")),
   ]));
   const harvestRows = harvests.map(log => row([log.id], [
     said(dayLabel(log.date)), said(log.field),
-    gaps.need("Harvested crop", commodity(log), log.id),
-    gaps.need("Harvested quantity", quantity(log), log.id),
-    gaps.need("Where the harvest went", fact(log, "destination"), log.id),
+    gaps.need("Harvested crop", commodity(log), log.id, inLog("what was harvested")),
+    gaps.need("Harvested quantity", quantity(log), log.id, inLog("how much was harvested, with a unit")),
+    gaps.need("Where the harvest went", fact(log, "destination"), log.id, inLog("where the harvest was sold or moved to")),
   ]));
   const activityRows = input.logs.map(log => row([log.id], [
     said(dayLabel(log.date)), said(log.field), said(log.activity), said(log.employee), said(`${clock(log.start)}–${clock(log.end)}`),
@@ -404,24 +411,25 @@ function organic(input: AssembleInput): Built {
 function acreage(input: AssembleInput): Built {
   const gaps = new Gaps();
   const plantings = input.logs.filter(log => PLANTING_ACTIVITIES.has(log.activity));
+  const fsa = inRecords("FSA", "Tract and field numbers come from your FSA farm records.");
   const rows = plantings.map(log => {
     const irrigation = input.logs.find(other => other.activity === "Irrigation" && other.field === log.field);
     return row(irrigation ? [log.id, irrigation.id] : [log.id], [
       said(log.field),
-      gaps.need("FSA tract number", unknown, log.id),
-      gaps.need("FSA field number", unknown, log.id),
-      gaps.need("Crop", commodity(log), log.id),
-      gaps.need("Intended use", unknown, log.id),
-      gaps.need("Acres", acres(log), log.id),
-      irrigation ? said("Irrigated") : gaps.need("Irrigation practice", unknown, log.id),
+      gaps.need("FSA tract number", unknown, log.id, fsa),
+      gaps.need("FSA field number", unknown, log.id, fsa),
+      gaps.need("Crop", commodity(log), log.id, inLog("what crop was planted")),
+      gaps.need("Intended use", unknown, log.id, inRecords("FSA", "How the crop will be used (for example fresh, processing or grain) is declared to FSA.")),
+      gaps.need("Acres", acres(log), log.id, inLog("how many acres were planted")),
+      irrigation ? said("Irrigated") : gaps.need("Irrigation practice", unknown, log.id, { from: "log", note: "No irrigation log exists for this field in this period, so its practice isn't known." }),
       said(dayLabel(log.date)),
-      gaps.need("Producer share", unknown, log.id),
+      gaps.need("Producer share", unknown, log.id, inRecords("FSA", "Each producer's share comes from your FSA records.")),
     ]);
   });
   const labels = ["FSA tract number", "FSA field number", "Crop", "Intended use", "Acres", "Irrigation practice", "Producer share"];
   return {
     header: [
-      { label: "FSA farm number", cell: gaps.farm("FSA farm number", `Assigned by the county FSA office. ${NOT_ON_FILE}`) },
+      { label: "FSA farm number", cell: gaps.farm("FSA farm number", inRecords("FSA", "Assigned by your county FSA office.")) },
       { label: "Operator", cell: said(input.farm.name) },
       { label: "Crop year", cell: said(Number(input.period.to.slice(0, 4))) },
     ],
@@ -463,19 +471,19 @@ function nitrogen(input: AssembleInput): Built {
     const products = fertilizings.map(log => log.facts.product?.value).filter(value => value != null);
     return row(logs.map(log => log.id), [
       said(field),
-      gaps.need("Assessor's parcel number (APN)", unknown, anchor),
-      gaps.need("Crop", first(logs.map(commodity)), anchor),
-      gaps.need("Irrigated acres", first(irrigations.map(acres)), anchor),
-      gaps.need("Irrigation method", first(irrigations.map(log => fact(log, "irrigationMethod"))), anchor),
+      gaps.need("Assessor's parcel number (APN)", unknown, anchor, inRecords("county records", "The assessor's parcel number comes from county records.")),
+      gaps.need("Crop", first(logs.map(commodity)), anchor, inLog("what crop is grown here")),
+      gaps.need("Irrigated acres", first(irrigations.map(acres)), anchor, inLog("how many acres were irrigated")),
+      gaps.need("Irrigation method", first(irrigations.map(log => fact(log, "irrigationMethod"))), anchor, inLog("how the field was irrigated")),
       said(fertilizings.length ? `${plural(fertilizings.length, "application")}${products.length ? `: ${products.join(", ")}` : ", product not recorded"}` : "None"),
-      fertilizings.length ? gaps.need("Total nitrogen applied", totalN, anchor) : said("None recorded"),
-      gaps.need("Harvested yield", first(harvests.map(quantity)), anchor),
+      fertilizings.length ? gaps.need("Total nitrogen applied", totalN, anchor, inLog("the fertilizer amount, its grade (such as 46-0-0) and the acres covered, which nitrogen is calculated from")) : said("None recorded"),
+      gaps.need("Harvested yield", first(harvests.map(quantity)), anchor, inLog("the harvested yield, with a unit")),
     ]);
   });
   const labels = ["Assessor's parcel number (APN)", "Crop", "Irrigated acres", "Irrigation method", "Harvested yield"];
   return {
     header: [
-      { label: "Member ID", cell: gaps.farm("Coalition member ID", `Issued by your water quality coalition. ${NOT_ON_FILE}`) },
+      { label: "Member ID", cell: gaps.farm("Coalition member ID", inRecords("coalition", "Issued by your water quality coalition.")) },
       { label: "Crop year", cell: said(Number(input.period.to.slice(0, 4))) },
     ],
     count: fields.length, noun: "field",
@@ -494,15 +502,22 @@ const builders: Record<ReportKind, (input: AssembleInput) => Built> = {
   "labor-hours": laborHours, organic, acreage, nitrogen,
 };
 
+/** Every marked blank: header values, table cells, and whole sections Toph does not hold. */
+export function countMissing(header: readonly ReportHeaderField[], sections: readonly ReportSection[]): number {
+  const cells = [...header.map(field => field.cell), ...sections.flatMap(section => section.rows.flatMap(item => item.cells))];
+  return cells.filter(cell => cell.value === null && cell.missing).length + sections.filter(section => section.missing && !section.rows.length).length;
+}
+
 export function assembleReport(input: AssembleInput): ReportDocument {
   const { formTitle, authority, recipient, cadence, sourceUrl } = reportCatalog[input.kind];
   const built = builders[input.kind](input);
+  const missing = countMissing(built.header, built.sections);
   const when = `between ${dayLabel(input.period.from)} and ${dayLabel(input.period.to)}`;
   const readiness: ReportDocument["readiness"] = !built.count
-    ? { status: "no-records", message: `No ${built.noun}s recorded ${when}.` }
-    : built.gaps.length
-      ? { status: "incomplete", message: `${plural(built.count, built.noun)} found. ${plural(built.gaps.length, "required item")} ${built.gaps.length === 1 ? "is" : "are"} missing.` }
-      : { status: "ready", message: `Every required item is recorded for ${plural(built.count, built.noun)}.` };
+    ? { status: "no-records", message: `No ${built.noun}s recorded ${when}.`, missing }
+    : missing
+      ? { status: "incomplete", message: `${plural(built.count, built.noun)} found. ${plural(missing, "value")} ${missing === 1 ? "is" : "are"} missing.`, missing }
+      : { status: "ready", message: `Every required value is recorded for ${plural(built.count, built.noun)}.`, missing };
   return {
     version: REPORT_DOCUMENT_VERSION, kind: input.kind,
     form: { formTitle, authority, recipient, cadence, sourceUrl },
