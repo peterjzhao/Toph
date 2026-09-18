@@ -153,8 +153,9 @@ function LaunchScreen({ status }: { status: string }) {
 const styles = StyleSheet.create({
   launch: { flex: 1, alignItems: "center", backgroundColor: colors.white },
   launchHalf: { flex: 1, alignSelf: "stretch", alignItems: "center", paddingHorizontal: spacing.xl },
-  // The expo-splash-screen plugin in app.json draws this 677×338 asset 150 points wide.
-  wordmark: { width: 150, aspectRatio: 677 / 338 },
+  // The expo-splash-screen plugin in app.json draws this 677×338 asset 150 points wide. Both sides
+  // are set because Image otherwise keeps the asset's own height and Yoga derives the width from it.
+  wordmark: { width: 150, height: 150 * 338 / 677 },
   status: { marginTop: spacing.sm, textAlign: "center" },
   page: { flex: 1, backgroundColor: colors.white },
   content: { flexGrow: 1, paddingHorizontal: spacing.xl, gap: 48 },
