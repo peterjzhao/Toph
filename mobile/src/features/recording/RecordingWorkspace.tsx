@@ -329,6 +329,11 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   // The two ways to start a log. Call mode starts an empty log, so both are offered only while there is nothing to lose.
   const atHome = recorder.status === "idle" && !handsFreeOpen && clips.length === 0 && !editing;
   const covered = accountOpen || handsFreeOpen;
+  // The call's secret and the audio route are prepared while the worker is still choosing, so Call mode
+  // starts on an SDP exchange instead of a round trip through Toph and OpenAI. One mint per visit home:
+  // a secret is good for two minutes, and the button refreshes it on press-in if it has gone stale.
+  const { prewarm } = handsFree;
+  useEffect(() => { if (atHome) prewarm(); }, [atHome, prewarm]);
 
   return <View style={styles.app}>
     <View style={styles.appContent} pointerEvents={covered ? "none" : "auto"} accessibilityElementsHidden={covered} importantForAccessibility={covered ? "no-hide-descendants" : "auto"}>
@@ -363,7 +368,7 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
                 <View style={[styles.modeIcon, styles.modeIconRecord]}><Mic size={26} color={colors.white} strokeWidth={1.7} /></View>
                 <View><Text style={[styles.modeTitle, { color: colors.white }]}>Record</Text><Text style={[styles.modeText, { color: colors.white }]}>Say what you did, then check it on screen.</Text></View>
               </Press>
-              <Press style={[styles.mode, styles.modeCall]} onPress={() => void handsFree.start()} accessibilityRole="button" accessibilityLabel="Start call mode" accessibilityHint="Talk through a log and save it by voice, without touching the screen">
+              <Press style={[styles.mode, styles.modeCall]} onPressIn={prewarm} onPress={() => void handsFree.start()} accessibilityRole="button" accessibilityLabel="Start call mode" accessibilityHint="Talk through a log and save it by voice, without touching the screen">
                 <View style={[styles.modeIcon, styles.modeIconCall]}><Phone size={24} color={colors.white} strokeWidth={1.7} /></View>
                 <View><Text style={styles.modeTitle}>Call mode</Text><Text style={styles.modeText}>Hands-free. Toph asks, you answer, it saves.</Text></View>
               </Press>

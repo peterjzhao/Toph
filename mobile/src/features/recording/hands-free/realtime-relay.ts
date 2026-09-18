@@ -115,12 +115,14 @@ export function createRealtimeRelay(deps: RelayDeps) {
   return {
     transcripts,
     turn: () => turn,
-    /** The data channel opened: have the assistant greet the worker, once. */
+    /**
+     * The data channel opened. No greeting is requested: composing and speaking one costs a full model
+     * turn before the worker may say anything, and semantic VAD answers whatever they open with anyway.
+     */
     open() {
       if (opened || closed) return;
       opened = true;
-      deps.send({ type: "response.create" });
-      deps.onPhase("thinking");
+      deps.onPhase("listening");
     },
     /** One data-channel message, as the JSON string or the parsed event. */
     handle(message: unknown) {
@@ -143,7 +145,8 @@ export function createRealtimeRelay(deps: RelayDeps) {
           if (typeof event.transcript === "string" && event.transcript.trim()) place(String(event.item_id ?? `assistant-${lines.length}`), "assistant").text = event.transcript.trim();
           break;
         case "input_audio_buffer.speech_started": deps.onPhase("listening"); break;
-        case "input_audio_buffer.speech_stopped": deps.onPhase("thinking"); break;
+        // speech_stopped is deliberately not a phase. Nothing computes between the end of a sentence and
+        // the reply, the microphone stays open for a barge-in, and labelling the gap "Thinking" reads as stuck.
         case "output_audio_buffer.started": deps.onPhase("speaking"); break;
         case "response.output_audio_transcript.delta":
         case "response.audio_transcript.delta": deps.onPhase("speaking"); break;

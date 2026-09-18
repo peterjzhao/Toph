@@ -25,10 +25,11 @@ const assistant = (id: string) => ({ type: "conversation.item.added", item: { id
 const heard = (item_id: string, transcript: string) => ({ type: "conversation.item.input_audio_transcription.completed", item_id, transcript });
 const said = (item_id: string, transcript: string) => ({ type: "response.output_audio_transcript.done", item_id, transcript });
 
-test("greets once when the channel opens", () => {
-  const { relay, sent } = harness();
+test("opens straight into listening, spending no model turn on a greeting", () => {
+  const { relay, deps, sent } = harness();
   relay.open(); relay.open();
-  expect(sent).toEqual([{ type: "response.create" }]);
+  expect(sent).toEqual([]);
+  expect(jest.mocked(deps.onPhase).mock.calls.map(call => call[0])).toEqual(["listening"]);
 });
 
 test("accumulates labelled lines in conversation order and injects the state note without a response", async () => {
@@ -121,7 +122,7 @@ test("caps the number of worker turns and reports phases from the audio events",
   relay.handle({ type: "input_audio_buffer.speech_stopped" });
   relay.handle({ type: "output_audio_buffer.started" });
   relay.handle({ type: "output_audio_buffer.stopped" });
-  expect(jest.mocked(deps.onPhase).mock.calls.map(call => call[0])).toEqual(["listening", "thinking", "speaking", "listening"]);
+  expect(jest.mocked(deps.onPhase).mock.calls.map(call => call[0])).toEqual(["listening", "speaking", "listening"]);
   relay.handle(heard("u1", "One.")); relay.handle(heard("u2", "Two.")); relay.handle(heard("u3", "Three."));
   expect(deps.onEnd).toHaveBeenCalledWith("limit", undefined);
   expect(deps.postState).toHaveBeenCalledTimes(2);

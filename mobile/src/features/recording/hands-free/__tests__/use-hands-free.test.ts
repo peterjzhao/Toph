@@ -13,7 +13,8 @@ const fields: ExtractedLogFields = { ...emptyExtraction, activity: "Spraying" };
 const ask: VoiceGuidance = { status: "needs_fields", prompt: "What time did you finish?", missingFields: ["endTime"] };
 const readBack: VoiceGuidance = { status: "ready_to_confirm", prompt: "Spraying in Field A. Say save, or tell me what to change.", missingFields: [] };
 const result = (voice: VoiceGuidance | null, text = "I sprayed field A."): TranscriptionResult => ({ text, transcript: text, fields, missingFields: [], extractionError: null, voice });
-const session: VoiceSession = { clientSecret: "ek_test", expiresAt: "2026-09-17T00:02:00.000Z", model: "gpt-realtime-2.1", connectUrl: "https://api.openai.com/v1/realtime/calls", dataChannel: "oai-events", toolName: "check_log", maxSessionSeconds: 300 };
+// Minted relative to now: a warmed secret is only handed to a call while it still has life left.
+const session: VoiceSession = { clientSecret: "ek_test", expiresAt: new Date(Date.now() + 120_000).toISOString(), model: "gpt-realtime-2.1", connectUrl: "https://api.openai.com/v1/realtime/calls", dataChannel: "oai-events", toolName: "check_log", maxSessionSeconds: 300 };
 const audio: RecordingAudio = { uri: "file:///cache/answer.m4a", mimeType: "audio/mp4", extension: "m4a" };
 const mounted: { unmount(): unknown }[] = [];
 async function mount(options: HandsFreeOptions) {
@@ -117,7 +118,7 @@ test("realtime: relays state and the tool call, hangs up on approval, then saves
   expect(adapters.prepareCallAudio).toHaveBeenCalled();
   expect(recorder.start).not.toHaveBeenCalled();
   await act(async () => { rtc.callbacks().onOpen(); });
-  expect(rtc.sent).toEqual([{ type: "response.create" }]);
+  expect(rtc.sent).toEqual([]);
   expect(hook.result.current.transport).toBe("realtime");
 
   await act(async () => {
@@ -267,4 +268,33 @@ test("a data channel that never opens falls back to the turn-based loop", async 
     expect(said).toEqual([spoken.opening]);
     expect(hook.result.current.transport).toBe("turns");
   } finally { jest.useRealTimers(); }
+});
+
+test("a session warmed before the tap is used for the call instead of minting on the tap", async () => {
+  const rtc = fakeCall();
+  const { adapters, options } = setup({ connect: rtc.connect });
+  const hook = await mount(options);
+  await act(async () => { hook.result.current.prewarm(); hook.result.current.prewarm(); await flush(); });
+  expect(adapters.api.session).toHaveBeenCalledTimes(1);
+  // The audio route is configured while the worker is still deciding, not on the tap.
+  expect(adapters.prepareCallAudio).toHaveBeenCalled();
+
+  await act(async () => { await hook.result.current.start(); });
+  expect(adapters.api.session).toHaveBeenCalledTimes(1);
+  await act(async () => { rtc.callbacks().onOpen(); });
+  expect(hook.result.current).toMatchObject({ transport: "realtime", phase: "listening" });
+});
+
+test("a failed prewarm still lets the tap start a call, by minting a fresh session", async () => {
+  const rtc = fakeCall();
+  let minted = 0;
+  const { adapters, options } = setup({
+    connect: rtc.connect,
+    session: async () => { minted += 1; if (minted === 1) throw new Error("Voice conversation is busy."); return session; },
+  });
+  const hook = await mount(options);
+  await act(async () => { hook.result.current.prewarm(); await flush(); });
+  await act(async () => { await hook.result.current.start(); rtc.callbacks().onOpen(); });
+  expect(adapters.api.session).toHaveBeenCalledTimes(2);
+  expect(hook.result.current).toMatchObject({ transport: "realtime", phase: "listening" });
 });

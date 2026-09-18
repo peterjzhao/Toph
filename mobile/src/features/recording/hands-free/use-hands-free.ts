@@ -10,6 +10,7 @@ import type { VoiceGuidance, VoiceSession } from "@toph/contracts/voice";
 import type { RecordingClip } from "../local-drafts";
 import type { useRecorder } from "../use-recorder";
 import { idleState, isLive, reduceHandsFree, type HandsFreePhase } from "./machine";
+import { createSessionWarmer, type SessionWarmer } from "./prewarm";
 import { createRealtimeRelay, type RelayEnd } from "./realtime-relay";
 import { createSilenceDetector, type SilenceOptions, type SilenceVerdict } from "./silence";
 import type { Speaker } from "./speaker";
@@ -57,7 +58,7 @@ type PendingClip = { resolve(clip: RecordingClip | null): void; reject(cause: Er
 /** The events channel OpenAI expects; created before the session arrives so the offer can be built early. */
 const realtimeDataChannel = "oai-events";
 let nativeAdapters: HandsFreeAdapters | null = null;
-/** Required on first use: the audio, haptics and WebRTC modules are not needed to draw the switch. */
+/** Loaded on the first session, or earlier by `prewarm`; drawing the switch alone needs no native module. */
 function defaultAdapters(): HandsFreeAdapters {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   nativeAdapters ??= (require("./native-adapters") as typeof import("./native-adapters")).createNativeAdapters();
@@ -68,6 +69,7 @@ export function useHandsFree(options: HandsFreeOptions) {
   const latest = useRef(options); latest.current = options;
   const [state, dispatch] = useReducer(reduceHandsFree, idleState);
   const run = useRef<Run | null>(null);
+  const warmer = useRef<SessionWarmer | null>(null);
   const pending = useRef<PendingClip | null>(null);
   const banner = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adapters = useCallback((): HandsFreeAdapters => {
@@ -193,6 +195,28 @@ export function useHandsFree(options: HandsFreeOptions) {
     } catch (cause) { review(cause instanceof Error ? cause.message : "The log could not be saved."); }
   }, [adapters, release]);
 
+  /** One warmer per mounted screen; the secret it holds is dropped when the screen goes away. */
+  const sessionWarmer = useCallback(() => {
+    warmer.current ??= createSessionWarmer({ session: () => adapters().api.session(latest.current.context) });
+    return warmer.current;
+  }, [adapters]);
+
+  /**
+   * Called while the capture screen is showing. Mints the call's secret and sets the audio route ahead of
+   * the tap, so starting a call does not wait on Toph and OpenAI first. Loads the native audio modules.
+   */
+  const prewarm = useCallback(() => {
+    if (run.current && !run.current.stopped) return;
+    // Purely an optimisation: a build without these native modules, or a mint that is refused, must not
+    // reach the screen. The tap runs the same code again and reports whatever it hits properly.
+    try {
+      // Turn-based mode has no session to warm, and Expo Go has no WebRTC to warm it for.
+      if (!adapters().connect) return;
+      sessionWarmer().warm();
+      void adapters().prepareCallAudio();
+    } catch { /* the capture screen still draws, and Call mode still works */ }
+  }, [adapters, sessionWarmer]);
+
   const realtime = useCallback(async (current: Run, connect: ConnectRealtime) => {
     const { api, prepareCallAudio } = adapters();
     let failing = false;
@@ -200,10 +224,12 @@ export function useHandsFree(options: HandsFreeOptions) {
     let open = false, relay: ReturnType<typeof createRealtimeRelay> | null = null;
     // Covers the session request, the microphone, the offer and the SDP exchange as well as the channel.
     current.timers.push(setTimeout(() => { if (!open) fail(); }, latest.current.connectTimeoutMs ?? 15_000));
-    // The session is minted while the microphone opens and the offer is built; only the SDP exchange needs both.
-    const pendingSession = adapters().api.session(latest.current.context);
+    // A secret warmed while the capture screen was open turns the tap into an SDP exchange and nothing
+    // more. Without one it is minted here, alongside the microphone and the offer as before.
+    const pendingSession = sessionWarmer().take() ?? api.session(latest.current.context);
     pendingSession.catch(() => undefined);
-    await prepareCallAudio();
+    // The audio route does not gate the offer, and prewarming has usually set it already.
+    void prepareCallAudio();
     const connecting = connect(realtimeDataChannel, {
       onOpen: () => {
         open = true; dispatch({ type: "transport", transport: "realtime" }); relay?.open();
@@ -245,7 +271,7 @@ export function useHandsFree(options: HandsFreeOptions) {
     if (open) relay.open();
     // A realtime call is billed while it is open.
     current.timers.push(setTimeout(() => finish(current, "review", "The voice conversation reached its time limit."), Math.max(30, session.maxSessionSeconds || 300) * 1000));
-  }, [adapters, fallBack, finish, saveAfterCall]);
+  }, [adapters, fallBack, finish, saveAfterCall, sessionWarmer]);
 
   const start = useCallback(async () => {
     if (run.current && !run.current.stopped) return;
@@ -278,11 +304,11 @@ export function useHandsFree(options: HandsFreeOptions) {
     // An open call keeps costing money and the microphone must not outlive the screen.
     // "inactive" is also reported while the microphone permission prompt is showing, so only "background" ends it.
     const listener = AppState.addEventListener("change", next => { if (next === "background" && run.current) finish(run.current, "idle"); });
-    return () => { listener.remove(); release(run.current); if (banner.current) clearTimeout(banner.current); };
+    return () => { listener.remove(); release(run.current); warmer.current?.clear(); if (banner.current) clearTimeout(banner.current); };
   }, [finish, release]);
 
   const phase = state.phase;
   useEffect(() => { if (phase !== "idle") adapters().haptic(phase); }, [adapters, phase]);
 
-  return { ...state, live: isLive(state.phase), start, stop };
+  return { ...state, live: isLive(state.phase), start, stop, prewarm };
 }

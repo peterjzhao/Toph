@@ -30,9 +30,9 @@ const audio: RecordingAudio = { uri: "file:///cache/spoken.m4a", extension: "m4a
 const mockSubmit = jest.fn(async (draft: { id: string }) => ({ clientDraftId: draft.id, logId: "40000000-0000-4000-8000-000000000001", savedAt: "2026-09-17T10:00:00.000Z" }));
 const mockSaid: string[] = [];
 const mockAdapters = {
-  api: { confirm: jest.fn(async () => ({ transcript: "Save", intent: "save" })) },
+  api: { confirm: jest.fn(async () => ({ transcript: "Save", intent: "save" })), session: jest.fn() },
   speaker: { speak: jest.fn(async (text: string) => { mockSaid.push(text); }), stop: jest.fn(async () => {}) },
-  connect: null, extract: jest.fn(), requestMicrophone: jest.fn(async () => true), prepareCallAudio: jest.fn(), haptic: jest.fn(), keepAwake: jest.fn(),
+  connect: null as null | jest.Mock, extract: jest.fn(), requestMicrophone: jest.fn(async () => true), prepareCallAudio: jest.fn(), haptic: jest.fn(), keepAwake: jest.fn(),
 };
 const mockRecorder = {
   status: "idle" as RecorderStatus, audio: null as RecordingAudio | null, seconds: 0, metering: null as number | null, levels: [3], error: "",
@@ -110,4 +110,26 @@ test("Review on screen stops the session and opens the form with what was extrac
   expect(screen.getByText(complete.transcript)).toBeTruthy();
   expect(screen.getByRole("button", { name: "Append recording" })).toBeTruthy();
   expect(mockSubmit).not.toHaveBeenCalled();
+});
+
+test("the capture screen warms a realtime session before Call mode is tapped", async () => {
+  mockAdapters.connect = jest.fn(async () => ({ send: jest.fn(), close: jest.fn() }));
+  mockAdapters.api.session.mockResolvedValue({
+    clientSecret: "ek_test", expiresAt: new Date(Date.now() + 120_000).toISOString(), model: "gpt-realtime-2.1",
+    connectUrl: "https://api.openai.com/v1/realtime/calls", dataChannel: "oai-events", toolName: "check_log", maxSessionSeconds: 300,
+  });
+  try {
+    await render(<Workspace />);
+    // Nothing has been tapped: the secret and the audio route are already being prepared.
+    await waitFor(() => expect(mockAdapters.api.session).toHaveBeenCalledTimes(1));
+    expect(mockAdapters.prepareCallAudio).toHaveBeenCalled();
+
+    await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Start call mode" })); await flush(); });
+    // The tap spends the warmed secret rather than minting a second one.
+    expect(mockAdapters.api.session).toHaveBeenCalledTimes(1);
+    expect(mockAdapters.connect).toHaveBeenCalledTimes(1);
+  } finally {
+    mockAdapters.connect = null;
+    mockAdapters.api.session.mockReset();
+  }
 });
