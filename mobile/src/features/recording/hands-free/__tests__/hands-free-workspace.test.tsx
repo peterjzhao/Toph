@@ -8,7 +8,6 @@ import { transcribeRecording } from "../../transcribe";
 import type { RecorderStatus } from "../../use-recorder";
 import { emptyExtraction } from "../../__tests__/transcription-fixture";
 import { workerBootstrap, workspaceProps } from "../../__tests__/workspace-fixture";
-import { readHandsFreePreference } from "../preference";
 import { spoken } from "../turn-loop";
 
 jest.mock("expo-file-system", () => require("../../__tests__/fake-file-system").createFakeFileSystem());
@@ -66,37 +65,19 @@ beforeEach(() => {
   mockRecorder.status = "idle"; mockRecorder.audio = null; mockRecorder.seconds = 0; mockRecorder.metering = null;
 });
 
-test("hands-free is off by default and the normal recorder is unchanged", async () => {
+test("home offers Record and Call mode; Record starts the normal recorder", async () => {
   await render(<Workspace />);
-  expect(screen.getByRole("switch", { name: "Hands-free" })).toHaveProp("value", false);
-  expect(screen.getByRole("button", { name: "Start recording" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Start call mode" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Write a note" })).toBeTruthy();
-  expect(screen.queryByText("Tap to start")).toBeNull();
   await fireEvent.press(screen.getByRole("button", { name: "Start recording" }));
   expect(mockRecorder.start).toHaveBeenCalledTimes(1);
   expect(mockAdapters.requestMicrophone).not.toHaveBeenCalled();
 });
 
-test("the switch shows the tap target and is remembered on the device", async () => {
-  const view = await render(<Workspace />);
-  await fireEvent(screen.getByRole("switch", { name: "Hands-free" }), "valueChange", true);
-  expect(screen.getByText("Tap to start")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Tap to start. Start hands-free log" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Start recording" })).toBeNull();
-  expect(readHandsFreePreference()).toBe(true);
-  await view.unmount();
-  await render(<Workspace />);
-  expect(screen.getByText("Tap to start")).toBeTruthy();
-  await fireEvent(screen.getByRole("switch", { name: "Hands-free" }), "valueChange", false);
-  expect(screen.getByRole("button", { name: "Start recording" })).toBeTruthy();
-  expect(readHandsFreePreference()).toBe(false);
-});
-
 test("a spoken log is read back and saved through the review form's own save", async () => {
   jest.mocked(transcribeRecording).mockResolvedValue(complete);
   const view = await render(<Workspace />);
-  await fireEvent(screen.getByRole("switch", { name: "Hands-free" }), "valueChange", true);
-  await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Tap to start. Start hands-free log" })); await flush(); });
+  await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Start call mode" })); await flush(); });
   expect(mockSaid).toEqual([spoken.opening]);
   expect(screen.getByText("Listening")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Review on screen" })).toBeTruthy();
@@ -120,8 +101,7 @@ test("a spoken log is read back and saved through the review form's own save", a
 test("Review on screen stops the session and opens the form with what was extracted", async () => {
   jest.mocked(transcribeRecording).mockResolvedValue({ ...complete, voice: { status: "needs_fields", prompt: "What time did you finish?", missingFields: ["endTime"] } });
   const view = await render(<Workspace />);
-  await fireEvent(screen.getByRole("switch", { name: "Hands-free" }), "valueChange", true);
-  await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Tap to start. Start hands-free log" })); await flush(); });
+  await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Start call mode" })); await flush(); });
   await speak(view);
   expect(mockSaid.at(-1)).toBe("What time did you finish?");
   await act(async () => { fireEvent.press(screen.getByRole("button", { name: "Review on screen" })); await flush(); });

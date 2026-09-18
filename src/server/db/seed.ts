@@ -6,7 +6,7 @@
 import { eq, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
-import { BAYS_AERIAL, BAYS_FIELD_BOUNDARIES } from "./bays-field-map";
+import { BAYS_AERIAL, BAYS_FIELD_BOUNDARIES, BAYS_PLACEHOLDER_EXTENT } from "./bays-field-map";
 import { FARM, INITIAL_EMPLOYEES, INITIAL_ROWS, RECORDING, recordId } from "./initial-data";
 import * as schema from "./schema";
 import { hashPassword, initialPassword } from "@/server/accounts/password";
@@ -108,7 +108,14 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
     });
     await tx
       .insert(schema.farmImages)
-      .values({ farmId: FARM.id, mimeType: BAYS_AERIAL.mimeType, bytes: publicAsset(BAYS_AERIAL.assetPath), width: BAYS_AERIAL.width, height: BAYS_AERIAL.height })
+      .values({
+        farmId: FARM.id, mimeType: BAYS_AERIAL.mimeType, bytes: publicAsset(BAYS_AERIAL.assetPath),
+        width: BAYS_AERIAL.width, height: BAYS_AERIAL.height,
+        // Declared a placeholder so the timeline never presents this imagery as Bays Ranch's own land.
+        extentMinX: BAYS_PLACEHOLDER_EXTENT.minX, extentMinY: BAYS_PLACEHOLDER_EXTENT.minY,
+        extentMaxX: BAYS_PLACEHOLDER_EXTENT.maxX, extentMaxY: BAYS_PLACEHOLDER_EXTENT.maxY,
+        extentSource: BAYS_PLACEHOLDER_EXTENT.source,
+      })
       .onConflictDoNothing({ target: schema.farmImages.farmId });
     const fieldRows = await tx
       .insert(schema.fields)

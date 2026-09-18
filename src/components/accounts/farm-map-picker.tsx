@@ -21,7 +21,8 @@ const WEB_MERCATOR_LIMIT = 20_037_508.34;
 type View = { x: number; y: number; zoom: number };
 type Point = { x: number; y: number };
 type Tile = { key: string; src: string; x: number; y: number; width: number; height: number };
-export type CapturedFarmImage = { dataUrl: string; width: number; height: number };
+/** `bbox` is the clamped Web Mercator view the server exported, kept so setup can store the extent. */
+export type CapturedFarmImage = { dataUrl: string; width: number; height: number; bbox: string };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const worldPixels = (zoom: number) => TILE_SIZE * 2 ** zoom;
@@ -43,7 +44,21 @@ function tileLayer(view: View, size: { width: number; height: number }, level: n
   return tiles;
 }
 
-export function FarmMapPicker({ disabled, onCapture, onUpload }: { disabled: boolean; onCapture: (image: CapturedFarmImage) => void; onUpload: () => void }) {
+/**
+ * Picks a farm's view on public USGS imagery.
+ *
+ * In the default mode the chosen view is exported and becomes the farm image. When `onLocate` is
+ * supplied the map instead only records where an existing raster sits, and `overlay` draws that
+ * farm's saved field boundaries over the viewport so the admin can line them up with their land —
+ * the proposed extent is the viewport, so normalized boundaries map straight onto it.
+ */
+export function FarmMapPicker({ disabled, onCapture, onUpload, onLocate, overlay }: {
+  disabled: boolean;
+  onCapture: (image: CapturedFarmImage) => void;
+  onUpload: () => void;
+  onLocate?: (bbox: string) => Promise<void> | void;
+  overlay?: Array<{ id: string; boundary: Array<{ x: number; y: number }> }>;
+}) {
   const [view, setView] = useState<View>(() => toView(39.5, -98.35, 4));
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [query, setQuery] = useState("");
@@ -201,9 +216,10 @@ export function FarmMapPicker({ disabled, onCapture, onUpload }: { disabled: boo
     const meters = (value: number) => Math.round((value - .5) * 2 * WEB_MERCATOR_LIMIT * 100) / 100;
     const bbox = [meters(view.x - halfX), -meters(view.y + halfY), meters(view.x + halfX), -meters(view.y - halfY)];
     try {
+      if (onLocate) { await onLocate(bbox.join(",")); setBusy(""); return; }
       const captured = await accountRequest<{ data: CapturedFarmImage }>(`/api/farm/imagery?bbox=${bbox.join(",")}`);
       onCapture(captured.data);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "We couldn’t capture this view."); setBusy(""); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : onLocate ? "We couldn’t save this location." : "We couldn’t capture this view."); setBusy(""); }
   }
 
   const level = clamp(Math.round(view.zoom), 0, MAX_TILE_ZOOM);
@@ -236,14 +252,19 @@ export function FarmMapPicker({ disabled, onCapture, onUpload }: { disabled: boo
       <button className={styles.pickerLocate} type="button" disabled={disabled || Boolean(busy)} onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onClick={locate}>
         {busy === "locate" ? <LoaderCircle className={styles.spinner} size={15} /> : <LocateFixed size={15} />}My current location
       </button>
-      {busy === "capture" && <div className={styles.pickerBusy} role="status"><LoaderCircle className={styles.spinner} size={22} />Capturing this view…</div>}
+      {overlay?.length ? <svg className={styles.pickerOverlay} viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+        {overlay.map(field => <polygon key={field.id} points={field.boundary.map(point => `${point.x},${point.y}`).join(" ")} vectorEffect="non-scaling-stroke" />)}
+      </svg> : null}
+      {busy === "capture" && <div className={styles.pickerBusy} role="status"><LoaderCircle className={styles.spinner} size={22} />{onLocate ? "Saving this location…" : "Capturing this view…"}</div>}
       <span className={styles.pickerCredit}>Imagery: USGS</span>
     </div>
     <div className={styles.pickerFooter}>
-      <p>{canCapture && "Frame your whole farm in the map, then use this view. It becomes your farm image."}</p>
+      <p>{canCapture && (onLocate
+        ? "Move the map until your saved field outlines sit on your land, then save this location."
+        : "Frame your whole farm in the map, then use this view. It becomes your farm image.")}</p>
       <div>
-        <button className={styles.textButton} type="button" disabled={disabled || Boolean(busy)} onClick={onUpload}>Upload my own image instead</button>
-        <button className={styles.primaryButton} type="button" disabled={disabled || Boolean(busy) || !canCapture} onClick={() => void capture()}>Use this view</button>
+        {!onLocate && <button className={styles.textButton} type="button" disabled={disabled || Boolean(busy)} onClick={onUpload}>Upload my own image instead</button>}
+        <button className={styles.primaryButton} type="button" disabled={disabled || Boolean(busy) || !canCapture} onClick={() => void capture()}>{onLocate ? "Save this location" : "Use this view"}</button>
       </div>
     </div>
     {error && <p className={styles.error} role="alert">{error}</p>}

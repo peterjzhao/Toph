@@ -27,6 +27,7 @@ export function describeRuntimeGrants(role: string): string[] {
     `GRANT UPDATE (updated_at, is_new, reviewed_by, reviewed_at, details) ON toph.work_logs TO ${role}`,
     `GRANT INSERT and scoped column UPDATE privileges for farm/account onboarding TO ${role}`,
     `GRANT INSERT, UPDATE (payload, revision, updated_at) ON toph.workspace_state TO ${role}`,
+    `GRANT INSERT and scoped column UPDATE on toph.field_index_stats and toph.satellite_usage TO ${role} (satellite timeline)`,
     `GRANT EXECUTE ON FUNCTION toph.waveform_peaks_valid(jsonb) TO ${role}`,
     `ALTER DEFAULT PRIVILEGES IN SCHEMA toph GRANT SELECT ON TABLES TO ${role}`,
     "REVOKE ALL ON SCHEMA toph / ALL TABLES IN SCHEMA toph FROM PUBLIC, anon, authenticated, service_role (when those roles exist)",
@@ -76,7 +77,12 @@ export async function applyRuntimeGrants(sql: postgres.Sql, role: string): Promi
     await tx`grant update (name, normalized_name, is_active) on toph.accounts to ${tx(role)}`;
     await tx`grant update (revoked_at) on toph.account_sessions to ${tx(role)}`;
     await tx`grant update (join_code, setup_complete) on toph.farm_access to ${tx(role)}`;
-    await tx`grant update (mime_type, bytes, width, height, updated_at) on toph.farm_images to ${tx(role)}`;
+    await tx`grant update (mime_type, bytes, width, height, updated_at, extent_min_x, extent_min_y, extent_max_x, extent_max_y, extent_source) on toph.farm_images to ${tx(role)}`;
+    // Satellite timeline: readings behind an analysis, and its own request allowance.
+    await tx`grant insert on toph.field_index_stats to ${tx(role)}`;
+    await tx`grant update (mean, min, max, std_dev, valid_fraction) on toph.field_index_stats to ${tx(role)}`;
+    await tx`grant insert on toph.satellite_usage to ${tx(role)}`;
+    await tx`grant update (minute_start, minute_count, day_start, day_count) on toph.satellite_usage to ${tx(role)}`;
     await tx`grant update (name, label, boundary, map_image_path, updated_at), delete on toph.fields to ${tx(role)}`;
     await tx`grant insert, update (payload, revision, updated_at) on toph.workspace_state to ${tx(role)}`;
     await tx`grant execute on function toph.waveform_peaks_valid(jsonb) to ${tx(role)}`;

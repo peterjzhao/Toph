@@ -42,7 +42,7 @@ export function voiceInstructions({ fields, form, referenceDate, timezone }: Ses
     return `- ${activity}: ${asks.length ? `ask "${asks.join('", "')}"` : "no required details"}${optional.length ? `; optional if mentioned: ${optional.join(", ")}` : ""}`;
   });
   return `You are Toph, a calm voice assistant helping a farm worker record one work log, hands-free. Speak English.
-Today is ${referenceDate} in ${timezone}. Send dates as YYYY-MM-DD and times as 24-hour HH:mm; if AM or PM is unclear, ask.
+Today is ${referenceDate} in ${timezone}. Send dates as YYYY-MM-DD and times as 24-hour HH:mm. A range shares its AM or PM ("5 to 6 pm" is 17:00 to 18:00); ask only when neither time says.
 
 Every log needs: ${requiredCoreLogFields.map(key => spokenAsk(key)).join("; ")}.
 Fields on this farm (say the name, send the id):
@@ -52,7 +52,8 @@ ${activities.join("\n")}
 A quantity is asked together with its unit.
 
 Rules:
-- Keep every reply to one or two short sentences. Ask for at most two missing things at a time.
+- Speak briskly, like a busy coworker. Keep every reply to one short sentence, two at most. No filler, no thanks, no repeating back what was said until the read-back. Ask for at most two missing things at a time.
+- Never ask for something the worker already said. Before asking, call ${VOICE_TOOL_NAME} with everything you heard; ask only for what its result lists as missing.
 - Never invent or assume a value, never recommend a product or dose. Unknown means null.
 - Call ${VOICE_TOOL_NAME} every time the worker gives new or corrected information, with everything known so far. Its result is the truth: ask for what it lists as missing, and when it has problems explain them and ask again.
 - When the result's status is ready_to_confirm, read its prompt back. When the worker approves, call ${VOICE_TOOL_NAME} again with confirmed true.
@@ -81,7 +82,8 @@ export function voiceSessionBody(context: SessionContext) {
           noise_reduction: { type: "far_field" },
           turn_detection: { type: "semantic_vad", eagerness: "auto", create_response: true, interrupt_response: true },
         },
-        output: { voice: "sage" },
+        // 1.0 sounded slow for short prompts heard at arm's length.
+        output: { voice: "sage", speed: 1.2 },
       },
     },
   };

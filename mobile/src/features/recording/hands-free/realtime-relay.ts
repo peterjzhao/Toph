@@ -13,25 +13,20 @@ export type RelayTranscripts = {
   /** Only what the worker said; this is what the log stores. */
   worker: string;
 };
-export type RelaySaveResult = { saved: true; synced: boolean } | { saved: false; error: string; prompt?: string };
-export type RelayEnd = "saved" | "failed" | "limit";
+/** "confirmed": the worker approved the read-back; the caller hangs up at once and saves after the call. */
+export type RelayEnd = "confirmed" | "failed" | "limit";
 export type RelayDeps = {
   send(event: Record<string, unknown>): void;
   postState(transcript: string, turn: number): Promise<VoiceStateResult<ExtractedLogFields>>;
   postCheck(args: unknown): Promise<VoiceCheckResult<ExtractedLogFields>>;
-  /** Final strict extraction of the transcript, then the review form's own save. */
-  save(transcripts: RelayTranscripts): Promise<RelaySaveResult>;
   onPhase(phase: Extract<HandsFreePhase, "listening" | "thinking" | "speaking">, text?: string): void;
   /** The newest server-validated fields, kept for the review form. */
   onFields(fields: ExtractedLogFields): void;
-  /** The caller hangs up. "failed" continues in turn-based mode; "limit" opens the review form. */
+  /** The caller hangs up. "confirmed" saves, "failed" continues in turn-based mode, "limit" opens the review form. */
   onEnd(reason: RelayEnd, message?: string): void;
   toolName: string;
   /** Worker turns before the call is ended; a realtime call is billed while it is open. */
   maxTurns?: number;
-  /** How long the spoken confirmation may take before hanging up anyway. */
-  farewellMs?: number;
-  schedule?: (run: () => void, ms: number) => unknown;
 };
 
 type Line = { id: string; role: "assistant" | "worker"; text: string };
@@ -48,10 +43,9 @@ const harmlessErrors = new Set(["conversation_already_has_active_response", "res
 
 export function createRealtimeRelay(deps: RelayDeps) {
   const maxTurns = deps.maxTurns ?? 14;
-  const schedule = deps.schedule ?? ((run, ms) => setTimeout(run, ms));
   const lines: Line[] = [];
   const handled = new Set<string>();
-  let turn = 0, injected = -1, opened = false, closed = false, farewell = false, farewellAudible = false, working = 0;
+  let turn = 0, injected = -1, opened = false, closed = false, working = 0;
   let calls: Promise<void> = Promise.resolve();
 
   const text = (role?: Line["role"]) => lines.filter(line => line.text && (!role || line.role === role));
@@ -98,11 +92,9 @@ export function createRealtimeRelay(deps: RelayDeps) {
       output({ ...check, fields: check.fields ? { ...check.fields, notes: undefined } : null });
       return true;
     }
-    const saved = await deps.save(transcripts());
-    if (closed) return false;
-    output(saved);
-    farewell = saved.saved;
-    return true;
+    // Nothing more needs saying: waiting for a spoken goodbye only keeps the worker on the phone.
+    end("confirmed");
+    return false;
   }
 
   function functionCalls(response: RealtimeEvent["response"]) {
@@ -116,8 +108,6 @@ export function createRealtimeRelay(deps: RelayDeps) {
       for (const call of fresh) replied = (await answer(call)) || replied;
       if (closed || !replied) return;
       deps.send({ type: "response.create" });
-      // The model now confirms aloud; hang up when it has finished, or soon after if no event says so.
-      if (farewell) schedule(() => end("saved"), deps.farewellMs ?? 12_000);
     }).catch(cause => end("failed", cause instanceof Error ? cause.message : "")).finally(() => { working -= 1; });
     return true;
   }
@@ -152,16 +142,14 @@ export function createRealtimeRelay(deps: RelayDeps) {
         case "response.audio_transcript.done":
           if (typeof event.transcript === "string" && event.transcript.trim()) place(String(event.item_id ?? `assistant-${lines.length}`), "assistant").text = event.transcript.trim();
           break;
-        case "input_audio_buffer.speech_started": if (!farewell) deps.onPhase("listening"); break;
-        case "input_audio_buffer.speech_stopped": if (!farewell) deps.onPhase("thinking"); break;
-        case "output_audio_buffer.started": farewellAudible = farewell; deps.onPhase("speaking"); break;
+        case "input_audio_buffer.speech_started": deps.onPhase("listening"); break;
+        case "input_audio_buffer.speech_stopped": deps.onPhase("thinking"); break;
+        case "output_audio_buffer.started": deps.onPhase("speaking"); break;
         case "response.output_audio_transcript.delta":
         case "response.audio_transcript.delta": deps.onPhase("speaking"); break;
         case "output_audio_buffer.stopped":
         case "output_audio_buffer.cleared":
-          // Audio that ended before the save belongs to an earlier sentence, not the confirmation.
-          if (farewellAudible) end("saved");
-          else if (!working && !farewell) deps.onPhase("listening");
+          if (!working) deps.onPhase("listening");
           break;
         case "response.done":
           if (event.response?.status === "failed") { end("failed", event.response?.status_details?.error?.message); break; }

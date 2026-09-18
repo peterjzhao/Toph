@@ -92,6 +92,13 @@
       "when": 1789921800000,
       "tag": "0012_account_passwords",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790008200000,
+      "tag": "0013_satellite_timeline",
+      "breakpoints": true
     }
   ]
 }

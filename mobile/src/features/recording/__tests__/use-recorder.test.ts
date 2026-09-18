@@ -1,19 +1,19 @@
 import { act, renderHook } from "@testing-library/react-native";
-import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, type RecordingOptions } from "expo-audio";
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, setIsAudioActiveAsync, type RecordingOptions } from "expo-audio";
 import { AppState, type AppStateStatus } from "react-native";
 import { useRecorder } from "../use-recorder";
 
 jest.mock("expo-audio", () => ({
   RecordingPresets: { HIGH_QUALITY: { extension: ".m4a" } },
   getRecordingPermissionsAsync: jest.fn(), requestRecordingPermissionsAsync: jest.fn(),
-  setAudioModeAsync: jest.fn(), useAudioRecorder: () => mockNativeRecorder,
+  setAudioModeAsync: jest.fn(), setIsAudioActiveAsync: jest.fn(), useAudioRecorder: () => mockNativeRecorder,
 }));
 
 const mockNativeRecorder = {
   uri: "file:///cache/original.m4a",
   prepareToRecordAsync: jest.fn<Promise<void>, [RecordingOptions?]>(),
   record: jest.fn(), pause: jest.fn(), stop: jest.fn<Promise<void>, []>(),
-  getStatus: () => ({ metering: -30 }),
+  getStatus: jest.fn(() => ({ metering: -30, isRecording: true })),
 };
 const permissionResult = (granted: boolean) => ({ granted, status: granted ? "granted" : "undetermined", canAskAgain: true, expires: "never" }) as Awaited<ReturnType<typeof getRecordingPermissionsAsync>>;
 let onAppState: (state: AppStateStatus) => void;
@@ -23,6 +23,8 @@ beforeEach(() => {
   jest.mocked(getRecordingPermissionsAsync).mockResolvedValue(permissionResult(true));
   jest.mocked(requestRecordingPermissionsAsync).mockResolvedValue(permissionResult(true));
   jest.mocked(setAudioModeAsync).mockResolvedValue();
+  jest.mocked(setIsAudioActiveAsync).mockResolvedValue();
+  mockNativeRecorder.getStatus.mockImplementation(() => ({ metering: -30, isRecording: true }));
   mockNativeRecorder.stop.mockResolvedValue();
   mockNativeRecorder.uri = "file:///cache/original.m4a";
   let nextClip = 0;
@@ -92,4 +94,41 @@ test("cancel during audio setup prevents a late microphone start; repeated taps 
   expect(result.current.status).toBe("idle");
   expect(mockNativeRecorder.prepareToRecordAsync).not.toHaveBeenCalled();
   expect(mockNativeRecorder.record).not.toHaveBeenCalled();
+});
+
+test("prewarm prepares the recorder while idle, so Start only calls record", async () => {
+  const { result } = await renderHook(() => useRecorder({ prewarm: true }));
+  await act(async () => {});
+  expect(requestRecordingPermissionsAsync).not.toHaveBeenCalled();
+  expect(mockNativeRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
+  expect(mockNativeRecorder.record).not.toHaveBeenCalled();
+  await act(async () => { await result.current.start(); });
+  expect(setAudioModeAsync).toHaveBeenCalledTimes(1);
+  expect(mockNativeRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
+  expect(result.current.status).toBe("recording");
+  // The next idle screen is prepared again.
+  await act(async () => { await result.current.finish(); result.current.reset(); });
+  expect(mockNativeRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(2);
+});
+
+test("prewarm never prepares without permission, and releases the session in the background", async () => {
+  jest.mocked(getRecordingPermissionsAsync).mockResolvedValue(permissionResult(false));
+  await renderHook(() => useRecorder({ prewarm: true }));
+  await act(async () => {});
+  expect(mockNativeRecorder.prepareToRecordAsync).not.toHaveBeenCalled();
+  jest.mocked(getRecordingPermissionsAsync).mockResolvedValue(permissionResult(true));
+  await act(async () => { onAppState("active"); });
+  expect(mockNativeRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
+  await act(async () => { onAppState("background"); });
+  expect(setIsAudioActiveAsync).toHaveBeenCalledWith(false);
+});
+
+test("a prepared recorder that no longer records is set up again on Start", async () => {
+  const { result } = await renderHook(() => useRecorder({ prewarm: true }));
+  await act(async () => {});
+  mockNativeRecorder.getStatus.mockImplementationOnce(() => ({ metering: -30, isRecording: false }));
+  await act(async () => { await result.current.start(); });
+  expect(mockNativeRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(2);
+  expect(mockNativeRecorder.record).toHaveBeenCalledTimes(2);
+  expect(result.current.status).toBe("recording");
 });

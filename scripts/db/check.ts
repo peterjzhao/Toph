@@ -98,6 +98,35 @@ async function checkRuntimePrivileges(sql: postgres.Sql): Promise<void> {
       && !mobile.profiles_delete && !mobile.recordings_mutate && !mobile.submissions_mutate && !mobile.quota_farm_update && !mobile.quota_delete,
     `runtime role ${user}: cannot reassign accounts or rewrite/delete saved mobile media and receipts`);
   }
+
+  const [satelliteTables] = await sql`select to_regclass('toph.field_index_stats') is not null
+    and to_regclass('toph.satellite_usage') is not null as present`;
+  report(satelliteTables.present, `runtime role ${user}: satellite timeline tables exist`);
+  if (satelliteTables.present && user) {
+    const [satellite] = await sql`select
+      has_column_privilege('toph.farm_images', 'extent_min_x', 'UPDATE') as extent_update,
+      has_column_privilege('toph.farm_images', 'extent_source', 'UPDATE') as extent_source_update,
+      has_table_privilege('toph.field_index_stats', 'INSERT') as stats_insert,
+      has_column_privilege('toph.field_index_stats', 'mean', 'UPDATE') as stats_mean_update,
+      has_column_privilege('toph.field_index_stats', 'valid_fraction', 'UPDATE') as stats_valid_update,
+      has_column_privilege('toph.field_index_stats', 'farm_id', 'UPDATE') as stats_farm_update,
+      has_table_privilege('toph.field_index_stats', 'DELETE') as stats_delete,
+      has_table_privilege('toph.satellite_usage', 'INSERT') as usage_insert,
+      has_column_privilege('toph.satellite_usage', 'minute_count', 'UPDATE') as usage_minute_update,
+      has_column_privilege('toph.satellite_usage', 'day_count', 'UPDATE') as usage_day_update,
+      has_table_privilege('toph.satellite_usage', 'DELETE') as usage_delete`;
+    report(satellite.extent_update && satellite.extent_source_update && satellite.stats_insert
+      && satellite.stats_mean_update && satellite.stats_valid_update && satellite.usage_insert
+      && satellite.usage_minute_update && satellite.usage_day_update,
+    `runtime role ${user}: has the satellite timeline write path`);
+    report(!satellite.stats_farm_update && !satellite.stats_delete && !satellite.usage_delete,
+    `runtime role ${user}: cannot reassign or delete satellite readings`);
+  }
+
+  // A farm whose raster has no extent simply has no timeline; the map page behaves as before.
+  const located = await sql`select f.name, i.extent_source from toph.farm_images i
+    join toph.farms f on f.id = i.farm_id where i.extent_source is not null`;
+  console.log(`      runtime role ${user}: ${located.length} farm map(s) placed on the earth${located.length ? ` (${located.map(row => `${row.name}: ${row.extent_source}`).join(", ")})` : ""}`);
 }
 
 async function main(): Promise<void> {

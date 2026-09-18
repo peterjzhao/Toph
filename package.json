@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "check:mobile-server": "node scripts/check-mobile-server.mjs",
     "check:recording": "node scripts/check-recording.mjs",
+    "check:satellite": "tsx --conditions=react-server scripts/check-satellite.ts",
     "test:db:up": "docker compose -f compose.db.yaml up -d",
     "test:db:stop": "docker compose -f compose.db.yaml stop",
     "db:generate": "drizzle-kit generate",

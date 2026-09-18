@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowDownToLine, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileText, List, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowDownToLine, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, FileText, List, Maximize2, Minimize2, Plus, Printer, Search, ShieldCheck, Trash2, X } from "lucide-react";
 import type { LogDto } from "@/contracts/dashboard";
 import type { Review, SavedReport, ScheduleItem } from "@/contracts/workspace";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
@@ -109,6 +109,72 @@ function downloadReport(report: SavedReport, logs: LogDto[], reviews: Review[]) 
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Reads a saved report on the page. `rows` is `reportRows` output: row 0 is the header. */
+function ReportViewer({ report, farmName, rows, onClose, onDownload }: { report: SavedReport; farmName: string; rows: (string | number)[][]; onClose: () => void; onDownload: () => void }) {
+  const overlay = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  // `document.fullscreenEnabled` can be true where the request is still refused (embedded viewers), so we only learn on use.
+  const [fullscreenBlocked, setFullscreenBlocked] = useState(false);
+  const [header = [], ...body] = rows;
+  const generatedAt = useMemo(() => new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" }).format(new Date()), []);
+  const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled;
+
+  useEffect(() => {
+    const element = overlay.current;
+    const syncFullscreen = () => setFullscreen(document.fullscreenElement === element);
+    // Esc exits full screen first; the browser owns that, so only close once we are back in the page.
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.fullscreenElement) { event.preventDefault(); onClose(); } };
+    const previousOverflow = document.body.style.overflow;
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    document.addEventListener("keydown", onKeyDown);
+    document.body.classList.add("toph-report-open");
+    document.body.style.overflow = "hidden";
+    element?.focus();
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.classList.remove("toph-report-open");
+      document.body.style.overflow = previousOverflow;
+      if (document.fullscreenElement === element) void document.exitFullscreen().catch(() => {});
+    };
+  }, [onClose]);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else void overlay.current?.requestFullscreen().catch(() => setFullscreenBlocked(true));
+  }
+
+  return <div ref={overlay} className={`${styles.viewerOverlay} toph-report-sheet`} role="dialog" aria-modal="true" aria-label={`${report.name}, ${reportKinds[report.kind]}`} tabIndex={-1}>
+    <div className={styles.viewerBar}>
+      <div className={styles.viewerTitle}><FileText size={16} /><strong>{report.name}</strong><span className={styles.badge}>{reportKinds[report.kind]}</span></div>
+      <div className={styles.viewerActions}>
+        {canFullscreen && <button type="button" className={styles.iconButton} onClick={toggleFullscreen} disabled={fullscreenBlocked} aria-label={fullscreen ? "Exit full screen" : "View full screen"} title={fullscreenBlocked ? "Full screen is not available in this browser" : fullscreen ? "Exit full screen" : "Full screen"}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>}
+        <button type="button" className={styles.iconButton} onClick={() => window.print()} aria-label="Print or save as PDF" title="Print / save as PDF"><Printer size={16} /></button>
+        <button type="button" className={styles.iconButton} onClick={onDownload} aria-label={`Download ${report.name} as CSV`} title="Download CSV"><ArrowDownToLine size={16} /></button>
+        <button type="button" className={styles.iconButton} onClick={onClose} aria-label="Close report" title="Close"><X size={16} /></button>
+      </div>
+    </div>
+    <div className={styles.viewerScroll} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <article className={styles.sheet}>
+        <header className={styles.sheetHead}>
+          <p className={styles.sheetFarm}>{farmName}</p>
+          <h1>{report.name}</h1>
+          <dl className={styles.sheetMeta}>
+            <div><dt>Report type</dt><dd>{reportKinds[report.kind]}</dd></div>
+            <div><dt>Period</dt><dd>{dateLabel(report.from)} – {dateLabel(report.to)}</dd></div>
+            <div><dt>Records</dt><dd>{body.length}</dd></div>
+            <div><dt>Generated</dt><dd>{generatedAt}</dd></div>
+          </dl>
+          <p className={styles.sheetNote}>Generated from current activity data, not a frozen historical snapshot. Values change if the underlying logs are edited.</p>
+        </header>
+        {body.length
+          ? <div className={styles.sheetTableScroll}><table className={styles.sheetTable}><thead><tr>{header.map((cell, index) => <th key={index} scope="col">{cell}</th>)}</tr></thead><tbody>{body.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell === "" ? "—" : cell}</td>)}</tr>)}</tbody></table></div>
+          : <p className={styles.sheetEmpty}>No activity logs fall within {dateLabel(report.from)} – {dateLabel(report.to)}, so this report has no records to show.</p>}
+      </article>
+    </div>
+  </div>;
+}
+
 export function ReportsPage() {
   const { data, workspace, update, saving, notify } = useWorkspace();
   const [kind, setKind] = useState<SavedReport["kind"]>("activity");
@@ -117,6 +183,7 @@ export function ReportsPage() {
   const [to, setTo] = useState("2026-04-30");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [viewing, setViewing] = useState<SavedReport | null>(null);
   const invalidRange = Boolean(from && to && to < from);
   const matching = invalidRange ? [] : data.logs.filter((log) => log.date >= from && log.date <= to);
   const reports = workspace.reports.filter((report) => `${report.name} ${reportKinds[report.kind]}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -152,12 +219,13 @@ export function ReportsPage() {
       <section className={styles.panel}><div className={styles.toolbar}><h2>Saved reports <span>({workspace.reports.length})</span></h2></div>
         <div className={styles.savedSearch}><label className={styles.search}><Search size={15} /><input type="search" aria-label="Search saved reports" placeholder="Find a report" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div>
         {reports.length ? <div className={styles.reportList}>{reports.map((report) => <article className={styles.savedReport} key={report.id}>
-          <div className={styles.fileIcon}><FileText size={19} strokeWidth={1.4} /></div><div className={styles.reportInfo}><h3>{report.name}</h3><p>{reportKinds[report.kind]}</p><small>{dateLabel(report.from, true, true)} – {dateLabel(report.to, true, true)}</small></div>
+          <button type="button" className={styles.reportOpen} onClick={() => setViewing(report)} aria-label={`Open ${report.name}`}><span className={styles.fileIcon}><FileText size={19} strokeWidth={1.4} /></span><span className={styles.reportInfo}><strong>{report.name}</strong><span>{reportKinds[report.kind]}</span><small>{dateLabel(report.from, true, true)} – {dateLabel(report.to, true, true)}</small></span></button>
           <div className={styles.reportActions}><button className={styles.iconButton} aria-label={`Download ${report.name}`} title="Download latest matching data" onClick={() => { downloadReport(report, data.logs, workspace.reviews); notify("CSV downloaded using the latest matching data."); }}><ArrowDownToLine size={16} /></button><button className={styles.iconButton} aria-label={`Delete ${report.name}`} title="Delete saved report" disabled={saving} onClick={() => void remove(report)}><Trash2 size={16} /></button></div>
         </article>)}</div> : <Empty title={query ? "No reports found" : "Your reports, all in one place"} text={query ? "Try another report name." : "Create your first report to save its date range and export settings here."} />}
-        <div className={styles.panelFoot}>Saved reports keep your export settings. Each download includes the latest matching data.</div>
+        <div className={styles.panelFoot}>Saved reports keep your export settings. Open one to read it here, or download the latest matching data.</div>
       </section>
     </div>
+    {viewing && <ReportViewer report={viewing} farmName={data.farm.name} rows={reportRows(viewing, data.logs, workspace.reviews)} onClose={() => setViewing(null)} onDownload={() => { downloadReport(viewing, data.logs, workspace.reviews); notify("CSV downloaded using the latest matching data."); }} />}
   </div>;
 }
 

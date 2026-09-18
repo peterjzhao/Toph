@@ -37,7 +37,8 @@ async function upstream(url: string): Promise<Response> {
   }
 }
 
-export async function fetchFarmImagery(request: FarmImageryRequest): Promise<{ dataUrl: string; width: number; height: number }> {
+/** Echoes the clamped bbox so farm setup can persist this raster's geographic extent. */
+export async function fetchFarmImagery(request: FarmImageryRequest): Promise<{ dataUrl: string; width: number; height: number; bbox: string }> {
   for (const quality of [85, 65]) {
     const query = new URLSearchParams({ bbox: request.bbox.join(","), bboxSR: "3857", imageSR: "3857", size: `${request.width},${request.height}`, format: "jpg", compressionQuality: String(quality), f: "image" });
     const response = await upstream(`${NAIP_EXPORT}?${query}`);
@@ -45,7 +46,7 @@ export async function fetchFarmImagery(request: FarmImageryRequest): Promise<{ d
     const dimensions = imageDimensions(bytes, "image/jpeg");
     // ArcGIS reports export failures as a JSON body, so trust the decoded header rather than the status.
     if (!dimensions) throw new ApiError(502, "INTERNAL_ERROR", "Satellite imagery isn’t available for this view. Imagery covers the United States.");
-    if (bytes.length <= MAX_IMAGE_BYTES) return { dataUrl: `data:image/jpeg;base64,${bytes.toString("base64")}`, ...dimensions };
+    if (bytes.length <= MAX_IMAGE_BYTES) return { dataUrl: `data:image/jpeg;base64,${bytes.toString("base64")}`, ...dimensions, bbox: request.bbox.join(",") };
   }
   throw validationError("This view is too detailed to save. Zoom in a little and try again.");
 }

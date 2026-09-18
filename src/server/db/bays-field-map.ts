@@ -6,6 +6,19 @@
  */
 export const BAYS_AERIAL = { assetPath: "/assets/bays-ranch-aerial.jpg", mimeType: "image/jpeg", width: 1403, height: 896 } as const;
 
+/**
+ * A stand-in location for the sample farm, NOT where Bays Ranch is.
+ *
+ * The seeded aerial is the Figma illustration, which depicts no real place, so the satellite
+ * timeline has nothing true to point at. These EPSG:3857 metres frame ordinary farmland south of
+ * Salinas, California, at the raster's own 1403:896 aspect ratio so the seeded field outlines are
+ * not stretched. `placeholder` makes the interface say the imagery is real land but not this
+ * farm's — the same disclosure convention as the synthesized /assets/sample-recording.mp3.
+ */
+export const BAYS_PLACEHOLDER_EXTENT = {
+  minX: -13539753.83, minY: 4387521.66, maxX: -13537153.83, maxY: 4389182.1, source: "placeholder",
+} as const;
+
 export const BAYS_FIELD_BOUNDARIES: Readonly<Record<string, readonly (readonly [number, number])[]>> = {
   A: [[0.533203125,0.41590214067278286],[0.654296875,0.41590214067278286],[0.65625,0.41896024464831805],[0.65625,0.5443425076452599],[0.654296875,0.5443425076452599],[0.654296875,0.5474006116207951],[0.533203125,0.5474006116207951]],
   B: [[0.658203125,0.41284403669724773],[0.736328125,0.41284403669724773],[0.73828125,0.41590214067278286],[0.73828125,0.5412844036697247],[0.736328125,0.5443425076452599],[0.734375,0.5474006116207951],[0.658203125,0.5474006116207951]],

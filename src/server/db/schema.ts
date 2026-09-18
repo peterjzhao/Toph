@@ -359,5 +359,54 @@ export const farmImages = toph.table("farm_images", {
   bytes: binary("bytes").notNull(),
   width: integer("width").notNull(),
   height: integer("height").notNull(),
+  /**
+   * Where this raster sits on the earth, in EPSG:3857 metres. Null together when unknown, which
+   * simply means the farm has no satellite timeline. Stored here rather than on `farms` because it
+   * describes this image: replacing the aerial must replace or clear its extent at the same time.
+   */
+  extentMinX: doublePrecision("extent_min_x"),
+  extentMinY: doublePrecision("extent_min_y"),
+  extentMaxX: doublePrecision("extent_max_x"),
+  extentMaxY: doublePrecision("extent_max_y"),
+  /** 'capture' (exact), 'located' (placed by hand), or 'placeholder' (sample data, not this land). */
+  extentSource: text("extent_source"),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Per-field index readings behind the satellite timeline.
+ *
+ * Only readings that passed the cloud guard are stored, so the interface can show the farmer the
+ * same numbers an analysis was given. Rendered frames are not cached here: imagery for a fixed
+ * extent and date never changes, so immutable HTTP caching does that job.
+ */
+export const fieldIndexStats = toph.table("field_index_stats", {
+  farmId: uuid("farm_id").notNull().references(() => farms.id),
+  fieldId: uuid("field_id").notNull(),
+  imageDate: date("image_date", { mode: "string" }).notNull(),
+  indexName: text("index_name").notNull(),
+  mean: doublePrecision("mean").notNull(),
+  min: doublePrecision("min").notNull(),
+  max: doublePrecision("max").notNull(),
+  stdDev: doublePrecision("std_dev").notNull(),
+  /** Share of the field that was cloud-free, 0–1. */
+  validFraction: doublePrecision("valid_fraction").notNull(),
+  createdAt: createdAt(),
+}, t => [
+  primaryKey({ columns: [t.farmId, t.fieldId, t.imageDate, t.indexName] }),
+  foreignKey({ columns: [t.farmId, t.fieldId], foreignColumns: [fields.farmId, fields.id] }),
+  check("field_index_stats_valid_fraction", sql`${t.validFraction} >= 0 and ${t.validFraction} <= 1`),
+  check("field_index_stats_index_name", sql`length(btrim(${t.indexName})) > 0`),
+]);
+
+/** Kept apart from transcription_usage so imagery and transcription cannot starve each other. */
+export const satelliteUsage = toph.table("satellite_usage", {
+  farmId: uuid("farm_id").primaryKey().references(() => farms.id),
+  minuteStart: timestamp("minute_start", { withTimezone: true }).notNull(),
+  minuteCount: integer("minute_count").notNull(),
+  dayStart: date("day_start").notNull(),
+  dayCount: integer("day_count").notNull(),
+}, t => [
+  check("satellite_usage_minute_count_check", sql`${t.minuteCount} > 0`),
+  check("satellite_usage_day_count_check", sql`${t.dayCount} > 0`),
+]);

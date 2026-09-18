@@ -23,7 +23,8 @@ export type FarmImageDto = { url: string; width: number; height: number };
 export type FarmSetup = { image: FarmImageDto | null; fields: FarmFieldDto[]; setupComplete: boolean };
 export type FarmSetupResponse = { data: FarmSetup };
 export type SaveFarmSetupRequest = {
-  image?: { dataUrl: string; width: number; height: number };
+  /** Web Mercator "minX,minY,maxX,maxY" when the view came from the map picker; absent for uploads. */
+  image?: { dataUrl: string; width: number; height: number; bbox?: string };
   fields: Array<{ id?: string; label: string; boundary: FieldPoint[] }>;
 };
 export type FarmMemberDto = { id: string; name: string; employeeId: string | null; role: AccountRole; active: boolean };

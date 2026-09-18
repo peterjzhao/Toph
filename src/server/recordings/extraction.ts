@@ -12,6 +12,7 @@ Use only facts stated by the speaker, including explicit corrections in later cl
 work times, treatment, or amounts. Match the field to exactly one supplied field ID; ambiguous or unknown means null.
 Choose the closest supported activity only when the work is clear. Resolve today/yesterday against referenceDate in
 the farm timezone. Do not assume a date when none is mentioned. Times are 24-hour HH:mm; ambiguous AM/PM means null.
+A range shares its AM/PM: "from 5 to 6 pm" is 17:00 to 18:00, and "8 to 11 this morning" is 08:00 to 11:00.
 The supplied logForm lists, for each activity, the detail fields this farm collects. Fill details only for the chosen
 activity's fields, using each field's label to decide what belongs there; every other detail is null. A select takes
 one of its listed options or null. product is free text: extract new names even if they have never appeared in a

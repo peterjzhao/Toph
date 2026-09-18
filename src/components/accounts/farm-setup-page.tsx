@@ -10,7 +10,7 @@ import { FilterSelect } from "@/components/dashboard/filter-select";
 import { FarmMapPicker, type CapturedFarmImage } from "./farm-map-picker";
 import styles from "./accounts.module.css";
 
-type SetupImage = { url: string; width: number; height: number; dataUrl?: string };
+type SetupImage = { url: string; width: number; height: number; dataUrl?: string; bbox?: string };
 
 export function FarmSetupPage() {
   const [session, setSession] = useState<AccountSession | null>(null);
@@ -92,7 +92,7 @@ export function FarmSetupPage() {
     if (fields.some(field => !validFieldBoundary(field.boundary))) { setError("Each field needs a valid boundary inside the image."); return; }
     setBusy(true); setError("");
     try {
-      await accountRequest<FarmSetupResponse>("/api/farm/setup", { method: "POST", body: JSON.stringify({ ...(image.dataUrl ? { image: { dataUrl: image.dataUrl, width: image.width, height: image.height } } : {}), fields }) });
+      await accountRequest<FarmSetupResponse>("/api/farm/setup", { method: "POST", body: JSON.stringify({ ...(image.dataUrl ? { image: { dataUrl: image.dataUrl, width: image.width, height: image.height, ...(image.bbox ? { bbox: image.bbox } : {}) } } : {}), fields }) });
       window.location.assign("/settings");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your fields couldn’t be saved. Please try again."); setBusy(false); setProgress(""); }
   }

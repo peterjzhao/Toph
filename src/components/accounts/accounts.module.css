@@ -129,3 +129,11 @@
 .pickerLocate { position:absolute; left:12px; bottom:12px; display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border:0; border-radius:9px; background:#fff; color:#000; font:inherit; font-size:13px; line-height:1.2; box-shadow:0 1px 6px rgb(0 0 0 / 25%); cursor:pointer; }
 .pickerLocate:hover { background:#f3f7f1; }
 .pickerLocate:disabled { color:#9aa79a; cursor:default; }
+.setupPage .selectedField { background:#000; border-color:#000; }
+.setupPage .selectedField button[role=combobox] { background:transparent; border-color:#444; color:#fff; }
+.setupPage .selectedField button[role=combobox]:hover { background:#1a1a1a; }
+.setupPage .selectedField button[role=combobox] svg, .setupPage .selectedField button:not(.fieldNumber):not([role=combobox]) { color:#fff; }
+
+/* Saved field outlines drawn over the picker while an existing raster is being placed. */
+.pickerOverlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.pickerOverlay polygon { fill:rgba(0,101,240,.14); stroke:var(--toph-color-field-outline); stroke-width:2; }

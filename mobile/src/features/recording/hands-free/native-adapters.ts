@@ -22,6 +22,8 @@ const haptics: Partial<Record<HandsFreePhase, () => Promise<void>>> = !Haptics ?
   listening: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy),
   thinking: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
   speaking: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+  // Felt the moment the call hangs up, so the phone can go back in the pocket.
+  saving: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
   saved: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
   error: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
 };

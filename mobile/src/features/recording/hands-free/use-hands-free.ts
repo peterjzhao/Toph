@@ -6,11 +6,11 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { AppState } from "react-native";
 import type { ExtractedLogFields, TranscriptionResult } from "@toph/contracts/transcription";
-import type { VoiceGuidance } from "@toph/contracts/voice";
+import type { VoiceGuidance, VoiceSession } from "@toph/contracts/voice";
 import type { RecordingClip } from "../local-drafts";
 import type { useRecorder } from "../use-recorder";
 import { idleState, isLive, reduceHandsFree, type HandsFreePhase } from "./machine";
-import { createRealtimeRelay, type RelayEnd, type RelaySaveResult, type RelayTranscripts } from "./realtime-relay";
+import { createRealtimeRelay, type RelayEnd } from "./realtime-relay";
 import { createSilenceDetector, type SilenceOptions, type SilenceVerdict } from "./silence";
 import type { Speaker } from "./speaker";
 import { runTurnLoop, type SaveOutcome, type TurnLimits } from "./turn-loop";
@@ -54,6 +54,8 @@ export type HandsFreeOptions = {
 
 type Run = { stopped: boolean; call: RealtimeCall | null; relay: ReturnType<typeof createRealtimeRelay> | null; timers: ReturnType<typeof setTimeout>[]; captured: boolean; fields: ExtractedLogFields | null };
 type PendingClip = { resolve(clip: RecordingClip | null): void; reject(cause: Error): void; detector: ReturnType<typeof createSilenceDetector>; verdict: SilenceVerdict | null; recording: boolean };
+/** The events channel OpenAI expects; created before the session arrives so the offer can be built early. */
+const realtimeDataChannel = "oai-events";
 let nativeAdapters: HandsFreeAdapters | null = null;
 /** Required on first use: the audio, haptics and WebRTC modules are not needed to draw the switch. */
 function defaultAdapters(): HandsFreeAdapters {
@@ -169,59 +171,81 @@ export function useHandsFree(options: HandsFreeOptions) {
     await turns(current, guidance);
   }, [adapters, finish, turns]);
 
-  const realtime = useCallback(async (current: Run, connect: ConnectRealtime) => {
-    const session = await adapters().api.session(latest.current.context);
+  /** The worker approved the read-back: hang up first, then extract and save behind the "Got it" screen. */
+  const saveAfterCall = useCallback(async (current: Run) => {
     if (current.stopped) return;
-    const { api, extract, prepareCallAudio } = adapters();
-    await prepareCallAudio();
+    const { labelled, worker } = current.relay?.transcripts() ?? { labelled: "", worker: "" };
+    release(current);
+    if (run.current === current) run.current = null;
+    dispatch({ type: "saving" });
+    const review = (message: string) => { dispatch({ type: "end" }); latest.current.onReview(message); };
+    try {
+      latest.current.loadTranscript([], worker);
+      // The model's arguments are never saved: the strict extraction of what was said is.
+      const result = await adapters().extract(labelled, latest.current.context);
+      if (!result.fields) { if (current.fields) latest.current.applyFields(current.fields); review(result.extractionError ?? "The details could not be read."); return; }
+      latest.current.applyFields(result.fields);
+      if (result.voice && result.voice.status !== "ready_to_confirm") { review("Some details are still missing."); return; }
+      const outcome = await latest.current.save();
+      if (!outcome.stored) { review(outcome.error || "The log could not be saved."); return; }
+      dispatch({ type: "saved" });
+      banner.current = setTimeout(() => dispatch({ type: "end" }), latest.current.savedBannerMs ?? 1500);
+    } catch (cause) { review(cause instanceof Error ? cause.message : "The log could not be saved."); }
+  }, [adapters, release]);
+
+  const realtime = useCallback(async (current: Run, connect: ConnectRealtime) => {
+    const { api, prepareCallAudio } = adapters();
     let failing = false;
     const fail = () => { if (!failing && !current.stopped) { failing = true; void fallBack(current); } };
+    let open = false, relay: ReturnType<typeof createRealtimeRelay> | null = null;
+    // Covers the session request, the microphone, the offer and the SDP exchange as well as the channel.
+    current.timers.push(setTimeout(() => { if (!open) fail(); }, latest.current.connectTimeoutMs ?? 15_000));
+    // The session is minted while the microphone opens and the offer is built; only the SDP exchange needs both.
+    const pendingSession = adapters().api.session(latest.current.context);
+    pendingSession.catch(() => undefined);
+    await prepareCallAudio();
+    const connecting = connect(realtimeDataChannel, {
+      onOpen: () => {
+        open = true; dispatch({ type: "transport", transport: "realtime" }); relay?.open();
+        // WebRTC configures the session for the earpiece when its audio starts; route to the loudspeaker again.
+        void prepareCallAudio();
+      },
+      onMessage: message => relay?.handle(message),
+      onDown: fail,
+    }, async offer => exchangeSdp(await pendingSession, offer));
+    connecting.catch(() => undefined);
+    let session: VoiceSession;
+    try { session = await pendingSession; }
+    catch (cause) { void connecting.then(call => call.close(), () => undefined); throw cause; }
+    if (current.stopped) { void connecting.then(call => call.close(), () => undefined); return; }
 
-    async function save({ labelled, worker }: RelayTranscripts): Promise<RelaySaveResult> {
-      // The model's arguments are never saved: the strict extraction of what was said is.
-      const result = await extract(labelled, latest.current.context);
-      if (!result.fields) return { saved: false, error: result.extractionError ?? "The details could not be read." };
-      current.fields = result.fields;
-      latest.current.loadTranscript([], worker);
-      latest.current.applyFields(result.fields);
-      if (result.voice && result.voice.status !== "ready_to_confirm") return { saved: false, error: "Some details are still missing.", prompt: result.voice.prompt };
-      const outcome = await latest.current.save();
-      return outcome.stored ? { saved: true, synced: outcome.synced } : { saved: false, error: outcome.error || "The log could not be saved." };
-    }
     function ended(reason: RelayEnd, message?: string) {
       if (reason === "failed") fail();
-      else finish(current, reason === "saved" ? "saved" : "review", message);
+      else if (reason === "confirmed") void saveAfterCall(current);
+      else finish(current, "review", message);
     }
-    const relay = createRealtimeRelay({
-      send: event => current.call?.send(event), toolName: session.toolName, save, onEnd: ended,
+    relay = createRealtimeRelay({
+      send: event => current.call?.send(event), toolName: session.toolName, onEnd: ended,
       postState: (transcript, turn) => api.state(latest.current.context, transcript, turn),
       postCheck: args => api.check(args),
       onPhase: (phase, text) => dispatch({ type: phase, text }),
       onFields: fields => { current.fields = fields; },
-      schedule: (next, ms) => current.timers.push(setTimeout(next, ms)),
     });
     current.relay = relay;
-    let open = false;
     let call: RealtimeCall;
-    try {
-      call = await connect(session, {
-        onOpen: () => { open = true; dispatch({ type: "transport", transport: "realtime" }); relay.open(); },
-        onMessage: relay.handle,
-        onDown: fail,
-      }, offer => exchangeSdp(session, offer));
-    } catch (cause) {
+    try { call = await connecting; }
+    catch (cause) {
       // A connection that dropped while it was being set up has already moved to the turn-based mode.
       if (failing) return;
       throw cause;
     }
     if (current.stopped || failing) { call.close(); return; }
     current.call = call;
-    current.timers.push(
-      setTimeout(() => { if (!open) fail(); }, latest.current.connectTimeoutMs ?? 8000),
-      // A realtime call is billed while it is open.
-      setTimeout(() => finish(current, "review", "The voice conversation reached its time limit."), Math.max(30, session.maxSessionSeconds || 300) * 1000),
-    );
-  }, [adapters, fallBack, finish]);
+    // The channel can open before the call is handed back; the greeting needs the call to send on.
+    if (open) relay.open();
+    // A realtime call is billed while it is open.
+    current.timers.push(setTimeout(() => finish(current, "review", "The voice conversation reached its time limit."), Math.max(30, session.maxSessionSeconds || 300) * 1000));
+  }, [adapters, fallBack, finish, saveAfterCall]);
 
   const start = useCallback(async () => {
     if (run.current && !run.current.stopped) return;

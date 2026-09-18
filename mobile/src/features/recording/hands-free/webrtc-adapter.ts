@@ -3,7 +3,6 @@
  * only in a development or release build; in Expo Go, on web and under Jest it is absent, and
  * hands-free mode uses the turn-based transport instead.
  */
-import type { VoiceSession } from "@toph/contracts/voice";
 
 type WebRTC = typeof import("react-native-webrtc");
 // The package's event typings come from a vendored shim that TypeScript cannot resolve here.
@@ -15,7 +14,11 @@ export type RealtimeCallbacks = {
   onDown(reason: string): void;
 };
 export type RealtimeCall = { send(event: Record<string, unknown>): void; close(): void };
-export type ConnectRealtime = (session: VoiceSession, callbacks: RealtimeCallbacks, exchange: (offer: string) => Promise<string>) => Promise<RealtimeCall>;
+/**
+ * Opens the microphone and builds the offer straight away; `exchange` is where the caller waits for the
+ * server's session, so the two run side by side instead of one after the other.
+ */
+export type ConnectRealtime = (dataChannel: string, callbacks: RealtimeCallbacks, exchange: (offer: string) => Promise<string>) => Promise<RealtimeCall>;
 
 /** Null when the native module is not part of this build. The import is guarded so the app still starts. */
 export function loadWebRTC(): WebRTC | null {
@@ -25,12 +28,12 @@ export function loadWebRTC(): WebRTC | null {
 }
 
 export function createRealtimeConnector(webrtc: WebRTC): ConnectRealtime {
-  return async (session, callbacks, exchange) => {
+  return async (dataChannel, callbacks, exchange) => {
     const { mediaDevices, RTCPeerConnection, RTCSessionDescription } = webrtc;
     let closed = false;
     const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
     const peer = new RTCPeerConnection();
-    const channel = peer.createDataChannel(session.dataChannel);
+    const channel = peer.createDataChannel(dataChannel);
     function close() {
       if (closed) return;
       closed = true;

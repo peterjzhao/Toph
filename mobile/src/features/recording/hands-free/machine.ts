@@ -1,7 +1,7 @@
 /** Hands-free session states shared by the realtime and turn-based transports. Pure: no native imports. */
 import { tokens } from "@toph/design";
 
-export type HandsFreePhase = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "saved" | "error";
+export type HandsFreePhase = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "saving" | "saved" | "error";
 export type HandsFreeTransport = "realtime" | "turns";
 export type HandsFreeState = {
   phase: HandsFreePhase;
@@ -15,6 +15,8 @@ export type HandsFreeEvent =
   | { type: "listening" }
   | { type: "thinking" }
   | { type: "speaking"; text?: string }
+  /** The call has ended; the log is being saved behind this screen. */
+  | { type: "saving" }
   | { type: "saved" }
   | { type: "fail"; message: string }
   | { type: "end" };
@@ -27,6 +29,7 @@ export const isLive = (phase: HandsFreePhase) => live.includes(phase);
 export function reduceHandsFree(state: HandsFreeState, event: HandsFreeEvent): HandsFreeState {
   if (event.type === "end") return idleState;
   if (event.type === "start") return isLive(state.phase) ? state : { phase: "connecting", transport: null, message: "" };
+  if (state.phase === "saving" && event.type === "saved") return { ...state, phase: "saved", message: "" };
   // Late adapter callbacks after a session ended, saved or failed must not revive it.
   if (!isLive(state.phase)) return state;
   switch (event.type) {
@@ -34,6 +37,7 @@ export function reduceHandsFree(state: HandsFreeState, event: HandsFreeEvent): H
     case "listening": return { ...state, phase: "listening", message: "" };
     case "thinking": return { ...state, phase: "thinking" };
     case "speaking": return { ...state, phase: "speaking", message: event.text ?? state.message };
+    case "saving": return { ...state, phase: "saving", message: "" };
     case "saved": return { ...state, phase: "saved", message: "" };
     case "fail": return { ...state, phase: "error", message: event.message };
   }
@@ -48,6 +52,7 @@ export const phaseDisplay: Record<HandsFreePhase, Display> = {
   listening: { label: "Listening", hint: "Speak now. Tap anywhere to stop", background: colors.brand, foreground: colors.surface },
   thinking: { label: "Thinking", hint: "Tap anywhere to stop", background: colors.textMuted, foreground: colors.surface },
   speaking: { label: "Speaking", hint: "Tap anywhere to stop", background: colors.fieldOutline, foreground: colors.surface },
+  saving: { label: "Got it", hint: "Saving your log. Tap to close", background: colors.text, foreground: colors.surface },
   saved: { label: "Saved", hint: "Tap to continue", background: colors.text, foreground: colors.surface },
   error: { label: "Stopped", hint: "Tap to go back", background: colors.warning, foreground: colors.surface },
 };

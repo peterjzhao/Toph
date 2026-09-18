@@ -1,7 +1,7 @@
 import type { ExtractedLogFields } from "@toph/contracts/transcription";
 import type { VoiceCheckResult, VoiceStateResult } from "@toph/contracts/voice";
 import { emptyExtraction } from "../../__tests__/transcription-fixture";
-import { createRealtimeRelay, type RelayDeps, type RelaySaveResult } from "../realtime-relay";
+import { createRealtimeRelay, type RelayDeps } from "../realtime-relay";
 
 const fields: ExtractedLogFields = { ...emptyExtraction, activity: "Spraying", notes: "Online voice log created." };
 const stateResult = (turn: number): VoiceStateResult<ExtractedLogFields> => ({ turn, status: "needs_fields", missingFields: ["endTime"], problems: [], prompt: "What time did you finish?", fields, stateNote: `LOG STATE (authoritative, turn ${turn}): end=MISSING.` });
@@ -11,17 +11,14 @@ const toolCall = (call_id: string, args = "{\"activity\":\"Spraying\",\"confirme
 
 function harness(overrides: Partial<RelayDeps> = {}) {
   const sent: Record<string, any>[] = [];
-  const timers: (() => void)[] = [];
   const deps: RelayDeps = {
     send: event => sent.push(event), toolName: "check_log",
     postState: jest.fn(async (_transcript: string, turn: number) => stateResult(turn)),
     postCheck: jest.fn(async () => checkResult(false)),
-    save: jest.fn(async (): Promise<RelaySaveResult> => ({ saved: true, synced: true })),
     onPhase: jest.fn(), onFields: jest.fn(), onEnd: jest.fn(),
-    schedule: run => timers.push(run),
     ...overrides,
   };
-  return { relay: createRealtimeRelay(deps), deps, sent, timers };
+  return { relay: createRealtimeRelay(deps), deps, sent };
 }
 const user = (id: string) => ({ type: "conversation.item.added", item: { id, type: "message", role: "user" } });
 const assistant = (id: string) => ({ type: "conversation.item.added", item: { id, type: "message", role: "assistant" } });
@@ -83,47 +80,23 @@ test("forwards a tool call to the check once and answers with the result, then a
   const output = JSON.parse(sent[0].item.output);
   expect(output).toMatchObject({ status: "needs_fields", saveRequested: false, prompt: "What time did you finish?" });
   expect(output.fields).not.toHaveProperty("notes");
-  expect(deps.save).not.toHaveBeenCalled();
+  expect(deps.onEnd).not.toHaveBeenCalled();
   // Other tools and plain messages are ignored.
   relay.handle({ type: "response.done", response: { output: [{ type: "function_call", name: "other", call_id: "call_2", arguments: "{}" }, { type: "message" }] } });
   await flush();
   expect(deps.postCheck).toHaveBeenCalledTimes(1);
 });
 
-test("saveRequested runs the save, replies saved true, and hangs up after the spoken confirmation", async () => {
-  const { relay, deps, sent, timers } = harness({ postCheck: jest.fn(async () => checkResult(true)) });
+test("saveRequested hangs up at once: no tool reply, no spoken goodbye to wait for", async () => {
+  const { relay, deps, sent } = harness({ postCheck: jest.fn(async () => checkResult(true)) });
   relay.handle(heard("u1", "I sprayed field A from eight to ten with two liters of neem oil."));
-  relay.handle({ type: "output_audio_buffer.stopped" }); // An earlier sentence ending must not hang up.
   relay.handle(toolCall("call_save", "{\"confirmed\":true}"));
   await flush();
-  expect(deps.save).toHaveBeenCalledWith({ labelled: "Worker: I sprayed field A from eight to ten with two liters of neem oil.", worker: "I sprayed field A from eight to ten with two liters of neem oil." });
-  const outputs = sent.filter(event => event.item?.type === "function_call_output");
-  expect(JSON.parse(outputs[0].item.output)).toEqual({ saved: true, synced: true });
-  expect(sent.at(-1)).toEqual({ type: "response.create" });
-  expect(deps.onEnd).not.toHaveBeenCalled();
-  relay.handle({ type: "output_audio_buffer.started" });
-  relay.handle({ type: "output_audio_buffer.stopped" });
-  expect(deps.onEnd).toHaveBeenCalledWith("saved", undefined);
-  timers.forEach(run => run());
-  expect(deps.onEnd).toHaveBeenCalledTimes(1);
-});
-
-test("hangs up on a timer when no audio event follows the save", async () => {
-  const { relay, deps, timers } = harness({ postCheck: jest.fn(async () => checkResult(true)) });
-  relay.handle(toolCall("call_save"));
-  await flush();
-  expect(timers).toHaveLength(1);
-  timers[0]();
-  expect(deps.onEnd).toHaveBeenCalledWith("saved", undefined);
-});
-
-test("a save that still misses details is reported to the model and the call continues", async () => {
-  const { relay, deps, sent } = harness({ postCheck: jest.fn(async () => checkResult(true)), save: jest.fn(async (): Promise<RelaySaveResult> => ({ saved: false, error: "Some details are still missing.", prompt: "Which product?" })) });
-  relay.handle(toolCall("call_save"));
-  await flush();
-  expect(JSON.parse(sent[0].item.output)).toEqual({ saved: false, error: "Some details are still missing.", prompt: "Which product?" });
-  relay.handle({ type: "output_audio_buffer.started" }); relay.handle({ type: "output_audio_buffer.stopped" });
-  expect(deps.onEnd).not.toHaveBeenCalled();
+  expect(deps.onEnd).toHaveBeenCalledWith("confirmed", undefined);
+  expect(sent.filter(event => event.item?.type === "function_call_output")).toHaveLength(0);
+  expect(sent.some(event => event.type === "response.create")).toBe(false);
+  // What was said is still available to the caller for the save.
+  expect(relay.transcripts().worker).toBe("I sprayed field A from eight to ten with two liters of neem oil.");
 });
 
 test("fatal errors and a failed check end the relay for the turn-based fallback; a busy response does not", async () => {

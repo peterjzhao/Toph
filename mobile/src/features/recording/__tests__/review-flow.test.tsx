@@ -64,7 +64,8 @@ test.each(["recording", "paused", "requesting"] as const)("cancel from %s resets
   await render(<RecordingWorkspace {...workspaceProps(mockBootstrap ?? undefined)} />);
   await fireEvent.press(screen.getByRole("button", { name: "Cancel recording" }));
   expect(mockRecorder.reset).toHaveBeenCalledTimes(1);
-  expect(screen.getByLabelText("0 seconds recorded")).toBeTruthy();
+  // Back on the home screen: the clock is gone until the next recording starts.
+  expect(screen.queryByLabelText(/seconds recorded/)).toBeNull();
   expect(screen.getByRole("button", { name: "Start recording" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Return to review" })).toBeNull();
 });
@@ -90,7 +91,8 @@ test("Back discards all clips, transcript and notes and resets the clock", async
   await fireEvent.changeText(screen.getByLabelText("Summary"), "Discard these notes");
   await fireEvent.press(screen.getByRole("button", { name: "Back" }));
   expect(mockRecorder.reset).toHaveBeenCalledTimes(1);
-  expect(screen.getByLabelText("0 seconds recorded")).toBeTruthy();
+  // Back on the home screen: the clock is gone until the next recording starts.
+  expect(screen.queryByLabelText(/seconds recorded/)).toBeNull();
   expect(screen.queryByRole("button", { name: "Return to review" })).toBeNull();
   await fireEvent.press(screen.getByRole("button", { name: "Write a note" }));
   expect(screen.queryByText("Recording player")).toBeNull();

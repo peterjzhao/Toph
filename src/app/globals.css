@@ -9,3 +9,9 @@ button:disabled { cursor: not-allowed; }
 button { color: inherit; }
 svg { flex-shrink: 0; }
 ::selection { background: var(--toph-color-selection); }
+
+/* A report viewer is open: print only its sheet. Paired with .viewerOverlay in operations.module.css. */
+@media print {
+  body.toph-report-open { visibility: hidden; background: #fff; }
+  body.toph-report-open .toph-report-sheet, body.toph-report-open .toph-report-sheet * { visibility: visible; }
+}

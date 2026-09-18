@@ -109,7 +109,7 @@ test("a blocked microphone is an error state and nothing is recorded", async () 
   expect(hook.result.current.phase).toBe("idle");
 });
 
-test("realtime: relays state and the tool call, saves through the form, then hangs up", async () => {
+test("realtime: relays state and the tool call, hangs up on approval, then saves through the form", async () => {
   const rtc = fakeCall();
   const { adapters, options, recorder } = setup({ connect: rtc.connect });
   const hook = await mount(options);
@@ -137,18 +137,13 @@ test("realtime: relays state and the tool call, saves through the form, then han
   expect(options.loadTranscript).toHaveBeenCalledWith([], "I sprayed field A.");
   expect(options.applyFields).toHaveBeenCalledWith(fields);
   expect(options.save).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(rtc.sent.find(event => event.item?.type === "function_call_output")!.item.output)).toEqual({ saved: true, synced: true });
-  expect(rtc.call.close).not.toHaveBeenCalled();
-
-  await act(async () => {
-    rtc.callbacks().onMessage(JSON.stringify({ type: "output_audio_buffer.started" }));
-    rtc.callbacks().onMessage(JSON.stringify({ type: "output_audio_buffer.stopped" }));
-  });
+  // The call is closed without waiting for a tool reply or a spoken goodbye.
+  expect(rtc.sent.find(event => event.item?.type === "function_call_output")).toBeUndefined();
   expect(rtc.call.close).toHaveBeenCalledTimes(1);
   expect(hook.result.current.phase).toBe("saved");
 });
 
-test("realtime: details still missing at the final extraction are not saved", async () => {
+test("realtime: details still missing at the final extraction open the form instead of saving", async () => {
   const rtc = fakeCall();
   const { adapters, options } = setup({ connect: rtc.connect });
   jest.mocked(adapters.extract).mockResolvedValue(result(ask));
@@ -159,8 +154,9 @@ test("realtime: details still missing at the final extraction are not saved", as
     await flush();
   });
   expect(options.save).not.toHaveBeenCalled();
-  expect(JSON.parse(rtc.sent.find(event => event.item?.type === "function_call_output")!.item.output)).toEqual({ saved: false, error: "Some details are still missing.", prompt: ask.prompt });
-  expect(hook.result.current.live).toBe(true);
+  expect(rtc.call.close).toHaveBeenCalledTimes(1);
+  expect(options.onReview).toHaveBeenCalledWith("Some details are still missing.");
+  expect(hook.result.current.phase).toBe("idle");
 });
 
 test("a failed session request falls back to the turn-based loop", async () => {
@@ -168,7 +164,8 @@ test("a failed session request falls back to the turn-based loop", async () => {
   const { recorder, options, said } = setup({ connect: rtc.connect, session: async () => { throw new Error("Voice conversation is unavailable."); } });
   const hook = await mount(options);
   await act(async () => { void hook.result.current.start(); await flush(); });
-  expect(rtc.connect).not.toHaveBeenCalled();
+  // The microphone and offer are prepared alongside the session request, so that call is closed again.
+  expect(rtc.call.close).toHaveBeenCalledTimes(1);
   expect(said).toEqual([spoken.opening]);
   expect(recorder.start).toHaveBeenCalledTimes(1);
   expect(hook.result.current.transport).toBe("turns");

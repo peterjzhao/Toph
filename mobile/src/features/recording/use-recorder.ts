@@ -1,5 +1,5 @@
 import {
-  getRecordingPermissionsAsync, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, type RecordingStatus,
+  getRecordingPermissionsAsync, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, setIsAudioActiveAsync, useAudioRecorder, type RecordingStatus,
 } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
@@ -23,7 +23,12 @@ function extensionOf(uri: string) {
   return match ? match[1].toLowerCase() : "m4a";
 }
 
-export function useRecorder() {
+/**
+ * `prewarm` configures the audio session and prepares the recording file while the screen is idle, so a tap
+ * only has to call record(). Preparing does not capture audio or show the microphone indicator, but it does
+ * activate the session, which pauses other apps' audio. It never opens the permission prompt.
+ */
+export function useRecorder({ prewarm = false }: { prewarm?: boolean } = {}) {
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [seconds, setSeconds] = useState(0);
   const [levels, setLevels] = useState<number[]>(idleLevels);
@@ -39,8 +44,24 @@ export function useRecorder() {
   const onStatus = useRef<(event: RecordingStatus) => void>(() => {});
   const recorder = useAudioRecorder(recordingOptions, (event) => onStatus.current(event));
 
-  // Read existing permission before the tap. Only Start may open the system prompt;
-  // do not prepare or activate the microphone while the screen is idle.
+  // Resolves true once the recorder is prepared and only record() is left to call.
+  const warm = useRef<Promise<boolean> | null>(null);
+
+  const warmUp = useCallback(() => {
+    if (!prewarm || warm.current || statusRef.current !== "idle") return;
+    const pending = (async () => {
+      const access = await permission.current;
+      if (!access?.granted) return false;
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync(recordingOptions);
+      return true;
+    })().catch(() => false);
+    warm.current = pending;
+    // A failed attempt must not block the next one (permission granted later, returning from Settings).
+    void pending.then(ready => { if (!ready && warm.current === pending) warm.current = null; });
+  }, [prewarm, recorder]);
+
+  // Read existing permission before the tap. Only Start may open the system prompt.
   useEffect(() => {
     const refreshPermission = () => {
       const pending = getRecordingPermissionsAsync();
@@ -48,12 +69,19 @@ export function useRecorder() {
       void pending.catch(() => { if (permission.current === pending) permission.current = null; });
     };
     refreshPermission();
+    warmUp();
     const listener = AppState.addEventListener("change", state => {
-      if (state === "active") refreshPermission();
-      else permission.current = null;
+      if (state === "active") { refreshPermission(); warmUp(); return; }
+      permission.current = null;
+      // Hand the audio session back while the app is away; the next tap or return prepares again.
+      if (warm.current && statusRef.current === "idle") void setIsAudioActiveAsync(false).catch(() => {});
+      warm.current = null;
     });
     return () => listener.remove();
-  }, []);
+  }, [warmUp]);
+
+  // Back on the idle screen after a recording or a discarded draft: prepare the next one.
+  useEffect(() => { if (status === "idle") warmUp(); }, [status, warmUp]);
 
   const update = useCallback((next: RecorderStatus) => {
     statusRef.current = next;
@@ -126,10 +154,20 @@ export function useRecorder() {
 
   async function start() {
     if (["requesting", "recording", "paused", "stopping"].includes(statusRef.current)) return;
+    const warmed = warm.current;
+    warm.current = null;
     reset();
     const attempt = generation.current;
     update("requesting");
     try {
+      if (warmed && await warmed) {
+        if (attempt !== generation.current) return;
+        // Playback or a call may have changed the session since it was prepared; then set up again below.
+        let recording = false;
+        try { recorder.record(); recording = recorder.getStatus().isRecording; } catch { recording = false; }
+        if (recording) { started.current = Date.now(); update("recording"); return; }
+      }
+      if (attempt !== generation.current) return;
       const existing = await permission.current?.catch(() => null);
       if (attempt !== generation.current) return;
       const access = existing?.granted ? existing : await requestRecordingPermissionsAsync();

@@ -5,11 +5,13 @@ import type { FieldPoint, FarmSetup } from "@/contracts/accounts";
 import type { AccountContext } from "./service";
 import { ApiError, validationError } from "@/server/errors";
 import { parseInput } from "./validation";
+import { parseFarmExtent } from "@/server/satellite/extent";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const point = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict();
 const setupSchema = z.object({
-  image: z.object({ dataUrl: z.string().max(2_800_000), width: z.number().int().min(1).max(8192), height: z.number().int().min(1).max(8192) }).strict().optional(),
+  // `bbox` is present only when the view came from the map picker; an uploaded image has no trusted extent.
+  image: z.object({ dataUrl: z.string().max(2_800_000), width: z.number().int().min(1).max(8192), height: z.number().int().min(1).max(8192), bbox: z.string().max(100).optional() }).strict().optional(),
   fields: z.array(z.object({ id: z.string().uuid().optional(), label: z.string().regex(/^[A-Z]$/), boundary: z.array(point).min(3).max(200) }).strict()).min(1).max(26),
 }).strict();
 
@@ -69,6 +71,13 @@ function parseImage(image: NonNullable<z.infer<typeof setupSchema>["image"]>) {
   return { bytes, mime: match[1], width: image.width, height: image.height };
 }
 
+/** The map picker's own view, revalidated against the shared extent bounds. */
+function parseExtent(bbox: string) {
+  const parts = bbox.split(",").map(Number);
+  if (parts.length !== 4) throw validationError("Choose a map view to capture.");
+  return parseFarmExtent({ minX: parts[0], minY: parts[1], maxX: parts[2], maxY: parts[3], source: "capture" });
+}
+
 export async function getFarmSetup(ctx: AccountContext): Promise<FarmSetup> {
   const [images, fields] = await Promise.all([
     ctx.sql`select width, height from toph.farm_images where farm_id = ${ctx.farmId}`,
@@ -84,6 +93,8 @@ export async function saveFarmSetup(ctx: AccountContext, body: unknown): Promise
   if (new Set(input.fields.map(field => field.label)).size !== input.fields.length) throw validationError("Assign each field a different letter from A to Z.");
   for (const field of input.fields) validateBoundary(field.boundary);
   const image = input.image ? parseImage(input.image) : null;
+  // Re-validated here rather than trusted: a client cannot widen the accepted bounds.
+  const extent = input.image?.bbox ? parseExtent(input.image.bbox) : null;
   await ctx.sql.begin(async tx => {
     await tx`select farm_id from toph.farm_access where farm_id = ${ctx.farmId} for update`;
     const [existingImage] = await tx`select farm_id from toph.farm_images where farm_id = ${ctx.farmId}`;
@@ -100,9 +111,14 @@ export async function saveFarmSetup(ctx: AccountContext, body: unknown): Promise
     const used = await tx<{ field_id: string }[]>`select distinct field_id from toph.work_logs where farm_id = ${ctx.farmId}`;
     if (used.some(row => !ids.has(row.field_id))) throw new ApiError(409, "REVISION_CONFLICT", "Fields with recorded work must remain on the farm map.");
     if (image && existingImage && used.length) throw new ApiError(409, "REVISION_CONFLICT", "This farm image has recorded work. Keep it to preserve the original field locations.");
-    if (image) await tx`insert into toph.farm_images (farm_id, mime_type, bytes, width, height)
-      values (${ctx.farmId}, ${image.mime}, ${image.bytes}, ${image.width}, ${image.height})
-      on conflict (farm_id) do update set mime_type = excluded.mime_type, bytes = excluded.bytes, width = excluded.width, height = excluded.height, updated_at = now()`;
+    // The extent is written with the image every time, so replacing an aerial can never leave the
+    // previous raster's coordinates attached to a different picture.
+    if (image) await tx`insert into toph.farm_images (farm_id, mime_type, bytes, width, height, extent_min_x, extent_min_y, extent_max_x, extent_max_y, extent_source)
+      values (${ctx.farmId}, ${image.mime}, ${image.bytes}, ${image.width}, ${image.height},
+        ${extent?.minX ?? null}, ${extent?.minY ?? null}, ${extent?.maxX ?? null}, ${extent?.maxY ?? null}, ${extent?.source ?? null})
+      on conflict (farm_id) do update set mime_type = excluded.mime_type, bytes = excluded.bytes, width = excluded.width, height = excluded.height,
+        extent_min_x = excluded.extent_min_x, extent_min_y = excluded.extent_min_y, extent_max_x = excluded.extent_max_x,
+        extent_max_y = excluded.extent_max_y, extent_source = excluded.extent_source, updated_at = now()`;
     // Vacate labels before applying edits so swapping A/B is atomic and preserves field IDs.
     await tx`update toph.fields set label = null where farm_id = ${ctx.farmId}`;
     await tx`delete from toph.fields where farm_id = ${ctx.farmId} and not (id = any(${[...ids]}::uuid[]))`;

@@ -1,10 +1,10 @@
 import * as Crypto from "expo-crypto";
 import { useNetworkState } from "expo-network";
 import {
-  ArrowLeft, ArrowRight, AudioLines, CheckCheck, CircleHelp, CloudUpload, FileText, MessageSquare, Mic, Pause, Play, Plus, RefreshCw, Square, WifiOff,
+  ArrowLeft, ArrowRight, AudioLines, CheckCheck, CircleHelp, CloudUpload, FileText, MessageSquare, Mic, Pause, Phone, Play, Plus, RefreshCw, Square, WifiOff,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileAccount, MobileAccountEdit, MobileBootstrap, MobileRemoteLog } from "@toph/contracts/mobile";
 import type { AccountSession } from "@toph/contracts/accounts";
 import { assetHeaders, assetUrl, createMobileClient, MobileApiError } from "@/lib/api/mobile-client";
@@ -19,7 +19,7 @@ import { draftClips, listDrafts, saveDraft, type RecordingDraft } from "./local-
 import {
   clock, dateLabel, emptyDetails, fieldLabel, localDate, validateDetails, type WorkDetails,
 } from "./recording-utils";
-import { colors, fonts, shared, fontSize, lineHeight, spacing } from "./styles";
+import { colors, fonts, shared, fontSize, lineHeight, radius, spacing } from "./styles";
 import { useTranscription } from "./use-transcription";
 import { useRecorder } from "./use-recorder";
 import { applyExtractedDetails } from "./extracted-details";
@@ -27,7 +27,6 @@ import { activityDetailSummary, activityForm } from "./activity-forms";
 import { saveActivityItem } from "./activity-catalog";
 import type { ExtractedLogFields } from "@toph/contracts/transcription";
 import HandsFreeScreen from "./hands-free/HandsFreeScreen";
-import { readHandsFreePreference, saveHandsFreePreference } from "./hands-free/preference";
 import type { SaveOutcome } from "./hands-free/turn-loop";
 import { useHandsFree } from "./hands-free/use-hands-free";
 import InboxSheet from "../messages/InboxSheet";
@@ -41,7 +40,7 @@ type Props = { session: AccountSession; initialBootstrap: MobileBootstrap; onSig
 export default function RecordingWorkspace({ session, initialBootstrap, onSignOut }: Props) {
   const initialAccount = sessionAccount(initialBootstrap, session);
   const catalogScope = `${session.farm.id}:${session.account.id}`;
-  const recorder = useRecorder();
+  const recorder = useRecorder({ prewarm: true });
   const insets = useSafeAreaInsets();
   const network = useNetworkState();
   const [screen, setScreen] = useState<Screen>("capture");
@@ -81,7 +80,6 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
   const voiceContext = { accountId: profile.id, referenceDate: details.workDate || localDate() };
   const transcription = useTranscription({ context: voiceContext, onFields: applyFields });
   const { clips, transcript, append, load } = transcription;
-  const [handsFreeOn, setHandsFreeOn] = useState(readHandsFreePreference);
   // A spoken "save" waits here until the form has rendered the last extracted details, then runs Save log.
   const [voiceSave, setVoiceSave] = useState<{ done: (outcome: SaveOutcome) => void } | null>(null);
   const handsFree = useHandsFree({
@@ -322,19 +320,14 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
     void submit().then(voiceSave.done);
   });
 
-  function toggleHandsFree(next: boolean) {
-    setHandsFreeOn(next);
-    saveHandsFreePreference(next);
-  }
-
   const statusText = recorder.status === "requesting" ? "Starting microphone…" : recorder.status === "recording" ? "Recording" : recorder.status === "paused" ? "Paused" : "";
   const noticeMessage = error || recorder.error;
   const accountDrafts = drafts.filter(draft => draft.employee.id === profile.id && draft.farmId === session.farm.id);
   const visibleRemoteLogs = remoteLogs.filter(log => !accountDrafts.some(draft => draft.sync?.logId === log.id));
   const localRemoteDraft = remoteLog ? accountDrafts.find(draft => draft.sync?.logId === remoteLog.id) : undefined;
   const handsFreeOpen = handsFree.phase !== "idle";
-  // Hands-free starts an empty log, so it is offered only while there is nothing to lose.
-  const handsFreeReady = handsFreeOn && !handsFreeOpen && !busy && clips.length === 0 && !editing;
+  // The two ways to start a log. Call mode starts an empty log, so both are offered only while there is nothing to lose.
+  const atHome = recorder.status === "idle" && !handsFreeOpen && clips.length === 0 && !editing;
   const covered = accountOpen || handsFreeOpen;
 
   return <View style={styles.app}>
@@ -365,11 +358,16 @@ export default function RecordingWorkspace({ session, initialBootstrap, onSignOu
               <SelectField style={styles.half} label="Field" value={details.field} values={fields} onChange={(value) => change("field", value)} disabled={busy} />
               <SelectField style={styles.half} label="Activity" value={details.activity} values={activities} onChange={(value) => change("activity", value)} disabled={busy} />
             </View> */}
-            <View style={styles.handsFreeRow}>
-              <Text style={shared.text}>Hands-free</Text>
-              <Switch value={handsFreeOn} onValueChange={toggleHandsFree} disabled={busy} trackColor={{ true: colors.green, false: colors.border }} accessibilityLabel="Hands-free" accessibilityHint="Record and save a log by voice, without touching the screen" />
-            </View>
-            {handsFreeReady ? <HandsFreeScreen {...handsFree} fullScreen={false} onPress={() => void handsFree.start()} onReview={() => handsFree.stop(true)} /> : <View style={styles.recorder}>
+            {atHome ? <View style={styles.modes}>
+              <Press style={[styles.mode, styles.modeRecord]} onPress={appendRecording} accessibilityRole="button" accessibilityLabel="Start recording" accessibilityHint="Record a log, then review it before saving">
+                <View style={[styles.modeIcon, styles.modeIconRecord]}><Mic size={26} color={colors.white} strokeWidth={1.7} /></View>
+                <View><Text style={[styles.modeTitle, { color: colors.white }]}>Record</Text><Text style={[styles.modeText, { color: colors.white }]}>Say what you did, then check it on screen.</Text></View>
+              </Press>
+              <Press style={[styles.mode, styles.modeCall]} onPress={() => void handsFree.start()} accessibilityRole="button" accessibilityLabel="Start call mode" accessibilityHint="Talk through a log and save it by voice, without touching the screen">
+                <View style={[styles.modeIcon, styles.modeIconCall]}><Phone size={24} color={colors.white} strokeWidth={1.7} /></View>
+                <View><Text style={styles.modeTitle}>Call mode</Text><Text style={styles.modeText}>Hands-free. Toph asks, you answer, it saves.</Text></View>
+              </Press>
+            </View> : <View style={styles.recorder}>
               <View style={styles.recorderStatus} accessibilityLiveRegion="polite">
                 <Text style={shared.quietText}>{statusText}</Text>
               </View>
@@ -485,7 +483,15 @@ const styles = StyleSheet.create({
   captureContent: { flexGrow: 1 },
   pageHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 28, marginBottom: spacing.xl },
   recordCard: { flex: 1, minHeight: 385 },
-  handsFreeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44, marginBottom: spacing.sm },
+  modes: { flex: 1, gap: spacing.md, minHeight: 295 },
+  mode: { flex: 1, minHeight: 140, justifyContent: "space-between", padding: spacing.xl, borderRadius: radius.section },
+  modeRecord: { backgroundColor: colors.ink },
+  modeCall: { backgroundColor: colors.greenTint },
+  modeIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  modeIconRecord: { backgroundColor: "rgba(255,255,255,0.16)" },
+  modeIconCall: { backgroundColor: colors.green },
+  modeTitle: { fontFamily: fonts.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -0.8, color: colors.ink },
+  modeText: { marginTop: 2, fontFamily: fonts.regular, fontSize: fontSize.control, lineHeight: lineHeight.control, color: colors.ink, opacity: 0.75 },
   contextFields: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-end" },
   half: { flex: 1 },
   recorder: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 295, paddingTop: 22, paddingBottom: 134 },
