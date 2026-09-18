@@ -137,7 +137,6 @@
 .sheetMeta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--toph-spacing-md); margin: 0; }
 .sheetMeta dt { font-size: 11px; text-transform: uppercase; letter-spacing: .35px; color: var(--toph-color-text-subtle); }
 .sheetMeta dd { margin: 5px 0 0; font-size: var(--toph-font-size-compact); color: #303030; }
-.sheetNote { margin: var(--toph-spacing-lg) 0 0; padding: 11px 13px; border-radius: var(--toph-radius-control); background: var(--toph-color-surface-muted); font-size: var(--toph-font-size-caption); line-height: 1.6; color: #777; }
 .sheetTableScroll { overflow-x: auto; }
 .sheetTable { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--toph-font-size-compact); white-space: nowrap; }
 .sheetTable th { background: var(--toph-color-surface); color: #999; font-size: 11px; text-transform: uppercase; font-weight: var(--toph-font-weight-regular); letter-spacing: .35px; padding: 14px var(--toph-spacing-lg); border-bottom: 1px solid var(--toph-color-border); }
@@ -153,7 +152,6 @@
   .viewerScroll { overflow: visible; padding: 0; display: block; }
   .sheet { max-width: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
   .sheetHead { padding: 0 0 var(--toph-spacing-lg); }
-  .sheetNote { background: transparent; border: 1px solid #ddd; color: #333; }
   .sheetTableScroll { overflow: visible; }
   .sheetTable { white-space: normal; font-size: 10px; }
   .sheetTable thead { display: table-header-group; }

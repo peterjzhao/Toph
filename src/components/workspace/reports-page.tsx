@@ -5,7 +5,7 @@ import { ArrowDownToLine, FileText, Maximize2, Minimize2, Printer, Search, Trash
 import type { LogDto } from "@/contracts/dashboard";
 import {
   reportCatalog, reportKinds, suggestedPeriod,
-  type ReportCell, type ReportDocument, type ReportKind, type ReportListResponse, type ReportMissing, type ReportResponse, type SavedReportDto, type SavedReportSummary,
+  type ReportCell, type ReportKind, type ReportListResponse, type ReportMissing, type ReportResponse, type SavedReportDto, type SavedReportSummary,
 } from "@/contracts/reports";
 import { requestJson, useWorkspace } from "@/components/workspace/workspace-provider";
 import { downloadCsv, EmptyState, PageHeader } from "@/components/workspace/workspace-ui";
@@ -85,15 +85,6 @@ function reportCsvRows(report: SavedReportDto): (string | number)[][] {
 }
 const csvName = (name: string) => `${name.replace(/[^a-z0-9 -]/gi, "").trim().replaceAll(" ", "-").toLowerCase() || "toph-report"}.csv`;
 
-/** The note under a report's header: where values came from, and what the blank markers mean. */
-function SourceNote({ doc }: { doc: ReportDocument }) {
-  return <p className={styles.sheetNote}>
-    Every value comes from a Toph log. {doc.detection.method === "ai"
-      ? <>Underlined values were read from a log&apos;s own words by {doc.detection.model}; hover to see them.</>
-      : "Only values recorded on logs were used."} Blanks are marked where the value belongs: <span className={`${own.pill} ${own.pillLog}`}>Not in log</span> means the worker&apos;s log doesn&apos;t say it, and <span className={`${own.pill} ${own.pillRecords}`}>From FSA</span> or similar names the record it comes from. Hover a marker for details.
-  </p>;
-}
-
 /** A saved report as a document: full screen, print or save as PDF, or CSV. */
 function ReportViewer({ summary, report, error, onClose }: { summary: SavedReportSummary; report: SavedReportDto | null; error: string; onClose: () => void }) {
   const overlay = useRef<HTMLDivElement>(null);
@@ -156,7 +147,6 @@ function ReportViewer({ summary, report, error, onClose }: { summary: SavedRepor
               <div><dt>Schedule</dt><dd>{form.cadence}</dd></div>
               <div><dt>Prepared</dt><dd>{stamp.format(new Date(doc.generatedAt))}{summary.createdBy ? ` by ${summary.createdBy}` : ""}</dd></div>
             </dl>
-            <SourceNote doc={doc} />
           </header>
           {doc.sections.map(section => <section key={section.title} className={own.section}>
             <div className={own.sectionHead}><h2>{section.title}</h2>{section.note && <p>{section.note}</p>}</div>
@@ -164,7 +154,7 @@ function ReportViewer({ summary, report, error, onClose }: { summary: SavedRepor
               ? <div className={styles.sheetTableScroll}><table className={styles.sheetTable}><thead><tr>{section.columns.map(column => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>{section.rows.map((row, index) => <tr key={`${row.logIds.join("-")}-${index}`}>{row.cells.map((cell, cellIndex) => <td key={cellIndex}><Value cell={cell} legacy={legacy} /></td>)}</tr>)}</tbody></table></div>
               : <p className={own.sectionEmpty}>{section.missing && <Blank missing={section.missing} />}{section.emptyText}</p>}
           </section>)}
-          <footer className={own.sheetFoot}>Structure follows the <a href={form.sourceUrl} target="_blank" rel="noreferrer">published source</a> for this record. Check requirements with the receiving agency or certifier before filing.</footer>
+          <footer className={own.sheetFoot}>Structure follows the <a href={form.sourceUrl} target="_blank" rel="noreferrer">published source</a> for this record.</footer>
         </>}
       </article>
     </div>
