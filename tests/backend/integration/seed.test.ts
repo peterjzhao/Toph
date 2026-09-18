@@ -71,9 +71,9 @@ describe("initial dataset", () => {
     expect(report.farm).toBe("inserted");
     expect(report.workLogs.inserted).toBe(11);
 
-    const [farm] = await sql<{ name: string; timezone: string; avatar_path: string }[]>`
-      select name, timezone, avatar_path from toph.farms where id = ${FARM_ID}`;
-    expect(farm).toEqual({ name: "Bays Ranch", timezone: "America/Los_Angeles", avatar_path: "/assets/avatar.jpg" });
+    const [farm] = await sql<{ name: string; timezone: string }[]>`
+      select name, timezone from toph.farms where id = ${FARM_ID}`;
+    expect(farm).toEqual({ name: "Bays Ranch", timezone: "America/Los_Angeles" });
 
     const counts = await sql<{ employees: number; fields: number; logs: number; tags: number; links: number }[]>`
       select (select count(*)::int from toph.employees where farm_id = ${FARM_ID}) as employees,
@@ -120,24 +120,18 @@ describe("initial dataset", () => {
   });
 
   it("attaches the recording and waveform to every log", async () => {
-    const logs = await sql<
-      { recording_path: string | null; recording_duration_seconds: number | null; waveform_asset_path: string | null; waveform_peaks: unknown }[]
-    >`select recording_path, recording_duration_seconds, waveform_asset_path, waveform_peaks from toph.work_logs where farm_id = ${FARM_ID}`;
+    const logs = await sql<{ recording_path: string | null; recording_duration_seconds: number | null; waveform_asset_path: string | null }[]>`
+      select recording_path, recording_duration_seconds, waveform_asset_path from toph.work_logs where farm_id = ${FARM_ID}`;
     expect(logs).toHaveLength(11);
     for (const log of logs) {
-      expect(log).toEqual({
-        recording_path: "/assets/sample-recording.mp3",
-        recording_duration_seconds: 13.384671,
-        waveform_asset_path: "/assets/waveform.svg",
-        waveform_peaks: null,
-      });
+      expect(log).toEqual({ recording_path: "/assets/sample-recording.mp3", recording_duration_seconds: 13.384671, waveform_asset_path: "/assets/waveform.svg" });
     }
   });
 
   it("stores the reviewed A–K map exactly like a confirmed field setup", async () => {
-    const fields = await sql<{ label: string; map_image_path: string | null; points: number }[]>`select label, map_image_path, jsonb_array_length(boundary) as points from toph.fields where farm_id = ${FARM_ID} order by label`;
+    const fields = await sql<{ label: string; points: number }[]>`select label, jsonb_array_length(boundary) as points from toph.fields where farm_id = ${FARM_ID} order by label`;
     expect(fields.map((f) => f.label).join("")).toBe("ABCDEFGHIJK");
-    expect(fields.every((f) => f.map_image_path === "/api/farm/image" && f.points >= 3)).toBe(true);
+    expect(fields.every((f) => f.points >= 3)).toBe(true);
     expect(await sql`select mime_type, width, height from toph.farm_images where farm_id = ${FARM_ID}`).toEqual([{ mime_type: "image/jpeg", width: 1403, height: 896 }]);
     expect(await sql`select setup_complete from toph.farm_access where farm_id = ${FARM_ID}`).toEqual([{ setup_complete: true }]);
   });

@@ -2,11 +2,13 @@ import "server-only";
 import { z } from "zod";
 import type { TranscriptionResult } from "@/contracts/transcription";
 import { buildVoiceGuidance } from "@/contracts/voice";
+import { ApiError } from "@/server/errors";
 import type { FarmContext } from "@/server/farm-context";
 import { getMobileBootstrap } from "@/server/mobile/accounts";
+import { requireOpenAiKey } from "@/server/openai";
 import { isValidCalendarDate } from "@/server/time/zoned";
 import { readJsonBody } from "@/server/http/body";
-import { readAudioUpload, transcribeAudio, TranscriptionError } from "./audio";
+import { readAudioUpload, transcribeAudio } from "./audio";
 import { extractLogFields } from "./extraction";
 import { reserveTranscription } from "./quota";
 import { assertOwnEmployee, type AccountContext } from "@/server/accounts/service";
@@ -18,19 +20,15 @@ export const contextSchema = z.object({
 const retrySchema = z.object({ context: contextSchema, transcript: z.string().trim().min(1).max(40_000) }).strict();
 
 export function transcriptionKey() {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) {
-    throw new TranscriptionError(503, "NOT_CONFIGURED", "Transcription needs a server API key. Your recording can still be saved.");
-  }
-  return key;
+  return requireOpenAiKey("Transcription needs a server API key. Your recording can still be saved.");
 }
 
 /** The farm's fields and log form, once the account is known to be the caller's and active. */
 export async function recordingBootstrap(ctx: FarmContext, accountId: string) {
   const bootstrap = await getMobileBootstrap(ctx);
   if ("account" in ctx) assertOwnEmployee(ctx as AccountContext, accountId);
-  if (!bootstrap.accounts.some(account => account.id === accountId)) throw new TranscriptionError(404, "ACCOUNT_UNAVAILABLE", "Choose an active account from this farm.");
-  if (!bootstrap.fields.length) throw new TranscriptionError(503, "NOT_CONFIGURED", "Add a farm field before processing recordings.");
+  if (!bootstrap.accounts.some(account => account.id === accountId)) throw new ApiError(404, "ACCOUNT_UNAVAILABLE", "Choose an active account from this farm.");
+  if (!bootstrap.fields.length) throw new ApiError(503, "NOT_CONFIGURED", "Add a farm field before processing recordings.");
   return bootstrap;
 }
 
@@ -48,14 +46,14 @@ export async function processRecording(request: Request, ctx: FarmContext, key: 
       file = upload.file; context = contextSchema.parse(upload.context);
     }
   } catch (error) {
-    if (error instanceof z.ZodError) throw new TranscriptionError(400, "INVALID_CONTEXT", "Check the account and recording date.");
+    if (error instanceof z.ZodError) throw new ApiError(400, "INVALID_CONTEXT", "Check the account and recording date.");
     throw error;
   }
   const bootstrap = await recordingBootstrap(ctx, context.accountId);
   await reserveTranscription(ctx);
   const text = file ? await transcribeAudio(file, key, request.signal) : transcript;
   if (file) transcript = [context.previousTranscript, text].filter(Boolean).join("\n\n");
-  if (transcript.length > 40_000) throw new TranscriptionError(413, "PAYLOAD_TOO_LARGE", "Split this recording into shorter work logs.");
+  if (transcript.length > 40_000) throw new ApiError(413, "PAYLOAD_TOO_LARGE", "Split this recording into shorter work logs.");
   try {
     const fields = await extractLogFields(transcript, { fields: bootstrap.fields, referenceDate: context.referenceDate, timezone: ctx.farm.timezone, form: bootstrap.logForm }, key, request.signal);
     // Core facts plus the chosen activity's required details; the same list drives the spoken prompt.

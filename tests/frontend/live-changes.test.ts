@@ -8,7 +8,7 @@ const log = (id: string, employeeId: string, name: string, avatarUrl: string | n
   startAt: "2026-09-16T13:00:00.000Z", endAt: "2026-09-16T15:00:00.000Z", summary: "", isNew: true, recording: null, tags: [], details: {}, updatedAt: "2026-09-16T15:00:00.000Z",
 });
 const dashboard = (logs: LogDto[]): DashboardData => ({
-  farm: { id: "farm", name: "Bays Ranch", avatarUrl: null, timezone: "America/Los_Angeles" },
+  farm: { id: "farm", name: "Bays Ranch", timezone: "America/Los_Angeles" },
   metrics: { recordingsToday: 0, newRecordings: 0, activeWorkers: 12, responseAccuracy: null, asOf: "2026-09-16" },
   newLogCount: 0, logs, filterOptions: { activities: [], fields: [] },
 });

@@ -8,7 +8,7 @@ export default async function DesignCheck({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const view = params.view === "expanded" ? "expanded" : "default";
   return <>
-    <Dashboard data={dashboardData} initialExpandedId={view === "expanded" ? "log-1" : null} />
+    <Dashboard data={dashboardData} demoMode initialExpandedId={view === "expanded" ? "log-1" : null} />
     {params.overlay !== "off" && <img src={`/design-reference/${view}`} alt="" aria-hidden="true" style={{ position: "fixed", inset: 0, width: 1676, height: 955, pointerEvents: "none", zIndex: 100, mixBlendMode: "difference" }} />}
   </>;
 }

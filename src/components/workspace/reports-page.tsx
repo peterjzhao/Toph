@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { ArrowDownToLine, FileText, Maximize2, Minimize2, Printer, Search, Trash2, X } from "lucide-react";
 import type { LogDto } from "@/contracts/dashboard";
 import {
-  reportCatalog, reportKinds, suggestedPeriod,
+  isWholeMonth, isWholeYear, reportCatalog, reportKinds, suggestedPeriod,
   type ReportCell, type ReportKind, type ReportListResponse, type ReportMissing, type ReportResponse, type SavedReportDto, type SavedReportSummary,
 } from "@/contracts/reports";
 import { requestJson, useWorkspace } from "@/components/workspace/workspace-provider";
@@ -18,13 +18,12 @@ const monthDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeri
 const longDay = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 const monthYear = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 const stamp = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" });
-const lastOfMonth = (iso: string) => new Date(Date.UTC(utc(iso).getUTCFullYear(), utc(iso).getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
 const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10); };
 
 /** "2026", "April 2026", "Apr 16–30, 2026", "Jan 1 – Apr 29, 2026" or "Apr 30, 2025 – Apr 29, 2026". */
 function periodName(from: string, to: string) {
-  if (from.endsWith("-01-01") && to === `${from.slice(0, 4)}-12-31`) return from.slice(0, 4);
-  if (from.endsWith("-01") && to === lastOfMonth(from)) return monthYear.format(utc(from));
+  if (isWholeYear(from, to)) return from.slice(0, 4);
+  if (isWholeMonth(from, to)) return monthYear.format(utc(from));
   if (from.slice(0, 7) === to.slice(0, 7)) return `${monthDay.format(utc(from))}–${to.slice(8).replace(/^0/, "")}, ${to.slice(0, 4)}`;
   if (from.slice(0, 4) === to.slice(0, 4)) return `${monthDay.format(utc(from))} – ${shortDay.format(utc(to))}`;
   return `${shortDay.format(utc(from))} – ${shortDay.format(utc(to))}`;

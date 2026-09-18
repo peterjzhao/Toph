@@ -66,7 +66,6 @@ function insertLog(
     endAt: string;
     recordingPath: string | null;
     duration: number | string | null;
-    waveformPeaks: unknown;
   }> = {},
 ) {
   const id = overrides.id ?? randomUUID();
@@ -77,12 +76,11 @@ function insertLog(
   const endAt = overrides.endAt ?? "2026-04-19T17:40:00Z";
   const recordingPath = overrides.recordingPath ?? null;
   const duration = overrides.duration ?? null;
-  const waveformPeaks = overrides.waveformPeaks === undefined ? null : tx.json(overrides.waveformPeaks as never);
   return tx`insert into toph.work_logs
     (id, farm_id, employee_id, field_id, activity, work_date, start_at, end_at, summary,
-     recording_path, recording_duration_seconds, waveform_peaks)
+     recording_path, recording_duration_seconds)
     values (${id}, ${farmId}, ${employeeId}, ${fieldId}, 'Spraying', '2026-04-19', ${startAt}, ${endAt}, 'summary',
-            ${recordingPath}, ${duration}, ${waveformPeaks})
+            ${recordingPath}, ${duration})
     returning id`;
 }
 
@@ -196,28 +194,6 @@ describe("toph schema constraints", () => {
       ).resolves.toBeTruthy();
       await expect(
         attempt(tx, (sp) => insertLog(sp, s, { recordingPath: "/assets/sample-recording.mp3", duration: 13.384671 })),
-      ).resolves.toBeTruthy();
-    });
-  });
-
-  it("validates waveform peaks", async () => {
-    await withRollback(sql, async (tx) => {
-      const s = await seedScratch(tx);
-      await expect(attempt(tx, (sp) => insertLog(sp, s, { waveformPeaks: { a: 1 } }))).rejects.toThrow(
-        /work_logs_waveform_peaks_valid/,
-      );
-      await expect(attempt(tx, (sp) => insertLog(sp, s, { waveformPeaks: [0.5, 1.5] }))).rejects.toThrow(
-        /work_logs_waveform_peaks_valid/,
-      );
-      await expect(attempt(tx, (sp) => insertLog(sp, s, { waveformPeaks: [0.5, "x"] }))).rejects.toThrow(
-        /work_logs_waveform_peaks_valid/,
-      );
-      const tooMany = Array.from({ length: 2049 }, () => 0.5);
-      await expect(attempt(tx, (sp) => insertLog(sp, s, { waveformPeaks: tooMany }))).rejects.toThrow(
-        /work_logs_waveform_peaks_valid/,
-      );
-      await expect(
-        attempt(tx, (sp) => insertLog(sp, s, { waveformPeaks: [0, 0.25, 1] })),
       ).resolves.toBeTruthy();
     });
   });

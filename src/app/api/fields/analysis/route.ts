@@ -2,10 +2,9 @@ import { fieldAnalysisRequestSchema } from "@/contracts/satellite";
 import { resolveAccountContext } from "@/server/accounts/service";
 import { askKey } from "@/server/ask/farm-question";
 import { validationError } from "@/server/errors";
-import { readRuntimeConfig } from "@/server/farm-context";
-import { readJsonBody } from "@/server/http/body";
-import { assertWriteOrigin } from "@/server/http/origin";
-import { satelliteRoute } from "@/server/satellite/http";
+import { readJsonBodyAs } from "@/server/http/body";
+import { assertWebWrite } from "@/server/http/origin";
+import { handleRoute, jsonResponse } from "@/server/http/responses";
 import { fieldAnalysis } from "@/server/satellite/service";
 
 export const runtime = "nodejs";
@@ -19,13 +18,12 @@ export const maxDuration = 60;
  * the evidence next to every claim rather than presenting a verdict on its own.
  */
 export async function POST(request: Request): Promise<Response> {
-  return satelliteRoute(async () => {
-    assertWriteOrigin(request, readRuntimeConfig().appOrigin);
+  return handleRoute(async () => {
+    assertWebWrite(request);
     const ctx = await resolveAccountContext(request, "admin");
     const key = askKey();
-    const body = fieldAnalysisRequestSchema.safeParse(await readJsonBody(request));
-    if (!body.success) throw validationError("Choose a field and a date range.");
-    const data = await fieldAnalysis(ctx, body.data, key, request.signal);
-    return Response.json({ data }, { headers: { "Cache-Control": "no-store" } });
+    const body = await readJsonBodyAs(request, fieldAnalysisRequestSchema, () => validationError("Choose a field and a date range."));
+    const data = await fieldAnalysis(ctx, body, key, request.signal);
+    return jsonResponse({ data });
   });
 }

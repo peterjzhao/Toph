@@ -18,7 +18,24 @@ export type ApiErrorCode =
   | "UNSUPPORTED_MEDIA_TYPE"
   | "DATABASE_UNAVAILABLE"
   | "NOT_CONFIGURED"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  // Recording, voice and other AI-backed requests.
+  | "ACCOUNT_UNAVAILABLE"
+  | "ASK_FAILED"
+  | "CANCELLED"
+  | "EXTRACTION_FAILED"
+  | "INVALID_AUDIO"
+  | "INVALID_CONTEXT"
+  | "INVALID_REQUEST"
+  | "INVALID_TEXT"
+  | "INVALID_TRANSCRIPT"
+  | "NO_SPEECH"
+  | "RATE_LIMITED"
+  | "REPORT_FAILED"
+  | "SPEECH_FAILED"
+  | "TIMEOUT"
+  | "TRANSCRIPTION_FAILED"
+  | "VOICE_SESSION_FAILED";
 
 export type ApiErrorBody = {
   error: { code: ApiErrorCode; message: string; fields?: Record<string, string> };

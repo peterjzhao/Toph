@@ -38,7 +38,6 @@ export const farms = toph.table(
   {
     id: uuid("id").primaryKey(),
     name: text("name").notNull(),
-    avatarPath: text("avatar_path"),
     timezone: text("timezone").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -95,8 +94,6 @@ export const fields = toph.table(
       .notNull()
       .references(() => farms.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
-    /** Application-relative asset path, e.g. /assets/field-map.svg. Null when no map exists. */
-    mapImagePath: text("map_image_path"),
     label: text("label"),
     boundary: jsonb("boundary").$type<FieldPoint[]>(),
     createdAt: createdAt(),
@@ -134,8 +131,6 @@ export const workLogs = toph.table(
     recordingDurationSeconds: doublePrecision("recording_duration_seconds"),
     /** Rendered waveform image for the recording, if one exists. */
     waveformAssetPath: text("waveform_asset_path"),
-    /** Null or an array of finite numbers in [0, 1], at most 2,048 samples (see waveform_peaks_valid). */
-    waveformPeaks: jsonb("waveform_peaks").$type<number[]>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -164,7 +159,6 @@ export const workLogs = toph.table(
       sql`recording_duration_seconds IS NULL OR (recording_path IS NOT NULL AND recording_duration_seconds > 0 AND recording_duration_seconds < 'Infinity'::double precision)`,
     ),
     check("work_logs_details_object", sql`jsonb_typeof(details) = 'object' AND octet_length(details::text) <= 16384`),
-    check("work_logs_waveform_peaks_valid", sql`waveform_peaks IS NULL OR toph.waveform_peaks_valid(waveform_peaks)`),
   ],
 );
 
@@ -233,7 +227,6 @@ export const dashboardLogs = toph
     workDate: date("work_date", { mode: "string" }).notNull(),
     fieldId: uuid("field_id").notNull(),
     fieldName: text("field_name").notNull(),
-    fieldMapImagePath: text("field_map_image_path"),
     startAt: timestamp("start_at", { withTimezone: true, mode: "date" }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true, mode: "date" }).notNull(),
     summary: text("summary").notNull(),
@@ -241,7 +234,6 @@ export const dashboardLogs = toph
     recordingPath: text("recording_path"),
     recordingDurationSeconds: doublePrecision("recording_duration_seconds"),
     waveformAssetPath: text("waveform_asset_path"),
-    waveformPeaks: jsonb("waveform_peaks").$type<number[]>(),
     tags: jsonb("tags").$type<{ id: string; label: string }[]>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
@@ -258,7 +250,6 @@ export const dashboardLogs = toph
   l.work_date,
   l.field_id,
   f.name as field_name,
-  f.map_image_path as field_map_image_path,
   l.start_at,
   l.end_at,
   l.summary,
@@ -266,7 +257,6 @@ export const dashboardLogs = toph
   l.recording_path,
   l.recording_duration_seconds,
   l.waveform_asset_path,
-  l.waveform_peaks,
   (
     select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'label', t.label) order by t.normalized_label, t.id), '[]'::jsonb)
     from toph.work_log_tags wt
@@ -327,7 +317,6 @@ export const transcriptionUsage = toph.table("transcription_usage", {
 export const farmAccess = toph.table("farm_access", {
   farmId: uuid("farm_id").primaryKey().references(() => farms.id),
   joinCode: text("join_code").notNull().unique(),
-  isSample: boolean("is_sample").notNull().default(false),
   setupComplete: boolean("setup_complete").notNull().default(false),
 });
 

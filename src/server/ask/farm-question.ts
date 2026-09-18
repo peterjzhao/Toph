@@ -10,8 +10,9 @@ import "server-only";
 import { z } from "zod";
 import { askFarmAnswerSchema, askFarmRequestSchema, type AskFarmResult } from "@/contracts/ask";
 import type { FarmContext } from "@/server/farm-context";
-import { readJsonBody } from "@/server/http/body";
-import { TranscriptionError } from "@/server/recordings/audio";
+import { ApiError, validationError } from "@/server/errors";
+import { readJsonBodyAs } from "@/server/http/body";
+import { requestStructuredOutput, requireOpenAiKey } from "@/server/openai";
 import { reserveTranscription } from "@/server/recordings/quota";
 import { farmToday } from "@/server/time/farm-today";
 
@@ -45,9 +46,7 @@ const dayFormat = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "lo
 export const dayLabel = (date: string) => dayFormat.format(new Date(`${date}T12:00:00Z`));
 
 export function askKey() {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) throw new TranscriptionError(503, "NOT_CONFIGURED", "Asking questions needs a server API key.");
-  return key;
+  return requireOpenAiKey("Asking questions needs a server API key.");
 }
 
 export async function loadAskContext(ctx: FarmContext, now = new Date()): Promise<AskContext> {
@@ -88,40 +87,24 @@ export function validateAskAnswer(value: unknown, logs: Pick<AskLog, "id">[]): P
   return { answer, citedLogIds: [...new Set(parsed.citedLogIds)].filter(id => known.has(id)) };
 }
 
-const failed = () => new TranscriptionError(502, "ASK_FAILED", "Toph couldn't answer that right now. Try again or rephrase your question.");
+const failed = () => new ApiError(502, "ASK_FAILED", "Toph couldn't answer that right now. Try again or rephrase your question.");
 
 export async function answerFarmQuestion(question: string, context: AskContext, apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<AskFarmResult> {
   const summary = { consideredLogs: context.logs.length, truncated: context.truncated };
   if (!context.logs.length) return { answer: "There are no activity logs on this farm yet, so there's nothing to answer from.", citedLogIds: [], ...summary };
-  try {
-    const response = await fetcher("https://api.openai.com/v1/responses", {
-      method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-      body: JSON.stringify({
-        model: askModel, store: false, max_output_tokens: 800, instructions,
-        input: [{ role: "user", content: JSON.stringify({ question, farm: { name: context.farmName, timezone: context.timezone, today: context.today }, truncated: context.truncated, logs: context.logs }) }],
-        text: { format: { type: "json_schema", name: "farm_answer", strict: true, schema: z.toJSONSchema(askFarmAnswerSchema) } },
-      }),
-    });
-    if (!response.ok) throw failed();
-    const result = await response.json();
-    if (result.status !== "completed" || !Array.isArray(result.output)) throw failed();
-    const content = result.output.flatMap((item: { type: string; content?: { type: string; text?: string }[] }) => item.type === "message" ? item.content ?? [] : []);
-    if (content.some((item: { type: string }) => item.type === "refusal")) throw failed();
-    const text = content.filter((item: { type: string }) => item.type === "output_text").map((item: { text: string }) => item.text).join("");
-    return { ...validateAskAnswer(JSON.parse(text), context.logs), ...summary };
-  } catch (error) {
-    if (signal.aborted) throw new TranscriptionError(499, "CANCELLED", "Question cancelled.");
-    if (error instanceof TranscriptionError) throw error;
-    throw failed();
-  }
+  const answer = await requestStructuredOutput({
+    apiKey, signal, fetcher, model: askModel, instructions, maxOutputTokens: 800,
+    input: { question, farm: { name: context.farmName, timezone: context.timezone, today: context.today }, truncated: context.truncated, logs: context.logs },
+    schemaName: "farm_answer", schema: z.toJSONSchema(askFarmAnswerSchema),
+    parse: value => validateAskAnswer(value, context.logs), failure: failed, cancelled: "Question cancelled.",
+  });
+  return { ...answer, ...summary };
 }
 
 export async function askFarm(request: Request, ctx: FarmContext, key: string): Promise<AskFarmResult> {
-  const body = askFarmRequestSchema.safeParse(await readJsonBody(request));
-  if (!body.success) throw new TranscriptionError(400, "VALIDATION_ERROR", "Ask a question between 3 and 500 characters.");
+  const { question } = await readJsonBodyAs(request, askFarmRequestSchema, () => validationError("Ask a question between 3 and 500 characters."));
   const context = await loadAskContext(ctx);
   // Empty farms answer locally without spending the shared AI allowance.
   if (context.logs.length) await reserveTranscription(ctx, "The farm's AI limit has been reached. Try again in a minute.");
-  return answerFarmQuestion(body.data.question, context, key, request.signal);
+  return answerFarmQuestion(question, context, key, request.signal);
 }

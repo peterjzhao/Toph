@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import type postgres from "postgres";
-import type { WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
+import type { Review, WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import * as route from "@/app/api/workspace/route";
 import { loginAccount } from "@/server/accounts/service";
 import { createFarmContext, type FarmContext } from "@/server/farm-context";
-import { FARM_ID, ISAAC_LOG_ID } from "@/server/db/initial-data";
+import { FARM_ID, INITIAL_ROWS, ISAAC_LOG_ID, recordId } from "@/server/db/initial-data";
 import { applyRuntimeGrants } from "@/server/db/grants";
 import { getWorkspace, patchWorkspace } from "@/server/workspace/service";
 import { MAX_WORKSPACE_BODY_BYTES } from "@/server/workspace/validation";
@@ -23,6 +23,8 @@ let cookie = "";
 const request = (body: unknown, extras: Record<string, string> = {}) => new NextRequest(`${origin}/api/workspace`, {
   method: "PATCH", headers: { ...headers, cookie, ...extras }, body: JSON.stringify(body),
 });
+const SEEDED_LOGS = INITIAL_ROWS.map((row) => recordId("workLog", row.n));
+const SEEDED_NEW_LOGS = INITIAL_ROWS.filter((row) => row.isNew).map((row) => recordId("workLog", row.n));
 
 describe("persistent workspace pages", () => {
   let owner: postgres.Sql;
@@ -42,6 +44,9 @@ describe("persistent workspace pages", () => {
     // Archiving syncs to the roster on every farm, so restore it with the workspace.
     await owner`update toph.employees set is_active = true where farm_id = ${FARM_ID}`;
     await owner`update toph.accounts set is_active = true where farm_id = ${FARM_ID}`;
+    // Audit decisions set the logs' new flags, so restore the seeded flags too.
+    await owner`update toph.work_logs set is_new = id = any(${SEEDED_NEW_LOGS}::uuid[]), reviewed_by = null, reviewed_at = null
+      where id = any(${SEEDED_LOGS}::uuid[])`;
   });
   afterAll(async () => { restoreEnv(); await ctx.close(); await owner.end(); });
 
@@ -84,6 +89,29 @@ describe("persistent workspace pages", () => {
     const separate = await createFarmContext({ databaseUrl: target.appUrl ?? target.url, farmId: FARM_ID });
     try { expect(await getWorkspace(separate)).toEqual(saved); } finally { await separate.close(); }
     expect((await getWorkspace(ctx)).data.reviews[0].status).toBe("Approved");
+  });
+
+  it("keeps a log new until its audit decision, and new again when the decision returns to Pending", async () => {
+    const flag = async (id: string) => (await owner<{ is_new: boolean; reviewed_at: string | null }[]>`
+      select is_new, reviewed_at from toph.work_logs where id = ${id}`)[0];
+    let revision = (await getWorkspace(ctx)).revision;
+    const decide = async (status: Review["status"]) => {
+      const review = { logId: ISAAC_LOG_ID, status, note: status === "Flagged" ? "Recheck the rows" : "", updatedAt: new Date().toISOString() };
+      revision = (await patchWorkspace(ctx, { expectedRevision: revision, patch: { reviews: [review] } })).revision;
+    };
+
+    await decide("Pending");
+    expect(await flag(ISAAC_LOG_ID)).toEqual({ is_new: true, reviewed_at: null });
+    await decide("Approved");
+    const decided = await flag(ISAAC_LOG_ID);
+    expect(decided.is_new).toBe(false);
+    expect(decided.reviewed_at).toBeTruthy();
+    // Changing the decision keeps the first decision's time, and no other log changes.
+    await decide("Flagged");
+    expect(await flag(ISAAC_LOG_ID)).toEqual(decided);
+    expect((await flag(recordId("workLog", 2))).is_new).toBe(true);
+    await decide("Pending");
+    expect((await flag(ISAAC_LOG_ID)).is_new).toBe(true);
   });
 
   it("rejects a stale revision and serializes competing writes without losing a change", async () => {
@@ -138,13 +166,12 @@ describe("persistent workspace pages", () => {
     expect((await getWorkspace(ctx)).revision).toBe(0);
   });
 
-  it("supports archive, schedules, reports, support and settings without replacing messages", async () => {
+  it("supports archive, schedules, support and settings without replacing messages", async () => {
     const { data } = await getWorkspace(ctx);
     const timestamp = new Date().toISOString();
     const saved = await patchWorkspace(ctx, { expectedRevision: 0, patch: {
       employees: data.employees.map((employee, index) => index === 0 ? { ...employee, status: "Inactive" } : employee),
       schedule: data.schedule.map((item) => ({ ...item, status: "Completed" })),
-      reports: [{ id: randomUUID(), name: "April hours", kind: "hours", from: "2026-04-01", to: "2026-04-30", createdAt: timestamp }],
       tickets: [{ id: randomUUID(), subject: "Irrigation valve", category: "Technical", body: "The valve on FIELD D sticks when opened.", status: "Open", createdAt: timestamp }],
       settings: { ...data.settings, notifications: { recordings: false, weekly: false, reminders: false } },
     } });
@@ -152,7 +179,6 @@ describe("persistent workspace pages", () => {
     const [archived] = await owner`select e.is_active as employee, a.is_active as account from toph.employees e join toph.accounts a on a.employee_id = e.id where e.id = ${data.employees[0].id}`;
     expect(archived).toEqual({ employee: false, account: false });
     expect(saved.data.schedule.every((item) => item.status === "Completed")).toBe(true);
-    expect(saved.data.reports).toHaveLength(1);
     expect(saved.data.tickets).toHaveLength(1);
     expect(saved.data.messages).toEqual(data.messages);
   });

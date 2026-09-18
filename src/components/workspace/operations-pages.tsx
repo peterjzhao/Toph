@@ -23,7 +23,7 @@ function Empty({ title, text, children }: { title: string; text: string; childre
 }
 
 export function AuditPage() {
-  const { data, workspace, update, saving, notify } = useWorkspace();
+  const { data, workspace, update, saving, notify, reloadDashboard } = useWorkspace();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All statuses");
   const [selected, setSelected] = useState<{ logId: string; status: Review["status"]; note: string } | null>(null);
@@ -40,7 +40,8 @@ export function AuditPage() {
     setReviewError("");
     const review: Review = { ...selected, note: selected.note.trim(), updatedAt: new Date().toISOString() };
     const success = await update("reviews", (previous) => [...previous.filter((item) => item.logId !== review.logId), review]);
-    if (success) { setSelected(null); notify(`Review saved as ${review.status.toLowerCase()}.`); }
+    // The decision also sets the log's new flag, which the dashboard reads with the logs.
+    if (success) { setSelected(null); notify(`Review saved as ${review.status.toLowerCase()}.`); void reloadDashboard().catch(() => undefined); }
     else setReviewError("The review could not be saved. Your changes are still here; please try again.");
   }
 

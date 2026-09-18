@@ -2,8 +2,9 @@ import "server-only";
 import { z } from "zod";
 import { extractedCoreSchema, extractionSchema, type ExtractedLogFields } from "@/contracts/transcription";
 import { checkLogDetails, type LogDetailsProblem, type LogDetailValue, type ResolvedLogForm } from "@/contracts/log-form";
+import { ApiError } from "@/server/errors";
+import { requestStructuredOutput } from "@/server/openai";
 import { isValidCalendarDate } from "@/server/time/zoned";
-import { TranscriptionError } from "./audio";
 
 export type ExtractionContext = { fields: { id: string; name: string }[]; referenceDate: string; timezone: string; form: ResolvedLogForm };
 export const extractionModel = "gpt-4.1-mini";
@@ -66,29 +67,13 @@ export function extractionJsonSchema(context: { fields: readonly { id: string }[
   return schema;
 }
 
-export async function extractLogFields(transcript: string, context: ExtractionContext, apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<ExtractedLogFields> {
-  const timeout = AbortSignal.timeout(45_000);
-  try {
-    const schema = extractionJsonSchema(context);
-    const response = await fetcher("https://api.openai.com/v1/responses", {
-      method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.any([signal, timeout]),
-      body: JSON.stringify({
-        model: extractionModel, store: false, max_output_tokens: 1800,
-        instructions, input: [{ role: "user", content: JSON.stringify({ fields: context.fields, referenceDate: context.referenceDate, timezone: context.timezone, logForm: context.form, transcript }) }],
-        text: { format: { type: "json_schema", name: "farm_work_log", strict: true, schema } },
-      }),
-    });
-    if (!response.ok) throw new TranscriptionError(502, "EXTRACTION_FAILED", "Your transcript is ready, but details could not be filled. Retry or enter them yourself.");
-    const result = await response.json();
-    if (result.status !== "completed" || !Array.isArray(result.output)) throw new Error("Incomplete extraction.");
-    const content = result.output.flatMap((item: { type: string; content?: { type: string; text?: string }[] }) => item.type === "message" ? item.content ?? [] : []);
-    if (content.some((item: { type: string }) => item.type === "refusal")) throw new Error("Extraction refused.");
-    const text = content.filter((item: { type: string }) => item.type === "output_text").map((item: { text: string }) => item.text).join("");
-    return validateExtractedLog(JSON.parse(text), context);
-  } catch (error) {
-    if (signal.aborted) throw new TranscriptionError(499, "CANCELLED", "Transcription cancelled.");
-    if (error instanceof TranscriptionError) throw error;
-    throw new TranscriptionError(502, "EXTRACTION_FAILED", "Your transcript is ready, but details could not be filled. Retry or enter them yourself.");
-  }
+export function extractLogFields(transcript: string, context: ExtractionContext, apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<ExtractedLogFields> {
+  return requestStructuredOutput({
+    apiKey, signal, fetcher, model: extractionModel, instructions, maxOutputTokens: 1800,
+    input: { fields: context.fields, referenceDate: context.referenceDate, timezone: context.timezone, logForm: context.form, transcript },
+    schemaName: "farm_work_log", schema: extractionJsonSchema(context),
+    parse: value => validateExtractedLog(value, context),
+    failure: () => new ApiError(502, "EXTRACTION_FAILED", "Your transcript is ready, but details could not be filled. Retry or enter them yourself."),
+    cancelled: "Transcription cancelled.",
+  });
 }

@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { MAX_SPEECH_CHARS } from "@/contracts/voice";
-import { readJsonBody } from "@/server/http/body";
-import { TranscriptionError } from "./audio";
+import { ApiError } from "@/server/errors";
+import { readJsonBodyAs } from "@/server/http/body";
 import { reserveSpeech } from "./quota";
 
 export const speechModel = "gpt-4o-mini-tts";
@@ -21,28 +21,23 @@ export async function synthesizeSpeech(text: string, apiKey: string, signal: Abo
         instructions: "Speak calmly and clearly at an even pace, like a helpful coworker. Read the text exactly as written." }),
     });
     if (!response.ok) {
-      if (response.status === 429) throw new TranscriptionError(429, "RATE_LIMITED", "Speech is busy. Try again in a moment.");
-      throw new TranscriptionError(502, "SPEECH_FAILED", "The prompt could not be spoken. Read it on screen instead.");
+      if (response.status === 429) throw new ApiError(429, "RATE_LIMITED", "Speech is busy. Try again in a moment.");
+      throw new ApiError(502, "SPEECH_FAILED", "The prompt could not be spoken. Read it on screen instead.");
     }
     const audio = await response.arrayBuffer();
-    if (!audio.byteLength || audio.byteLength > MAX_SPEECH_BYTES) throw new TranscriptionError(502, "SPEECH_FAILED", "The prompt could not be spoken. Read it on screen instead.");
+    if (!audio.byteLength || audio.byteLength > MAX_SPEECH_BYTES) throw new ApiError(502, "SPEECH_FAILED", "The prompt could not be spoken. Read it on screen instead.");
     return audio;
   } catch (cause) {
-    if (signal.aborted) throw new TranscriptionError(499, "CANCELLED", "Speech cancelled.");
-    if (timeout.aborted) throw new TranscriptionError(504, "TIMEOUT", "Speech timed out. Read the prompt on screen instead.");
-    if (cause instanceof TranscriptionError) throw cause;
-    throw new TranscriptionError(502, "SPEECH_FAILED", "The speech service could not be reached. Read the prompt on screen instead.");
+    if (signal.aborted) throw new ApiError(499, "CANCELLED", "Speech cancelled.");
+    if (timeout.aborted) throw new ApiError(504, "TIMEOUT", "Speech timed out. Read the prompt on screen instead.");
+    if (cause instanceof ApiError) throw cause;
+    throw new ApiError(502, "SPEECH_FAILED", "The speech service could not be reached. Read the prompt on screen instead.");
   }
 }
 
 /** Validates `{ text }`, charges the farm's speech bucket, and returns the audio. */
 export async function speakText(request: Request, farmId: string, key: string, fetcher: typeof fetch = fetch): Promise<ArrayBuffer> {
-  let text: string;
-  try { text = speechSchema.parse(await readJsonBody(request, 4096)).text; }
-  catch (error) {
-    if (error instanceof z.ZodError) throw new TranscriptionError(400, "INVALID_TEXT", `Send up to ${MAX_SPEECH_CHARS} characters of text to speak.`);
-    throw error;
-  }
+  const { text } = await readJsonBodyAs(request, speechSchema, () => new ApiError(400, "INVALID_TEXT", `Send up to ${MAX_SPEECH_CHARS} characters of text to speak.`), 4096);
   reserveSpeech(farmId);
   return synthesizeSpeech(text, key, request.signal, fetcher);
 }

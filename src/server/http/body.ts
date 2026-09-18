@@ -1,8 +1,31 @@
 import "server-only";
+import type { z } from "zod";
 import { payloadTooLarge, unsupportedMediaType, validationError } from "@/server/errors";
 
 /** Mutation bodies are tiny; anything larger than this is rejected before parsing. */
 export const MAX_JSON_BODY_BYTES = 4096;
+
+/**
+ * Reads a body into memory, throwing `tooLarge()` once it passes `maxBytes`. The limit applies to the
+ * stream itself, so it also holds for chunked requests without Content-Length.
+ */
+export async function readLimitedBody(body: ReadableStream<Uint8Array>, maxBytes: number, tooLarge: () => Error): Promise<Blob> {
+  const reader = body.getReader();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return new Blob(chunks);
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw tooLarge();
+      }
+      chunks.push(new Uint8Array(value));
+    }
+  } finally { reader.releaseLock(); }
+}
 
 function isJsonContentType(value: string | null): boolean {
   if (!value) return false;
@@ -28,26 +51,7 @@ export async function readJsonBody(request: Request, maxBytes: number = MAX_JSON
 
   if (!request.body) throw validationError("Request body must be a JSON object.", { body: "is required" });
 
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    received += value.byteLength;
-    if (received > maxBytes) {
-      await reader.cancel().catch(() => undefined);
-      throw payloadTooLarge(maxBytes);
-    }
-    chunks.push(value);
-  }
-
-  const bytes = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const bytes = new Uint8Array(await (await readLimitedBody(request.body, maxBytes, () => payloadTooLarge(maxBytes))).arrayBuffer());
   if (bytes.byteLength === 0) throw validationError("Request body must be a JSON object.", { body: "is required" });
 
   let text: string;
@@ -61,6 +65,13 @@ export async function readJsonBody(request: Request, maxBytes: number = MAX_JSON
   } catch {
     throw validationError("Request body is not valid JSON.", { body: "invalid JSON" });
   }
+}
+
+/** Reads a JSON body that must match `schema`; a mismatch throws `invalid()`, and body errors pass through. */
+export async function readJsonBodyAs<T>(request: Request, schema: z.ZodType<T>, invalid: () => Error, maxBytes?: number): Promise<T> {
+  const parsed = schema.safeParse(await readJsonBody(request, maxBytes));
+  if (!parsed.success) throw invalid();
+  return parsed.data;
 }
 
 /** Validates the POST /api/logs/:logId/tags body: exactly `{ "label": string }`. */

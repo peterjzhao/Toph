@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MIN_OBSERVATIONS, analyseField, validateAnalysis, type AnalysisContext } from "@/server/satellite/analysis";
 import type { FieldObservation } from "@/server/satellite/statistics";
+import { completedResponse, refusalResponse } from "../helpers/openai";
 
 const observations: FieldObservation[] = [
   { date: "2026-04-01", mean: 0.40, min: 0.2, max: 0.6, stDev: 0.05, validFraction: 0.95 },
@@ -16,8 +17,6 @@ const context: AnalysisContext = {
   observations,
   logs: [{ id: logId, day: "Friday, April 3, 2026", employee: "Isaac Wang", activity: "Spraying", product: "Copper", amount: 2, unit: "L", summary: "Sprayed Field D." }],
 };
-
-const reply = (value: unknown) => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 
 const observation = (overrides: Record<string, unknown> = {}) => ({
   logId, fromDate: "2026-04-01", toDate: "2026-04-21", indexChange: 0.99, claim: "Vegetation rose after the spraying.", confidence: "clear", ...overrides,
@@ -63,7 +62,7 @@ describe("validateAnalysis", () => {
 
 describe("analyseField", () => {
   it("grounds the request in this field's cloud-free statistics and its own logs", async () => {
-    const fetcher = vi.fn(async () => reply({ summary: "Vegetation rose after spraying.", observations: [observation()] }));
+    const fetcher = vi.fn(async () => completedResponse({ summary: "Vegetation rose after spraying.", observations: [observation()] }));
     const result = await analyseField(context, "server-key", new AbortController().signal, fetcher);
 
     expect(result.summary).toBe("Vegetation rose after spraying.");
@@ -89,7 +88,7 @@ describe("analyseField", () => {
   });
 
   it("maps provider failures and refusals to a retryable error", async () => {
-    for (const response of [new Response("{}", { status: 500 }), Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "no" }] }] })]) {
+    for (const response of [new Response("{}", { status: 500 }), refusalResponse()]) {
       const fetcher = vi.fn(async () => response.clone());
       await expect(analyseField(context, "key", new AbortController().signal, fetcher)).rejects.toThrow();
     }

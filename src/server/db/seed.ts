@@ -68,7 +68,6 @@ export function buildInitialWorkLogs(): (typeof schema.workLogs.$inferInsert)[] 
       recordingPath: RECORDING.path,
       recordingDurationSeconds: RECORDING.durationSeconds,
       waveformAssetPath: RECORDING.waveformAssetPath,
-      waveformPeaks: null,
       createdAt: receivedAt,
       updatedAt: receivedAt,
     };
@@ -86,7 +85,7 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
     const [existingFarm] = await tx.select({ id: schema.farms.id }).from(schema.farms).where(eq(schema.farms.id, FARM.id));
     await tx
       .insert(schema.farms)
-      .values({ id: FARM.id, name: FARM.name, avatarPath: FARM.avatarPath, timezone: FARM.timezone })
+      .values({ id: FARM.id, name: FARM.name, timezone: FARM.timezone })
       .onConflictDoNothing({ target: schema.farms.id });
 
     const employeeValues = INITIAL_EMPLOYEES.map((row) => ({
@@ -110,7 +109,6 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
         name: row.field,
         label,
         boundary: BAYS_FIELD_BOUNDARIES[label].map(([x, y]) => ({ x, y })),
-        mapImagePath: "/api/farm/image",
       };
     });
     await tx
@@ -149,7 +147,7 @@ export async function seedInitialDataRows(tx: Pick<PostgresJsDatabase<typeof sch
       .from(schema.employees).where(eq(schema.employees.farmId, FARM.id)).orderBy(schema.employees.id);
     const seededFields = await tx.select({ id: schema.fields.id, name: schema.fields.name })
       .from(schema.fields).where(eq(schema.fields.farmId, FARM.id)).orderBy(schema.fields.id);
-    const workspace = makeWorkspaceSeed({ id: FARM.id, name: FARM.name, timezone: FARM.timezone, avatarPath: FARM.avatarPath }, seededEmployees, seededFields);
+    const workspace = makeWorkspaceSeed({ id: FARM.id, name: FARM.name, timezone: FARM.timezone }, seededEmployees, seededFields);
     workspace.settings.adminAvatar = adminAvatar();
     // Shown as of the design's day, so the dashboard reads like the Figma. Settings can turn it off.
     workspace.settings.demoDay = DESIGN_DEMO_DAY;

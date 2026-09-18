@@ -9,7 +9,8 @@ import "server-only";
  */
 import { z } from "zod";
 import { numericReportFacts, reportFactKeys, type ReportFactKey } from "@/contracts/reports";
-import { TranscriptionError } from "@/server/recordings/audio";
+import { ApiError } from "@/server/errors";
+import { requestStructuredOutput } from "@/server/openai";
 
 export const detectionModel = "gpt-4.1-mini";
 export const DETECTION_BATCH_SIZE = 20;
@@ -101,25 +102,14 @@ export function validateDetections(value: unknown, logs: readonly DetectionLog[]
   return result;
 }
 
-const failed = () => new TranscriptionError(502, "REPORT_FAILED", "Toph couldn't read the logs for this report. Try again in a moment.");
+const failed = () => new ApiError(502, "REPORT_FAILED", "Toph couldn't read the logs for this report. Try again in a moment.");
 
-async function detectBatch(logs: DetectionLog[], apiKey: string, signal: AbortSignal, fetcher: typeof fetch): Promise<Map<string, DetectedFact[]>> {
-  const response = await fetcher("https://api.openai.com/v1/responses", {
-    method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-    body: JSON.stringify({
-      model: detectionModel, store: false, max_output_tokens: 4000, instructions: detectionInstructions,
-      input: [{ role: "user", content: JSON.stringify({ logs }) }],
-      text: { format: { type: "json_schema", name: "report_facts", strict: true, schema: z.toJSONSchema(detectionOutputSchema) } },
-    }),
+function detectBatch(logs: DetectionLog[], apiKey: string, signal: AbortSignal, fetcher: typeof fetch): Promise<Map<string, DetectedFact[]>> {
+  return requestStructuredOutput({
+    apiKey, signal, fetcher, model: detectionModel, instructions: detectionInstructions, maxOutputTokens: 4000,
+    input: { logs }, schemaName: "report_facts", schema: z.toJSONSchema(detectionOutputSchema),
+    parse: value => validateDetections(value, logs), failure: failed, cancelled: "Report cancelled.",
   });
-  if (!response.ok) throw failed();
-  const result = await response.json();
-  if (result.status !== "completed" || !Array.isArray(result.output)) throw failed();
-  const content = result.output.flatMap((item: { type: string; content?: { type: string; text?: string }[] }) => item.type === "message" ? item.content ?? [] : []);
-  if (content.some((item: { type: string }) => item.type === "refusal")) throw failed();
-  const text = content.filter((item: { type: string }) => item.type === "output_text").map((item: { text: string }) => item.text).join("");
-  return validateDetections(JSON.parse(text), logs);
 }
 
 /** Detects facts for every log, a few batches at a time. Logs with nothing to detect still get an empty list. */
@@ -133,13 +123,7 @@ export async function detectReportFacts(
   async function worker() {
     while (next < batches.length) {
       const batch = batches[next++];
-      try {
-        for (const [id, facts] of await detectBatch(batch, apiKey, signal, options.fetcher ?? fetch)) result.set(id, facts);
-      } catch (error) {
-        if (signal.aborted) throw new TranscriptionError(499, "CANCELLED", "Report cancelled.");
-        if (error instanceof TranscriptionError) throw error;
-        throw failed();
-      }
+      for (const [id, facts] of await detectBatch(batch, apiKey, signal, options.fetcher ?? fetch)) result.set(id, facts);
     }
   }
   await Promise.all(Array.from({ length: Math.min(DETECTION_CONCURRENCY, batches.length) }, worker));

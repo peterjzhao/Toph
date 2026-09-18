@@ -33,7 +33,7 @@ export const dashboardData: DashboardData = {
       startAt: `${date}T${start}:00-07:00`,
       endAt: `${date}T${end}:00-07:00`,
       summary: index === 0 ? sourceSummary : `${name} recorded ${activity.toLowerCase()} in ${field}. Work began at ${formatTime(`${date}T${start}:00-07:00`)} and finished at ${formatTime(`${date}T${end}:00-07:00`)}. This is a sample log for the dashboard preview.`,
-      recording: { url: "/assets/sample-recording.mp3", durationSeconds: 13.384671 },
+      recording: { url: "/assets/sample-recording.mp3", durationSeconds: 13.384671, waveformAssetUrl: "/assets/waveform.svg" },
       tags: [],
       isNew: index < 4,
     };

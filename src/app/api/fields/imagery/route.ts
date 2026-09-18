@@ -1,7 +1,7 @@
 import { isLayer } from "@/contracts/satellite";
 import { resolveAccountContext } from "@/server/accounts/service";
 import { validationError } from "@/server/errors";
-import { satelliteRoute } from "@/server/satellite/http";
+import { handleRoute } from "@/server/http/responses";
 import { ARCHIVE_START, fieldFrame } from "@/server/satellite/service";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ export const maxDuration = 60;
  * session-authenticated, so a shared CDN copy would hand one farm's imagery to another.
  */
 export async function GET(request: Request): Promise<Response> {
-  return satelliteRoute(async () => {
+  return handleRoute(async () => {
     const ctx = await resolveAccountContext(request, "admin");
     const params = new URL(request.url).searchParams;
     const date = params.get("date") ?? "";

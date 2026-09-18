@@ -6,7 +6,7 @@ import type { WorkspaceState } from "@/contracts/workspace";
 import type { FarmContext } from "@/server/farm-context";
 import { getRuntimeDatabase } from "@/server/db/client";
 import { ApiError, forbidden, notFound, validationError } from "@/server/errors";
-import { assertWriteOrigin, normalizeOrigin } from "@/server/http/origin";
+import { assertMobileWrite, assertWebWrite } from "@/server/http/origin";
 import { hashPassword, verifyPassword } from "./password";
 import { normalizeAccountName } from "./validation";
 
@@ -38,11 +38,8 @@ function tokenFromRequest(request: Request): { token: string; client: AuthClient
 }
 
 export function assertAccountWrite(request: Request, client?: AuthClient): void {
-  const mobile = client === "mobile" || request.headers.has("authorization");
-  if (!mobile) return assertWriteOrigin(request, process.env.APP_ORIGIN ?? null);
-  if (request.headers.get("x-toph-client") !== "toph-mobile") throw forbidden("Use the Toph mobile client.");
-  const origin = request.headers.get("origin");
-  if (origin && normalizeOrigin(origin) !== normalizeOrigin(process.env.APP_ORIGIN)) throw forbidden("This origin is not allowed.");
+  if (client === "mobile" || request.headers.has("authorization")) assertMobileWrite(request);
+  else assertWebWrite(request);
 }
 
 export function sessionCookie(token: string, request: Request, clear = false): string {
@@ -81,13 +78,12 @@ export async function resolveAccountContext(request: Request, role?: AccountRole
   if (!account) throw unauthorized();
   if (role && account.role !== role) throw forbidden(role === "admin" ? "This dashboard is for farm administrators." : "Use a worker account in the mobile app.");
   const session = await sessionData(sql, account);
-  const [farm] = await sql`select avatar_path from toph.farms where id = ${account.farm_id}`;
-  return { db, sql, farmId: session.farm.id, farm: { id: session.farm.id, name: session.farm.name, timezone: session.farm.timezone, avatarPath: farm.avatar_path },
+  return { db, sql, farmId: session.farm.id, farm: { id: session.farm.id, name: session.farm.name, timezone: session.farm.timezone },
     account: session.account, session, tokenHash, close: async () => undefined };
 }
 
 function emptyWorkspace(name: string, farmName: string, timezone: string): WorkspaceState {
-  return { employees: [], schedule: [], reviews: [], reports: [], messages: [], tickets: [],
+  return { employees: [], schedule: [], reviews: [], messages: [], tickets: [],
     settings: { farmName, contactName: name, email: "", timezone, notifications: { recordings: true, weekly: true, reminders: true } } };
 }
 

@@ -50,7 +50,7 @@ test("details are checked against the activity's fields", () => {
 });
 
 test("workspace validation accepts only catalog keys and well-formed custom fields", () => {
-  const base = { employees: [], schedule: [], reviews: [], reports: [], messages: [], tickets: [],
+  const base = { employees: [], schedule: [], reviews: [], messages: [], tickets: [],
     settings: { farmName: "Farm", contactName: "Admin", email: "", timezone: "America/Los_Angeles", notifications: { recordings: true, weekly: true, reminders: true } } };
   const custom = { key: "custom_tank", label: "Tank", type: "select", options: ["North", "South"], activities: ["Spraying"] };
   expect(parseWorkspaceState(base).logForm).toBeUndefined();

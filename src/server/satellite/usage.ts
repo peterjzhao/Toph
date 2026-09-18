@@ -6,8 +6,8 @@ import "server-only";
  * so satellite browsing and recording transcription cannot starve each other. The OpenAI call in
  * `analysis.ts` still draws on the shared AI allowance, because that is a paid model request.
  */
+import { ApiError } from "@/server/errors";
 import type { FarmContext } from "@/server/farm-context";
-import { TranscriptionError } from "@/server/recordings/audio";
 
 /** Scrubbing a timeline issues many small frame requests, so the minute allowance is generous. */
 const PER_MINUTE = 60;
@@ -25,5 +25,5 @@ export async function reserveSatellite(ctx: FarmContext, limitMessage = "This fa
     where (satellite_usage.minute_start < excluded.minute_start or satellite_usage.minute_count < ${PER_MINUTE})
       and (satellite_usage.day_start < excluded.day_start or satellite_usage.day_count < ${PER_DAY})
     returning farm_id`;
-  if (!rows.length) throw new TranscriptionError(429, "RATE_LIMITED", limitMessage);
+  if (!rows.length) throw new ApiError(429, "RATE_LIMITED", limitMessage);
 }

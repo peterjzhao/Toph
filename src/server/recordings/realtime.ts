@@ -4,11 +4,11 @@ import { z } from "zod";
 import { requiredCoreLogFields, requiredLogDetailKeys, spokenAsk, type LogDetailValue } from "@/contracts/log-form";
 import { extractedCoreSchema, type ExtractedLogFields } from "@/contracts/transcription";
 import { buildLogStateNote, buildVoiceGuidance, LOG_STATE_PREFIX, VOICE_TOOL_NAME, type VoiceCheckResult, type VoiceContext, type VoiceProblem, type VoiceSession, type VoiceStateResult } from "@/contracts/voice";
+import { ApiError } from "@/server/errors";
 import type { FarmContext } from "@/server/farm-context";
-import { readJsonBody } from "@/server/http/body";
+import { readJsonBodyAs } from "@/server/http/body";
 import { getMobileBootstrap } from "@/server/mobile/accounts";
 import { isValidCalendarDate } from "@/server/time/zoned";
-import { TranscriptionError } from "./audio";
 import { extractionJsonSchema, extractLogFields, settleExtractedLog } from "./extraction";
 import { contextSchema, recordingBootstrap } from "./process";
 import { reserveVoiceSession, reserveVoiceState } from "./quota";
@@ -25,12 +25,8 @@ const checkSchema = z.object({ fields: z.unknown(), transcript: z.string().max(4
 const stateSchema = z.object({ context: sessionContext, transcript: z.string().trim().min(1).max(40_000), turn: z.number().int().min(0).max(100_000) }).strict();
 type SessionContext = VoiceContext & { referenceDate: string; timezone: string };
 
-async function parseBody<T>(request: Request, schema: z.ZodType<T>, maxBytes: number, message: string): Promise<T> {
-  try { return schema.parse(await readJsonBody(request, maxBytes)); }
-  catch (error) {
-    if (error instanceof z.ZodError) throw new TranscriptionError(400, "INVALID_REQUEST", message);
-    throw error;
-  }
+function parseBody<T>(request: Request, schema: z.ZodType<T>, maxBytes: number, message: string): Promise<T> {
+  return readJsonBodyAs(request, schema, () => new ApiError(400, "INVALID_REQUEST", message), maxBytes);
 }
 
 /** What the realtime model is told. Built from the farm's log form so its questions match the saved form. */
@@ -98,17 +94,17 @@ export async function mintVoiceSecret(context: SessionContext, safetyId: string,
       signal: AbortSignal.any([signal, timeout]), body: JSON.stringify(voiceSessionBody(context)),
     });
     if (!response.ok) {
-      if (response.status === 429) throw new TranscriptionError(429, "RATE_LIMITED", "Voice conversation is busy. Record the log instead.");
-      throw new TranscriptionError(502, "VOICE_SESSION_FAILED", UNAVAILABLE);
+      if (response.status === 429) throw new ApiError(429, "RATE_LIMITED", "Voice conversation is busy. Record the log instead.");
+      throw new ApiError(502, "VOICE_SESSION_FAILED", UNAVAILABLE);
     }
     const secret = z.object({ value: z.string().min(1), expires_at: z.number().positive() }).parse(await response.json());
     return { clientSecret: secret.value, expiresAt: new Date(secret.expires_at * 1000).toISOString(), model: realtimeModel, connectUrl: realtimeConnectUrl,
       dataChannel: "oai-events", toolName: VOICE_TOOL_NAME, maxSessionSeconds: MAX_SESSION_SECONDS };
   } catch (cause) {
-    if (signal.aborted) throw new TranscriptionError(499, "CANCELLED", "Voice conversation cancelled.");
-    if (timeout.aborted) throw new TranscriptionError(504, "TIMEOUT", "Voice conversation timed out. Record the log instead.");
-    if (cause instanceof TranscriptionError) throw cause;
-    throw new TranscriptionError(502, "VOICE_SESSION_FAILED", UNAVAILABLE);
+    if (signal.aborted) throw new ApiError(499, "CANCELLED", "Voice conversation cancelled.");
+    if (timeout.aborted) throw new ApiError(504, "TIMEOUT", "Voice conversation timed out. Record the log instead.");
+    if (cause instanceof ApiError) throw cause;
+    throw new ApiError(502, "VOICE_SESSION_FAILED", UNAVAILABLE);
   }
 }
 

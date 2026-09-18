@@ -25,13 +25,13 @@ export async function prepareTestDatabase(sql: postgres.Sql): Promise<void> {
 }
 
 export async function seedOtherFarm(sql: postgres.Sql): Promise<void> {
-  await sql`insert into toph.farms (id, name, timezone, avatar_path)
-    values (${OTHER_FARM.id}, 'Other Orchard', 'America/Chicago', null)
+  await sql`insert into toph.farms (id, name, timezone)
+    values (${OTHER_FARM.id}, 'Other Orchard', 'America/Chicago')
     on conflict (id) do nothing`;
   await sql`insert into toph.employees (id, farm_id, display_name)
     values (${OTHER_FARM.employeeId}, ${OTHER_FARM.id}, 'Other Worker') on conflict (id) do nothing`;
-  await sql`insert into toph.fields (id, farm_id, name, map_image_path)
-    values (${OTHER_FARM.fieldId}, ${OTHER_FARM.id}, 'ORCHARD 1', null) on conflict (id) do nothing`;
+  await sql`insert into toph.fields (id, farm_id, name)
+    values (${OTHER_FARM.fieldId}, ${OTHER_FARM.id}, 'ORCHARD 1') on conflict (id) do nothing`;
   await sql`insert into toph.work_logs (id, farm_id, employee_id, field_id, activity, work_date, start_at, end_at, summary, is_new)
     values (${OTHER_FARM.logId}, ${OTHER_FARM.id}, ${OTHER_FARM.employeeId}, ${OTHER_FARM.fieldId}, 'Spraying', '2026-04-19',
             '2026-04-19T13:00:00Z', '2026-04-19T15:00:00Z', 'Other farm summary.', true)

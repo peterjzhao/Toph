@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DashboardPeriod, DashboardQuery, DashboardSort } from "@/contracts/dashboard";
 import { validationError } from "@/server/errors";
 import { isValidCalendarDate } from "@/server/time/zoned";
+import { UUID_PATTERN } from "@/server/validation/ids";
 
 export const DASHBOARD_QUERY_LIMITS = {
   qMaxLength: 200,
@@ -22,8 +23,6 @@ export type ParsedDashboardQuery = {
   limit: number;
   offset: number;
 };
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const calendarDate = z
   .string()

@@ -70,7 +70,12 @@ describe("npm run db:reset-demo", () => {
     expect((await sql`select count(*)::int as n from toph.accounts`)[0].n).toBe(12);
     const reports = await sql<{ id: string; document: unknown }[]>`select id, document from toph.farm_reports order by id`;
     expect(reports.map((row) => [row.id, row.document])).toEqual(SAMPLE_REPORTS.map((report) => [report.id, report.document]));
-    const [grant] = await sql`select has_table_privilege('toph_app', 'toph.farm_reports', 'INSERT') as insert`;
-    expect(grant.insert).toBe(true);
+    const [grant] = await sql`select has_table_privilege('toph_app', 'toph.farm_reports', 'INSERT') as insert,
+      has_table_privilege('toph_app', 'toph.dashboard_logs', 'SELECT') as view`;
+    expect(grant).toEqual({ insert: true, view: true });
+    // The design's eleven logs, four of them new, on the Figma's demo day.
+    expect((await sql`select count(*)::int as logs, (count(*) filter (where is_new))::int as new_logs from toph.dashboard_logs`)[0]).toEqual({ logs: 11, new_logs: 4 });
+    const [workspace] = await sql<{ demo_day: string; reports: boolean }[]>`select payload->'settings'->>'demoDay' as demo_day, payload ? 'reports' as reports from toph.workspace_state`;
+    expect(workspace).toEqual({ demo_day: "2026-04-29", reports: false });
   });
 });

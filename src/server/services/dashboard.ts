@@ -8,7 +8,8 @@ import { and, asc, between, desc, eq, inArray, or, sql, type SQL } from "drizzle
 import type { DashboardData, DashboardMeta, DashboardQuery, LogDto, TagDto } from "@/contracts/dashboard";
 import { DASHBOARD_CONTRACT_VERSION } from "@/contracts/dashboard";
 import type { FarmContext } from "@/server/farm-context";
-import { dashboardLogs, employees, fields, tags, workLogTags, workLogs, workspaceState } from "@/server/db/schema";
+import { FARM_IMAGE_URL } from "@/server/accounts/farm-setup";
+import { dashboardLogs, employees, farmImages, fields, tags, workLogTags, workLogs, workspaceState } from "@/server/db/schema";
 import { notFound } from "@/server/errors";
 import { treatmentSummary } from "@/contracts/log-form";
 import { responseAccuracy } from "@/contracts/response-accuracy";
@@ -37,14 +38,23 @@ async function attachMobileClips(ctx: FarmContext, logs: LogDto[]): Promise<LogD
   });
 }
 
+/**
+ * Every field is drawn on its farm's aerial, so a field's map is the farm image whenever the farm
+ * has one, and null otherwise (never a broken URL).
+ */
+export async function farmMapImageUrl(ctx: FarmContext): Promise<string | null> {
+  const [image] = await ctx.db.select({ farmId: farmImages.farmId }).from(farmImages).where(eq(farmImages.farmId, ctx.farmId));
+  return image ? FARM_IMAGE_URL : null;
+}
+
 /** Maps a dashboard_logs row to the page-shaped DTO. Asset paths are application-relative URLs. */
-export function toLogDto(row: ViewRow): LogDto {
+export function toLogDto(row: ViewRow, mapImageUrl: string | null): LogDto {
   return {
     id: row.id,
     employee: { id: row.employeeId, name: row.employeeName, avatarUrl: row.employeeAvatarPath },
     activity: row.activity,
     date: row.workDate,
-    field: { id: row.fieldId, name: row.fieldName, mapImageUrl: row.fieldMapImagePath },
+    field: { id: row.fieldId, name: row.fieldName, mapImageUrl },
     startAt: row.startAt.toISOString(),
     endAt: row.endAt.toISOString(),
     // Until the dashboard renders details itself, the item and quantity read as part of the summary.
@@ -55,7 +65,6 @@ export function toLogDto(row: ViewRow): LogDto {
           url: row.recordingPath,
           durationSeconds: row.recordingDurationSeconds === null ? null : Number(row.recordingDurationSeconds),
           waveformAssetUrl: row.waveformAssetPath,
-          waveformPeaks: Array.isArray(row.waveformPeaks) ? row.waveformPeaks.map(Number) : null,
         }
       : null,
     tags: (row.tags ?? []).map((tag) => ({ id: tag.id, label: tag.label })),
@@ -161,7 +170,7 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
   const dateRange = resolveDateRange(parsed, today);
   const filter = buildLogFilter(ctx.farmId, parsed, dateRange);
 
-  const [counts, rows, metrics, activityRows, fieldRows] = await Promise.all([
+  const [counts, rows, metrics, activityRows, fieldRows, mapImageUrl] = await Promise.all([
     ctx.db
       .select({
         total: sql<number>`count(*)::int`,
@@ -178,10 +187,11 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
       .groupBy(workLogs.activity)
       .orderBy(asc(sql`lower(${workLogs.activity})`), asc(workLogs.activity)),
     ctx.db
-      .select({ id: fields.id, name: fields.name, boundary: fields.boundary, mapImageUrl: fields.mapImagePath })
+      .select({ id: fields.id, name: fields.name, boundary: fields.boundary })
       .from(fields)
       .where(eq(fields.farmId, ctx.farmId))
       .orderBy(asc(fields.name), asc(fields.id)),
+    farmMapImageUrl(ctx),
   ]);
 
   const total = counts[0]?.total ?? 0;
@@ -190,15 +200,14 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
       farm: {
         id: ctx.farm.id,
         name: ctx.farm.name,
-        avatarUrl: ctx.farm.avatarPath,
         timezone: ctx.farm.timezone,
       },
       metrics,
       newLogCount: counts[0]?.newCount ?? 0,
-      logs: await attachMobileClips(ctx, rows.map(toLogDto)),
+      logs: await attachMobileClips(ctx, rows.map((row) => toLogDto(row, mapImageUrl))),
       filterOptions: {
         activities: activityRows.map((r) => r.activity),
-        fields: fieldRows.map((r) => ({ id: r.id, name: r.name, ...(r.boundary ? { boundary: r.boundary, mapImageUrl: r.mapImageUrl } : {}) })),
+        fields: fieldRows.map((r) => ({ id: r.id, name: r.name, ...(r.boundary ? { boundary: r.boundary, mapImageUrl } : {}) })),
       },
     },
     meta: {
@@ -224,13 +233,16 @@ export async function getDashboard(ctx: FarmContext, query: DashboardQuery = {})
 /** Loads one log by ID within the context's farm; 400 for a malformed ID, 404 when out of scope. */
 export async function getLog(ctx: FarmContext, logId: string): Promise<LogDto> {
   const id = parseUuid(logId, "logId");
-  const [row] = await ctx.db
-    .select()
-    .from(dashboardLogs)
-    .where(and(eq(dashboardLogs.farmId, ctx.farmId), eq(dashboardLogs.id, id)))
-    .limit(1);
+  const [[row], mapImageUrl] = await Promise.all([
+    ctx.db
+      .select()
+      .from(dashboardLogs)
+      .where(and(eq(dashboardLogs.farmId, ctx.farmId), eq(dashboardLogs.id, id)))
+      .limit(1),
+    farmMapImageUrl(ctx),
+  ]);
   if (!row) throw notFound("Log not found.");
-  return (await attachMobileClips(ctx, [toLogDto(row)]))[0];
+  return (await attachMobileClips(ctx, [toLogDto(row, mapImageUrl)]))[0];
 }
 
 /** The farm's tag catalog, sorted by normalized label then ID. */

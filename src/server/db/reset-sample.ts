@@ -33,7 +33,7 @@ export async function resetSampleFarm(client: postgres.Sql, options: { preserveF
     await tx.execute(sql`delete from toph.farm_reports where farm_id = ${farm}`);
     await tx.execute(sql`delete from toph.transcription_usage where farm_id = ${farm}`);
     await tx.execute(sql`delete from toph.farm_access where farm_id = ${farm}`);
-    await tx.execute(sql`update toph.farms set name = ${FARM.name}, avatar_path = ${FARM.avatarPath}, timezone = ${FARM.timezone} where id = ${farm}`);
+    await tx.execute(sql`update toph.farms set name = ${FARM.name}, timezone = ${FARM.timezone} where id = ${farm}`);
     return seedInitialDataRows(tx);
   });
 }

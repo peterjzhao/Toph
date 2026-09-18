@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { extractLogFields, validateExtractedLog } from "@/server/recordings/extraction";
 import { allLogFields, resolveLogForm, type LogDetailValue } from "@/contracts/log-form";
+import { completedResponse } from "../helpers/openai";
 const form = resolveLogForm({ enabled: { Spraying: ["applicationMethod", "windSpeedMph"] }, hidden: {}, custom: [{ key: "custom_tank", label: "Tank", type: "select", options: ["North", "South"], activities: ["Spraying", "Planting"] }] });
 const context = { fields: [{ id: "20000000-0000-4000-8000-000000000001", name: "FIELD A" }], referenceDate: "2026-09-16", timezone: "America/Los_Angeles", form };
 const core = { fieldId: context.fields[0].id, activity: "Spraying", workDate: "2026-09-16", startTime: "06:00", endTime: "08:00", notes: "Sprayed Field A.", tags: ["Equipment"] };
@@ -9,9 +10,8 @@ const output = (details: Record<string, LogDetailValue>, patch: Record<string, u
   ({ ...core, ...patch, details: { ...Object.fromEntries(allLogFields(form).map(field => [field.key, null])), ...details } });
 const treatment = { product: "Water", amount: 2, unit: "L" };
 const fields = { ...core, details: treatment, ...treatment };
-const completed = (value: unknown) => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 test("requests strict structured output using the farm's field catalog and no response storage", async () => {
-  const fetcher = vi.fn(async () => completed(output(treatment)));
+  const fetcher = vi.fn(async () => completedResponse(output(treatment)));
   expect(await extractLogFields("Recorded work", context, "server-key", new AbortController().signal, fetcher)).toEqual(fields);
   const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
   expect(url).toBe("https://api.openai.com/v1/responses");
@@ -54,7 +54,7 @@ test.each([
 test("an oak-tree amendment fills the crop even with no count or existing crop catalog", async () => {
   const transcript = "I was planting in Field A yesterday from 6 AM until 8 AM.\n\nI planted oak trees.";
   const patch = { activity: "Planting", notes: "Online voice log created.\n\nOak trees were planted in Field A on September 16, from 6 AM to 8 AM." };
-  const fetcher = vi.fn(async () => completed(output({ product: "Oak trees", unit: "plants" }, patch)));
+  const fetcher = vi.fn(async () => completedResponse(output({ product: "Oak trees", unit: "plants" }, patch)));
   expect(await extractLogFields(transcript, context, "key", new AbortController().signal, fetcher))
     .toEqual({ ...core, ...patch, details: { product: "Oak trees", unit: "plants" }, product: "Oak trees", amount: null, unit: "plants" });
   const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
@@ -68,5 +68,5 @@ test("handles refusals, partial JSON and schema failures as retryable extraction
   for (const payload of [{ status: "incomplete", output: [] }, { status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "No" }] }] }]) {
     await expect(extractLogFields("Speech", context, "key", new AbortController().signal, vi.fn(async () => Response.json(payload)))).rejects.toMatchObject({ code: "EXTRACTION_FAILED" });
   }
-  await expect(extractLogFields("Speech", context, "key", new AbortController().signal, vi.fn(async () => completed(output(treatment, { fieldId: "bad" }))))).rejects.toMatchObject({ code: "EXTRACTION_FAILED" });
+  await expect(extractLogFields("Speech", context, "key", new AbortController().signal, vi.fn(async () => completedResponse(output(treatment, { fieldId: "bad" }))))).rejects.toMatchObject({ code: "EXTRACTION_FAILED" });
 });

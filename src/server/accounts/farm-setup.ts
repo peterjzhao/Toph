@@ -8,6 +8,8 @@ import { parseInput } from "./validation";
 import { parseFarmExtent } from "@/server/satellite/extent";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+/** Where the signed-in account's farm aerial is served (src/app/api/farm/image/route.ts). */
+export const FARM_IMAGE_URL = "/api/farm/image";
 const point = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict();
 const setupSchema = z.object({
   // `bbox` is present only when the view came from the map picker; an uploaded image has no trusted extent.
@@ -83,7 +85,7 @@ export async function getFarmSetup(ctx: AccountContext): Promise<FarmSetup> {
     ctx.sql`select width, height from toph.farm_images where farm_id = ${ctx.farmId}`,
     ctx.sql`select id, label, boundary from toph.fields where farm_id = ${ctx.farmId} and boundary is not null order by label`,
   ]);
-  return { image: images[0] ? { url: "/api/farm/image", width: images[0].width, height: images[0].height } : null,
+  return { image: images[0] ? { url: FARM_IMAGE_URL, width: images[0].width, height: images[0].height } : null,
     fields: fields.map(field => ({ id: field.id, label: field.label, boundary: typeof field.boundary === "string" ? JSON.parse(field.boundary) : field.boundary })),
     setupComplete: ctx.session.farm.setupComplete };
 }
@@ -122,9 +124,9 @@ export async function saveFarmSetup(ctx: AccountContext, body: unknown): Promise
     // Vacate labels before applying edits so swapping A/B is atomic and preserves field IDs.
     await tx`update toph.fields set label = null where farm_id = ${ctx.farmId}`;
     await tx`delete from toph.fields where farm_id = ${ctx.farmId} and not (id = any(${[...ids]}::uuid[]))`;
-    for (const field of confirmed) await tx`insert into toph.fields (id, farm_id, name, label, boundary, map_image_path)
-      values (${field.id}, ${ctx.farmId}, ${`FIELD ${field.label}`}, ${field.label}, ${JSON.stringify(field.boundary)}::jsonb, '/api/farm/image')
-      on conflict (id) do update set name = excluded.name, label = excluded.label, boundary = excluded.boundary, map_image_path = excluded.map_image_path, updated_at = now()`;
+    for (const field of confirmed) await tx`insert into toph.fields (id, farm_id, name, label, boundary)
+      values (${field.id}, ${ctx.farmId}, ${`FIELD ${field.label}`}, ${field.label}, ${JSON.stringify(field.boundary)}::jsonb)
+      on conflict (id) do update set name = excluded.name, label = excluded.label, boundary = excluded.boundary, updated_at = now()`;
     await tx`update toph.farm_access set setup_complete = true where farm_id = ${ctx.farmId}`;
   });
   return getFarmSetup({ ...ctx, session: { ...ctx.session, farm: { ...ctx.session.farm, setupComplete: true } } });

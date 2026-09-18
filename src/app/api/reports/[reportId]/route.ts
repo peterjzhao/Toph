@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 import { resolveAccountContext } from "@/server/accounts/service";
-import { readRuntimeConfig } from "@/server/farm-context";
-import { assertWriteOrigin } from "@/server/http/origin";
+import { assertWebWrite } from "@/server/http/origin";
 import { handleRoute, jsonResponse } from "@/server/http/responses";
 import { deleteReport, getReport } from "@/server/reports/service";
 
@@ -20,7 +19,7 @@ export async function GET(request: NextRequest, { params }: RouteContext): Promi
 /** DELETE /api/reports/:reportId */
 export async function DELETE(request: NextRequest, { params }: RouteContext): Promise<Response> {
   return handleRoute(async () => {
-    assertWriteOrigin(request, readRuntimeConfig().appOrigin);
+    assertWebWrite(request);
     const { reportId } = await params;
     await deleteReport(await resolveAccountContext(request, "admin"), reportId);
     return jsonResponse({ data: { removed: true } });

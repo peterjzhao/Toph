@@ -7,7 +7,7 @@
  * when every input to the computation is stated.
  */
 import {
-  REPORT_DOCUMENT_VERSION, reportCatalog,
+  isWholeMonth, isWholeYear, REPORT_DOCUMENT_VERSION, reportCatalog,
   type ReportCell, type ReportDocument, type ReportFactKey, type ReportGap, type ReportHeaderField, type ReportKind, type ReportMissing, type ReportRow, type ReportSection,
 } from "@/contracts/reports";
 
@@ -76,9 +76,6 @@ const asDate = (iso: string) => new Date(`${iso}T12:00:00Z`);
 export const dayLabel = (iso: string) => dayFormat.format(asDate(iso));
 const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 const daysBetween = (from: string, to: string) => Math.round((asDate(to).getTime() - asDate(from).getTime()) / 86_400_000);
-const lastDayOfMonth = (iso: string) => { const d = asDate(iso); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10); };
-const isWholeMonth = (from: string, to: string) => from.endsWith("-01") && to === lastDayOfMonth(from);
-const isWholeYear = (from: string, to: string) => from.endsWith("-01-01") && to === `${from.slice(0, 4)}-12-31`;
 export const periodLabel = (from: string, to: string) => isWholeYear(from, to) ? from.slice(0, 4) : isWholeMonth(from, to) ? monthFormat.format(asDate(from)) : `${dayLabel(from)} – ${dayLabel(to)}`;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 

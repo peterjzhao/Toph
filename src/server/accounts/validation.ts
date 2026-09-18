@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/contracts/accounts";
 import { validationError } from "@/server/errors";
+import { parseOrThrow } from "@/server/validation/schema";
 
 /** The unique name identifies the account; the password (hashed in password.ts) proves it. */
 export function normalizeAccountName(value: string): { name: string; normalizedName: string } {
@@ -20,7 +21,5 @@ export const signupSchema = z.object({ name, password: newPassword, farmName: z.
 export const loginSchema = z.object({ name, password, client }).strict();
 export const joinSchema = z.object({ name, password: newPassword, code: z.string().trim().regex(/^[A-Za-z0-9]{12}$/).transform(value => value.toUpperCase()), client }).strict();
 export function parseInput<T>(schema: z.ZodType<T>, value: unknown): T {
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) throw validationError("Check the entered details.", Object.fromEntries(parsed.error.issues.map(issue => [issue.path.join("."), issue.message])));
-  return parsed.data;
+  return parseOrThrow(schema, value, "Check the entered details.");
 }

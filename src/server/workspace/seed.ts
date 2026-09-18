@@ -18,7 +18,7 @@ export function makeWorkspaceSeed(farm: Farm, employees: SeedEmployee[], fields:
       startTime: ["07:00", "08:00", "06:30"][index], endTime: ["09:00", "11:00", "09:30"][index],
       notes: "", status: "Scheduled" as const,
     }] : []),
-    reviews: [], reports: [], tickets: [],
+    reviews: [], tickets: [],
     messages: employees.slice(0, 2).map((employee, index) => ({
       id: `70000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
       employeeId: employee.id,

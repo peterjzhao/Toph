@@ -7,13 +7,13 @@ import { Dashboard } from "@/components/dashboard/dashboard";
 import { requestJson, useWorkspace } from "./workspace-provider";
 
 export function DashboardPage({ activityPage = false }: { activityPage?: boolean }) {
-  const { data, workspace, setLogTags, markReviewed } = useWorkspace();
+  const { data, workspace, setLogTags } = useWorkspace();
   const router = useRouter(); const search = useSearchParams();
   const adapted: DashboardData = {
     farm: { ...data.farm, role: "Admin", name: workspace.settings.farmName, avatarUrl: workspace.settings.adminAvatar ?? "/assets/avatar-default.svg" },
     metrics: data.metrics,
     fields: data.filterOptions.fields.map(field => ({ ...field, mapImageUrl: field.mapImageUrl ?? "" })),
-    logs: data.logs.map(log => ({ ...log, field: { ...log.field, mapImageUrl: log.field.mapImageUrl ?? "" }, tags: log.tags.map(tag => tag.label), recording: log.recording ? { url: log.recording.url, durationSeconds: log.recording.durationSeconds ?? 0, clips: log.recording.clips } : { url: "", durationSeconds: 0 } })),
+    logs: data.logs.map(log => ({ ...log, field: { ...log.field, mapImageUrl: log.field.mapImageUrl ?? "" }, tags: log.tags.map(tag => tag.label), recording: log.recording ? { url: log.recording.url, durationSeconds: log.recording.durationSeconds ?? 0, clips: log.recording.clips, waveformAssetUrl: log.recording.waveformAssetUrl } : { url: "", durationSeconds: 0 } })),
   };
   async function addTag(logId: string, label: string) {
     const result = await requestJson<LogTagsResponse>(`/api/logs/${logId}/tags`, { method: "POST", body: JSON.stringify({ label }) });
@@ -29,5 +29,5 @@ export function DashboardPage({ activityPage = false }: { activityPage?: boolean
     const result = await requestJson<AskFarmResponse>("/api/logs/ask", { method: "POST", body: JSON.stringify({ question }), signal });
     return result.data;
   }
-  return <Dashboard embedded reviewMode onReview={markReviewed} activityPage={activityPage} data={adapted} initialExpandedId={search.get("log")} onAddTag={addTag} onRemoveTag={removeTag} onNavigate={path => router.push(path)} onAsk={activityPage ? askFarm : undefined} />;
+  return <Dashboard embedded reviewMode demoMode={Boolean(workspace.settings.demoDay)} activityPage={activityPage} data={adapted} initialExpandedId={search.get("log")} onAddTag={addTag} onRemoveTag={removeTag} onNavigate={path => router.push(path)} onAsk={activityPage ? askFarm : undefined} />;
 }

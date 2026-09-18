@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { WorkspaceState } from "@/contracts/workspace";
 import { validationError } from "@/server/errors";
+import { parseOrThrow } from "@/server/validation/schema";
 import { CUSTOM_KEY_PATTERN, MAX_CUSTOM_LOG_FIELDS, logFormCatalog, type ActivityFormDef } from "@/contracts/log-form";
 
 export const MAX_WORKSPACE_BODY_BYTES = 512 * 1024;
@@ -30,9 +31,6 @@ const schedule = z.object({
 const review = z.object({
   logId: id, status: z.enum(["Pending", "Approved", "Flagged"]), note: text(4000), updatedAt: instant,
 }).strict();
-const report = z.object({
-  id, name: requiredText(160), kind: z.enum(["activity", "compliance", "hours"]), from: date, to: date, createdAt: instant,
-}).strict().refine((item) => item.to >= item.from, { message: "End date must be on or after start date.", path: ["to"] });
 const message = z.object({
   id, employeeId: id, body: requiredText(4000), from: z.enum(["admin", "employee"]), createdAt: instant, read: z.boolean(), readAt: instant.nullable().optional(),
 }).strict();
@@ -73,7 +71,7 @@ const logForm = z.object({
 
 export const workspaceSchema = z.object({
   employees: z.array(employee).max(250), schedule: z.array(schedule).max(1000), reviews: z.array(review).max(1000),
-  reports: z.array(report).max(250), messages: z.array(message).max(2000), tickets: z.array(ticket).max(250), settings, logForm: logForm.optional(),
+  messages: z.array(message).max(2000), tickets: z.array(ticket).max(250), settings, logForm: logForm.optional(),
 }).strict();
 const requestSchema = z.object({
   expectedRevision: z.number().int().min(0).max(2147483646),
@@ -82,26 +80,28 @@ const requestSchema = z.object({
   patch: workspaceSchema.omit({ messages: true }).partial().refine((value) => Object.keys(value).length > 0, "Provide at least one section."),
 }).strict();
 
-function parse<T>(schema: z.ZodType<T>, value: unknown): T {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    const fields: Record<string, string> = {};
-    for (const issue of result.error.issues.slice(0, 20)) fields[issue.path.join(".") || "body"] = issue.message;
-    throw validationError("Invalid workspace data.", fields);
-  }
-  return result.data;
-}
 
 export function parseWorkspacePatch(value: unknown): { expectedRevision: number; patch: Partial<WorkspaceState> } {
-  return parse(requestSchema, value);
+  return parseOrThrow(requestSchema, value, "Invalid workspace data.");
+}
+
+/**
+ * Migration 0016 deletes the unused `reports` list from stored payloads. Until a database has run
+ * it, reads drop the key here so the strict schema still accepts those payloads.
+ */
+function withoutRetiredSections(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !("reports" in value)) return value;
+  const rest: Record<string, unknown> = { ...value };
+  delete rest.reports;
+  return rest;
 }
 
 export function parseWorkspaceState(value: unknown): WorkspaceState {
-  const state = parse(workspaceSchema, value);
+  const state = parseOrThrow(workspaceSchema, withoutRetiredSections(value), "Invalid workspace data.");
   // The old admin-only composer used read=true to mean "saved". Those messages have
   // never been seen by a worker. New recipient acknowledgements carry a server timestamp.
   state.messages = state.messages.map(message => message.from === "admin" && message.read && !message.readAt ? { ...message, read: false } : message);
-  for (const section of ["employees", "schedule", "reports", "messages", "tickets"] as const) {
+  for (const section of ["employees", "schedule", "messages", "tickets"] as const) {
     const values = state[section].map((item) => item.id);
     if (new Set(values).size !== values.length) throw validationError("Duplicate record IDs are not allowed.", { [section]: "IDs must be unique within the section." });
   }

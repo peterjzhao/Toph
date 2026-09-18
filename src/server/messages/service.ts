@@ -4,16 +4,12 @@ import type { MessageInbox } from "@/contracts/messages";
 import type { WorkspaceResponse } from "@/contracts/workspace";
 import type { AccountContext } from "@/server/accounts/service";
 import { ApiError, forbidden, notFound, validationError } from "@/server/errors";
+import { parseOrThrow } from "@/server/validation/schema";
 import { changeWorkspaceMessages, getWorkspace } from "@/server/workspace/service";
 
 const id = z.string().uuid().transform(value => value.toLowerCase());
 const sendSchema = z.object({ id, employeeId: id, body: z.string().trim().min(1).max(4000) }).strict();
 const readSchema = z.object({ employeeId: id, messageIds: z.array(id).min(1).max(2000) }).strict();
-function parse<T>(schema: z.ZodType<T>, input: unknown): T {
-  const result = schema.safeParse(input);
-  if (!result.success) throw validationError("Invalid message request.", Object.fromEntries(result.error.issues.map(issue => [issue.path.join(".") || "body", issue.message])));
-  return result.data;
-}
 function assertConversation(ctx: AccountContext, employeeId: string) {
   if (ctx.account.role === "worker" && ctx.account.employeeId !== employeeId) throw forbidden("This conversation belongs to another worker.");
 }
@@ -24,7 +20,7 @@ export async function getMessages(ctx: AccountContext): Promise<MessageInbox> {
   return inbox(ctx, await getWorkspace(ctx));
 }
 export async function sendMessage(ctx: AccountContext, body: unknown): Promise<MessageInbox> {
-  const input = parse(sendSchema, body);
+  const input = parseOrThrow(sendSchema, body, "Invalid message request.");
   assertConversation(ctx, input.employeeId);
   const from = ctx.account.role === "admin" ? "admin" : "employee";
   const result = await changeWorkspaceMessages(ctx, async (messages, tx) => {
@@ -44,7 +40,7 @@ export async function sendMessage(ctx: AccountContext, body: unknown): Promise<M
   return inbox(ctx, result);
 }
 export async function readMessages(ctx: AccountContext, body: unknown): Promise<MessageInbox> {
-  const input = parse(readSchema, body);
+  const input = parseOrThrow(readSchema, body, "Invalid message request.");
   assertConversation(ctx, input.employeeId);
   const incoming = ctx.account.role === "admin" ? "employee" : "admin";
   const ids = new Set(input.messageIds);

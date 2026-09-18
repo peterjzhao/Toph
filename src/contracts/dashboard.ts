@@ -7,7 +7,8 @@
  * v2 changes from v1: `recording` lost its sample-media flag and `waveformSource`; `metrics` lost `source`
  * and is computed from the farm's data; `meta` lost `mode` and its fixed reference date; periods
  * are `all` (default), `this-month`, and `custom`. v2.1 adds `employee.avatarUrl` (additive).
- * v2.2 adds `LogDto.details` and `PATCH /api/logs/:logId` (additive).
+ * v2.2 adds `LogDto.details` and `PATCH /api/logs/:logId` (additive). v2.3 removes
+ * `recording.waveformPeaks` and `farm.avatarUrl`, which no client read.
  */
 import type { LogDetailValue, LogDetails } from "./log-form";
 
@@ -30,7 +31,6 @@ export type LogDto = {
     url: string;
     durationSeconds: number | null;
     waveformAssetUrl: string | null;
-    waveformPeaks: number[] | null;
     /** Present for mobile logs with appended recordings, in capture order. */
     clips?: Array<{ url: string; durationSeconds: number }>;
   } | null;
@@ -44,7 +44,6 @@ export type DashboardData = {
   farm: {
     id: string;
     name: string;
-    avatarUrl: string | null;
     timezone: string;
   };
   metrics: {

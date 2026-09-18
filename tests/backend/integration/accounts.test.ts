@@ -20,7 +20,6 @@ import * as bootstrap from "@/app/api/mobile/v1/accounts/route";
 import * as profile from "@/app/api/mobile/v1/accounts/[accountId]/route";
 import * as mobileLogs from "@/app/api/mobile/v1/logs/route";
 import * as log from "@/app/api/logs/[logId]/route";
-import * as review from "@/app/api/logs/[logId]/review/route";
 import * as recording from "@/app/api/mobile/v1/recordings/[recordingId]/route";
 import { applyRuntimeGrants } from "@/server/db/grants";
 import { applyMobileGrants } from "@/server/mobile/grants";
@@ -159,20 +158,31 @@ describe("account-scoped signup, farm setup and review", () => {
     expect(response.status).toBe(200); logId = (await response.json()).data.logId;
     const read = await log.GET(req(`/api/logs/${logId}`, "GET", undefined, cookie), params({ logId }));
     expect((await read.json()).data).toMatchObject({ isNew: true, field: { boundary, mapImageUrl: "/api/farm/image" } });
-    expect((await review.POST(req(`/api/logs/${logId}/review`, "POST", {}, token, true), params({ logId }))).status).toBe(403);
-    expect((await review.POST(req(`/api/logs/${logId}/review`, "POST", {}, cookie), params({ logId }))).status).toBe(200);
+    // A log stays new until an administrator saves its Audit Manager decision.
+    const decide = async (credential: string, id: string, status: "Pending" | "Approved" | "Flagged") => {
+      const state = await (await workspace.GET(req("/api/workspace", "GET", undefined, credential))).json();
+      const reviews = [...state.data.reviews.filter((item: { logId: string }) => item.logId !== id), { logId: id, status, note: "", updatedAt: new Date().toISOString() }];
+      return workspace.PATCH(req("/api/workspace", "PATCH", { expectedRevision: state.revision, patch: { reviews } }, credential));
+    };
+    const byWorker = { expectedRevision: 0, patch: { reviews: [{ logId, status: "Approved", note: "", updatedAt: new Date().toISOString() }] } };
+    expect((await workspace.PATCH(req("/api/workspace", "PATCH", byWorker, token, true))).status).toBe(403);
+    expect((await sql`select is_new from toph.work_logs where id = ${logId}`)[0].is_new).toBe(true);
+    expect((await decide(cookie, logId, "Approved")).status).toBe(200);
     const [first] = await sql`select is_new, reviewed_by, reviewed_at from toph.work_logs where id = ${logId}`;
     expect(first.is_new).toBe(false); expect(first.reviewed_by).toBe(admin.account.id); expect(first.reviewed_at).toBeTruthy();
-    await review.POST(req(`/api/logs/${logId}/review`, "POST", {}, cookie), params({ logId }));
+    expect((await decide(cookie, logId, "Flagged")).status).toBe(200);
     expect((await sql`select reviewed_at from toph.work_logs where id = ${logId}`)[0].reviewed_at).toEqual(first.reviewed_at);
-    // Bays Ranch is a regular farm: its administrator signs in by name and reviews persist.
+    // Bays Ranch is a regular farm: its administrator signs in by name and decisions persist.
     const responseBays = await login.POST(req("/api/auth/login", "POST", { name: "Ranch Admin", password: "ranch", client: "web" })); expect(responseBays.status).toBe(200);
     const baysCookie = responseBays.headers.get("set-cookie")!.split(";")[0];
     const baysLogId = "30000000-0000-4000-8000-000000000001";
     expect((await sql`select is_new from toph.work_logs where id = ${baysLogId}`)[0].is_new).toBe(true);
-    expect((await review.POST(req(`/api/logs/${baysLogId}/review`, "POST", {}, baysCookie), params({ logId: baysLogId }))).status).toBe(200);
+    expect((await decide(baysCookie, baysLogId, "Approved")).status).toBe(200);
     const [reviewed] = await sql`select is_new, reviewed_by from toph.work_logs where id = ${baysLogId}`;
     expect(reviewed.is_new).toBe(false); expect(reviewed.reviewed_by).toBe("90000000-0000-4000-8000-000000000001");
+    // Pending again, so new again: later suites see Bays Ranch's four new logs.
+    expect((await decide(baysCookie, baysLogId, "Pending")).status).toBe(200);
+    expect((await sql`select is_new from toph.work_logs where id = ${baysLogId}`)[0].is_new).toBe(true);
     expect((await log.GET(req(`/api/logs/${logId}`, "GET", undefined, baysCookie), params({ logId }))).status).toBe(404);
   });
 

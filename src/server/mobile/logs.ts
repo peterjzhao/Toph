@@ -4,12 +4,13 @@ import { z } from "zod";
 import type { MobileLogReceipt, MobileLogSubmission, MobileRemoteLog } from "@/contracts/mobile";
 import type { FarmContext } from "@/server/farm-context";
 import { ApiError, notFound, payloadTooLarge, validationError } from "@/server/errors";
+import { readLimitedBody } from "@/server/http/body";
 import { getWorkspace } from "@/server/workspace/service";
 import { parseWorkspaceState } from "@/server/workspace/validation";
 import { isValidCalendarDate, localDateTimeToInstant } from "@/server/time/zoned";
 import { normalizeTagLabel } from "@/server/validation/tag-label";
 import { parseUuid } from "@/server/validation/ids";
-import { toLogDto } from "@/server/services/dashboard";
+import { farmMapImageUrl, toLogDto } from "@/server/services/dashboard";
 import { dashboardLogs } from "@/server/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { MAX_MOBILE_AUDIO_BYTES } from "./accounts";
@@ -48,20 +49,9 @@ export async function readMobileSubmission(request: Request): Promise<{ metadata
   const declared = request.headers.get("content-length");
   if (declared && (!/^\d+$/.test(declared) || Number(declared) > limit)) throw payloadTooLarge(limit);
   if (!request.body) throw validationError("Add a log to save.");
-  const chunks: Uint8Array<ArrayBuffer>[] = [];
-  const reader = request.body.getReader();
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > limit) { await reader.cancel(); throw payloadTooLarge(limit); }
-      chunks.push(new Uint8Array(value));
-    }
-  } finally { reader.releaseLock(); }
+  const body = await readLimitedBody(request.body, limit, () => payloadTooLarge(limit));
   let form: FormData;
-  try { form = await new Response(new Blob(chunks), { headers: { "Content-Type": request.headers.get("content-type")! } }).formData(); }
+  try { form = await new Response(body, { headers: { "Content-Type": request.headers.get("content-type")! } }).formData(); }
   catch { throw validationError("The upload could not be read."); }
   let metadata: MobileLogSubmission;
   try {
@@ -166,14 +156,15 @@ export async function listMobileLogs(ctx: FarmContext, accountId: string): Promi
   const rows = await ctx.db.select().from(dashboardLogs).where(and(eq(dashboardLogs.farmId, ctx.farmId), eq(dashboardLogs.employeeId, id))).orderBy(desc(dashboardLogs.workDate), desc(dashboardLogs.createdAt)).limit(100);
   if (!rows.length) return [];
   const ids = rows.map(row => row.id);
-  const [submissions, clips, transcripts] = await Promise.all([
+  const [submissions, clips, transcripts, mapImageUrl] = await Promise.all([
     ctx.sql`select log_id, client_draft_id, notes, treatment from toph.mobile_submissions where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[])`,
     ctx.sql`select id, log_id, duration_seconds, mime_type from toph.mobile_recordings where farm_id = ${ctx.farmId} and log_id = any(${ids}::uuid[]) order by position`,
     ctx.sql`select id, transcript, details from toph.work_logs where farm_id = ${ctx.farmId} and id = any(${ids}::uuid[])`,
+    farmMapImageUrl(ctx),
   ]);
   return rows.map(row => {
     const submission = submissions.find(item => item.log_id === row.id);
-    return { ...toLogDto(row), clientDraftId: submission?.client_draft_id ?? null, notes: submission?.notes ?? row.summary,
+    return { ...toLogDto(row, mapImageUrl), clientDraftId: submission?.client_draft_id ?? null, notes: submission?.notes ?? row.summary,
       treatment: typeof submission?.treatment === "string" ? JSON.parse(submission.treatment) : submission?.treatment ?? null,
       transcript: transcripts.find(item => item.id === row.id)?.transcript ?? null,
       details: decodeDetails(transcripts.find(item => item.id === row.id)?.details),

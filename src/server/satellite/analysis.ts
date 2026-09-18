@@ -11,7 +11,8 @@ import "server-only";
  */
 import { z } from "zod";
 import { fieldAnalysisAnswerSchema, type FieldAnalysisObservation, type FieldAnalysisResult } from "@/contracts/satellite";
-import { TranscriptionError } from "@/server/recordings/audio";
+import { ApiError } from "@/server/errors";
+import { requestStructuredOutput } from "@/server/openai";
 import type { FieldObservation } from "./statistics";
 
 export const analysisModel = "gpt-4.1-mini";
@@ -44,7 +45,7 @@ or that anyone is responsible for a change: flat or falling vegetation is not ev
 Crop stage, product type, weather and thin cloud all produce the same flat line.
 Do not give agronomic, pesticide, dosage or safety advice. Copy dates exactly as they are written.`;
 
-const failed = () => new TranscriptionError(502, "ASK_FAILED", "Toph couldn’t analyse this field right now. Please try again.");
+const failed = () => new ApiError(502, "ASK_FAILED", "Toph couldn’t analyse this field right now. Please try again.");
 
 const round = (value: number) => Math.round(value * 10_000) / 10_000;
 
@@ -85,34 +86,16 @@ export async function analyseField(
       series,
     };
   }
-  try {
-    const response = await fetcher("https://api.openai.com/v1/responses", {
-      method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-      body: JSON.stringify({
-        model: analysisModel, store: false, max_output_tokens: 900, instructions,
-        input: [{
-          role: "user",
-          content: JSON.stringify({
-            farm: { name: context.farmName, timezone: context.timezone },
-            field: context.fieldName,
-            observations: context.observations.map(item => ({ date: item.date, ndvi: round(item.mean), fieldVisible: round(item.validFraction) })),
-            logs: context.logs,
-          }),
-        }],
-        text: { format: { type: "json_schema", name: "field_analysis", strict: true, schema: z.toJSONSchema(fieldAnalysisAnswerSchema) } },
-      }),
-    });
-    if (!response.ok) throw failed();
-    const result = await response.json();
-    if (result.status !== "completed" || !Array.isArray(result.output)) throw failed();
-    const content = result.output.flatMap((item: { type: string; content?: { type: string; text?: string }[] }) => item.type === "message" ? item.content ?? [] : []);
-    if (content.some((item: { type: string }) => item.type === "refusal")) throw failed();
-    const text = content.filter((item: { type: string }) => item.type === "output_text").map((item: { text: string }) => item.text).join("");
-    return { ...validateAnalysis(JSON.parse(text), context), series };
-  } catch (error) {
-    if (signal.aborted) throw new TranscriptionError(499, "CANCELLED", "Analysis cancelled.");
-    if (error instanceof TranscriptionError) throw error;
-    throw failed();
-  }
+  const analysis = await requestStructuredOutput({
+    apiKey, signal, fetcher, model: analysisModel, instructions, maxOutputTokens: 900,
+    input: {
+      farm: { name: context.farmName, timezone: context.timezone },
+      field: context.fieldName,
+      observations: context.observations.map(item => ({ date: item.date, ndvi: round(item.mean), fieldVisible: round(item.validFraction) })),
+      logs: context.logs,
+    },
+    schemaName: "field_analysis", schema: z.toJSONSchema(fieldAnalysisAnswerSchema),
+    parse: value => validateAnalysis(value, context), failure: failed, cancelled: "Analysis cancelled.",
+  });
+  return { ...analysis, series };
 }

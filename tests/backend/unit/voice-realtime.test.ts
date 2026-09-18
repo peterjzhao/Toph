@@ -7,6 +7,7 @@ import { buildLogStateNote, type VoiceLogFields } from "@/contracts/voice";
 import type { FarmContext } from "@/server/farm-context";
 import { reserveVoiceSession, reserveVoiceState } from "@/server/recordings/quota";
 import { checkVoiceLog, checkVoiceRequest, mintVoiceSecret, voiceInstructions, voiceSessionBody, voiceState, voiceTool } from "@/server/recordings/realtime";
+import { completedResponse } from "../helpers/openai";
 
 const form = resolveLogForm({ enabled: { Spraying: ["applicationMethod"] }, hidden: {}, custom: [] });
 const farmFields = [{ id: "11111111-1111-4111-8111-111111111111", name: "NORTH 40" }, { id: "22222222-2222-4222-8222-222222222222", name: "Field B" }];
@@ -123,7 +124,7 @@ describe("shadow state", () => {
     const bootstrap = vi.fn(async () => ({ fields: farmFields, logForm: form })) as never;
     const extracted = { ...args(), endTime: null, details: { product: "Neem oil", amount: 2, unit: "L", applicationMethod: null } } as Record<string, unknown>; delete extracted.confirmed;
     const details = Object.fromEntries(Object.keys((voiceTool(context).parameters as unknown as { properties: { details: { properties: object } } }).properties.details.properties).map(key => [key, (extracted.details as Record<string, unknown>)[key] ?? null]));
-    const fetcher = vi.fn(async () => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ ...extracted, details }) }] }] }));
+    const fetcher = vi.fn(async () => completedResponse({ ...extracted, details }));
     const body = { context: { accountId, referenceDate: "2026-09-17" }, transcript: "I sprayed two liters of neem oil in north 40 from eight", turn: 7 };
     const result = await voiceState(json("/api/mobile/v1/voice/state", body), ctx, "server-key", fetcher, bootstrap);
     expect(result).toMatchObject({ turn: 7, status: "needs_fields", missingFields: ["endTime"], problems: [], prompt: "What time did you finish?", fields: { endTime: null } });

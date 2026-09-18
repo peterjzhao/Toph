@@ -36,7 +36,6 @@ describe("dashboard read services", () => {
     expect(data.farm).toEqual({
       id: FARM_ID,
       name: "Bays Ranch",
-      avatarUrl: "/assets/avatar.jpg",
       timezone: "America/Los_Angeles",
     });
     // The Figma cards, from the seed on its demo day: five logs arrived on April 29 and one of them
@@ -80,6 +79,9 @@ describe("dashboard read services", () => {
     expect(data.filterOptions.fields.map((f) => f.name)).toEqual(
       ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"].map((x) => `FIELD ${x}`),
     );
+    // Every field is drawn on the farm's aerial.
+    expect(data.filterOptions.fields.every((f) => f.mapImageUrl === "/api/farm/image" && f.boundary?.length)).toBe(true);
+    expect(data.logs.every((l) => l.field.mapImageUrl === "/api/farm/image")).toBe(true);
 
     expect(meta).toEqual({
       contractVersion: "2",
@@ -184,19 +186,26 @@ describe("dashboard read services", () => {
       endAt: "2026-04-19T17:40:00.000Z",
       summary: ISAAC_SUMMARY,
       isNew: true,
-      recording: {
-        url: "/assets/sample-recording.mp3",
-        durationSeconds: 13.384671,
-        waveformAssetUrl: "/assets/waveform.svg",
-        waveformPeaks: null,
-      },
       tags: [],
     });
+    expect(isaac.recording).toEqual({ url: "/assets/sample-recording.mp3", durationSeconds: 13.384671, waveformAssetUrl: "/assets/waveform.svg" });
     expect(typeof isaac.updatedAt).toBe("string");
     expect(new Date(isaac.updatedAt).toISOString()).toBe(isaac.updatedAt);
     expect(data.logs.every((l) => l.recording?.url === "/assets/sample-recording.mp3")).toBe(true);
     expect(data.logs[1].isNew).toBe(true);
     expect(data.logs[4].isNew).toBe(false);
+  });
+
+  it("gives no map URL on a farm without an aerial, rather than a broken one", async () => {
+    const other = await createFarmContext({ databaseUrl: getTestDatabaseTarget().url, farmId: OTHER_FARM.id });
+    try {
+      const { data } = await getDashboard(other, {});
+      expect(data.logs.map((log) => log.field)).toEqual([{ id: OTHER_FARM.fieldId, name: "ORCHARD 1", mapImageUrl: null }]);
+      expect(data.filterOptions.fields).toEqual([{ id: OTHER_FARM.fieldId, name: "ORCHARD 1" }]);
+      expect((await getLog(other, OTHER_FARM.logId)).field.mapImageUrl).toBeNull();
+    } finally {
+      await other.close();
+    }
   });
 
   it("returns JSON-safe values only", async () => {

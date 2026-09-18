@@ -6,6 +6,7 @@ import { ApiError, notFound, validationError } from "@/server/errors";
 import { getWorkspace } from "@/server/workspace/service";
 import { parseWorkspaceState } from "@/server/workspace/validation";
 import { parseUuid } from "@/server/validation/ids";
+import { parseOrThrow } from "@/server/validation/schema";
 import { normalizeAccountName } from "@/server/accounts/validation";
 import { nameTaken } from "@/server/accounts/service";
 import { resolveLogForm, type ResolvedLogForm } from "@/contracts/log-form";
@@ -30,9 +31,7 @@ const editSchema = z.object({
   }).strict(),
 }).strict();
 export function parseAccountEdit(body: unknown): { expectedRevision: number; profile: MobileAccountEdit } {
-  const parsed = editSchema.safeParse(body);
-  if (!parsed.success) throw validationError("Check your account details.", Object.fromEntries(parsed.error.issues.map(issue => [issue.path.join("."), issue.message])));
-  return parsed.data;
+  return parseOrThrow(editSchema, body, "Check your account details.");
 }
 
 /** The server always sends the log form; only a phone's cached copy can lack it. */

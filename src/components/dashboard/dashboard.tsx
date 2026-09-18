@@ -18,6 +18,7 @@ import { dateRange, dateFilterLabel, initialDateFilter, rangeDescription, type D
 import { ScrollAnchor } from "./scroll-anchor";
 import { AskPanel, type AskState } from "./ask-panel";
 import { isFarmQuestion, logSearchText, matchesSearch } from "./log-search";
+import { useRecordingWaveform } from "./recording-waveform";
 
 function DesignIcon({ name, size = 16 }: { name: string; size?: number }) {
   return <img src={`/assets/icons/${name}.svg`} alt="" aria-hidden="true" width={size} height={size} style={{ display: "block", flexShrink: 0 }} />;
@@ -76,14 +77,22 @@ function MapDialog({ log, fields, onClose }: { log: EmployeeLog; fields: Employe
   </Modal>;
 }
 
-function LogDetails({ log, fields, tags, onAddTag, onRemoveTag, onExpandMap, onNotify }: { log: EmployeeLog; fields: EmployeeLog["field"][]; tags: string[]; onAddTag: () => void; onRemoveTag?: (label: string) => Promise<void>; onExpandMap: () => void; onNotify: (text: string) => void }) {
+/** Where the design draws the playhead over its waveform, in percent. */
+const DESIGN_PLAYHEAD = 55.7444;
+
+function LogDetails({ log, fields, tags, demoMode, onAddTag, onRemoveTag, onExpandMap, onNotify }: { log: EmployeeLog; fields: EmployeeLog["field"][]; tags: string[]; demoMode: boolean; onAddTag: () => void; onRemoveTag?: (label: string) => Promise<void>; onExpandMap: () => void; onNotify: (text: string) => void }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [clipIndex, setClipIndex] = useState(0);
   const clips = log.recording.clips;
   const recordingUrl = clips?.[clipIndex]?.url ?? log.recording.url;
+  // Only the synthesized demo clip has a stored waveform (the design's), with the design's
+  // playhead in demo mode. Real recordings are drawn from their audio and start at the beginning.
+  const storedWaveform = log.recording.waveformAssetUrl ?? null;
+  const drawnWaveform = useRecordingWaveform(storedWaveform ? null : recordingUrl || null);
+  const waveform = storedWaveform ?? drawnWaveform;
   const [removingTag, setRemovingTag] = useState<string | null>(null);
-  const [progress, setProgress] = useState(55.7444);
+  const [progress, setProgress] = useState(demoMode && storedWaveform ? DESIGN_PLAYHEAD : 0);
   useEffect(() => { const element = audio.current; return () => element?.pause(); }, []);
   async function togglePlayback() {
     const element = audio.current;
@@ -97,8 +106,8 @@ function LogDetails({ log, fields, tags, onAddTag, onRemoveTag, onExpandMap, onN
   return <div className={styles.detailLayout} id={`details-${log.id}`}>
     <div className={styles.detailLeft}>
       {log.recording.url ? <div className={styles.waveform} role="img" aria-label="Recording waveform">
-        <img src="/assets/waveform.svg" alt="" className={styles.waveformBase} />
-        <img src="/assets/waveform.svg" alt="" className={styles.waveformPlayed} style={{ clipPath: `inset(0 ${100 - progress}% 0 0)` }} />
+        {waveform && <><img src={waveform} alt="" className={styles.waveformBase} />
+        <img src={waveform} alt="" className={styles.waveformPlayed} style={{ clipPath: `inset(0 ${100 - progress}% 0 0)` }} /></>}
         <span className={styles.playhead} style={{ left: `${progress}%` }} />
       </div> : <div className={styles.noRecording}>No audio recording is attached to this log.</div>}
       <audio ref={audio} src={recordingUrl || undefined} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setProgress(0); }} onTimeUpdate={() => { const element = audio.current; if (element && element.duration) setProgress(element.currentTime / element.duration * 100); }} />
@@ -120,10 +129,11 @@ function LogDetails({ log, fields, tags, onAddTag, onRemoveTag, onExpandMap, onN
   </div>;
 }
 
-export function Dashboard({ data, initialExpandedId = null, embedded = false, activityPage = false, reviewMode = false, onReview, onAddTag, onRemoveTag, onNavigate, onAsk }: {
+export function Dashboard({ data, initialExpandedId = null, embedded = false, activityPage = false, reviewMode = false, demoMode = false, onAddTag, onRemoveTag, onNavigate, onAsk }: {
   data: DashboardData; initialExpandedId?: string | null; embedded?: boolean; activityPage?: boolean;
   reviewMode?: boolean;
-  onReview?: (logId: string) => Promise<void>;
+  /** The farm's Settings pin a demo day: the demo clip keeps the design's playhead position. */
+  demoMode?: boolean;
   onAddTag?: (logId: string, label: string) => Promise<string[]>;
   onRemoveTag?: (logId: string, label: string) => Promise<string[]>;
   onNavigate?: (path: string) => void;
@@ -132,7 +142,6 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId);
   const [reviewFilter, setReviewFilter] = useState<"new" | "all">(reviewMode && !activityPage ? "new" : "all");
-  const reviewAttempts = useRef(new Set<string>());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [ask, setAsk] = useState<AskState | null>(null);
@@ -165,13 +174,6 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const filterDatePanel = useRef<HTMLDivElement>(null);
   const logCard = useRef<HTMLElement>(null);
   useEffect(() => { setExpandedId(initialExpandedId); }, [initialExpandedId]);
-  useEffect(() => {
-    if (!onReview || !expandedId || !data.logs.find(log => log.id === expandedId)?.isNew || reviewAttempts.current.has(expandedId)) return;
-    reviewAttempts.current.add(expandedId);
-    void onReview(expandedId).catch(cause => {
-      setNotice(cause instanceof Error ? cause.message : "The review could not be saved. Close and reopen the log to retry.");
-    });
-  }, [expandedId, onReview, data.logs]);
   // With a backend the logs themselves carry saved tags, including live updates from other
   // sessions; local overrides only serve the fixture preview and must not mask newer data.
   useEffect(() => { if (onAddTag) setTags(previous => Object.keys(previous).length ? {} : previous); }, [data.logs, onAddTag]);
@@ -261,7 +263,6 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
   const filterCount = Number(Boolean(activity)) + Number(Boolean(field));
 
   function toggleLog(id: string) {
-    if (expandedId === id) reviewAttempts.current.delete(id);
     setExpandedId(current => current === id ? null : id);
   }
   function toggleSelected(id: string) { setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
@@ -386,7 +387,7 @@ export function Dashboard({ data, initialExpandedId = null, embedded = false, ac
                   <td>{log.employee.name}</td><td>{log.activity}</td><td>{formatDate(log.date)}</td><td>{log.field.name}</td><td>{formatTime(log.startAt, data.farm.timezone)} - {formatTime(log.endAt, data.farm.timezone)}</td>
                   <td className={styles.actionCell}><button type="button" className={styles.viewButton} aria-label={`${expandedId === log.id ? "Close" : "View"} ${log.employee.name}'s log`} aria-expanded={expandedId === log.id} aria-controls={expandedId === log.id ? `details-${log.id}` : undefined} onClick={event => { event.stopPropagation(); toggleLog(log.id); }}>{expandedId === log.id ? "Close" : "View"}</button></td>
                 </tr>
-                {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} fields={data.fields ?? [...new Map(data.logs.map(item => [item.field.id, item.field])).values()]} tags={tags[log.id] ?? log.tags} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
+                {expandedId === log.id && <tr className={styles.detailRow}><td colSpan={7}><LogDetails log={log} fields={data.fields ?? [...new Map(data.logs.map(item => [item.field.id, item.field])).values()]} tags={tags[log.id] ?? log.tags} demoMode={demoMode} onAddTag={() => { setTagLog(log); setTagDraft(""); setTagError(""); }} onExpandMap={() => setMapLog(log)} onRemoveTag={onRemoveTag ? async label => { const saved = await onRemoveTag(log.id, label); setTags(previous => ({ ...previous, [log.id]: saved })); setNotice("Tag removed."); } : undefined} onNotify={setNotice} /></td></tr>}
               </Fragment>)}
               {logs.length === 0 && <tr className={styles.emptyRow}><td colSpan={7}><Search size={22} /><h3>{reviewMode && reviewFilter === "new" ? "You’re all caught up" : "No matching logs"}</h3><p>{reviewMode && reviewFilter === "new" ? "New submissions will appear here when your team records work." : range ? `No logs match your filters for ${rangeDescription(range)}.` : "Try another search or clear your filters."}</p><button type="button" onClick={() => { resetFilters(); setDateFilter({ kind: "all" }); setReviewFilter("all"); }}>{reviewMode && reviewFilter === "new" ? "View all logs" : "Clear filters"}</button></td></tr>}
             </tbody>

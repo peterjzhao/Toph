@@ -113,6 +113,13 @@
       "when": 1790181000000,
       "tag": "0015_sample_reports_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790267400000,
+      "tag": "0016_drop_unused_columns",
+      "breakpoints": true
     }
   ]
 }

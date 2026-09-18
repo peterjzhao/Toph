@@ -112,6 +112,14 @@ export const reportCatalog = {
 const pad = (value: number) => String(value).padStart(2, "0");
 const lastDay = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
 
+/** Whether from..to (YYYY-MM-DD) is exactly one calendar year. */
+export const isWholeYear = (from: string, to: string) => from.endsWith("-01-01") && to === `${from.slice(0, 4)}-12-31`;
+/** Whether from..to (YYYY-MM-DD) is exactly one calendar month. */
+export function isWholeMonth(from: string, to: string): boolean {
+  const [year, month] = from.split("-").map(Number);
+  return from.endsWith("-01") && to === `${from.slice(0, 7)}-${pad(lastDay(year, month))}`;
+}
+
 /** The report period that contains `today` (YYYY-MM-DD): its month, its half-month pay period, or its year. */
 export function suggestedPeriod(kind: ReportKind, today: string): { from: string; to: string } {
   const [year, month, day] = today.split("-").map(Number);

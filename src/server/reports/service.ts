@@ -16,13 +16,13 @@ import { notFound, validationError } from "@/server/errors";
 import type { FarmContext } from "@/server/farm-context";
 import { reserveTranscription } from "@/server/recordings/quota";
 import { isValidCalendarDate } from "@/server/time/zoned";
+import { isUuid } from "@/server/validation/ids";
 import { assembleReport, INPUT_ACTIVITIES, LOOKBACK_DAYS, mergeFacts, recordedFacts, type ReportLog } from "./assemble";
 import { detectionModel, detectReportFacts, type DetectedFact, type DetectionLog } from "./detect";
 
 /** Most logs one report reads. A longer period is split into several reports. */
 export const MAX_REPORT_LOGS = 1000;
 const MAX_SAVED_REPORTS = 250;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Activities whose notes can hold facts a report uses. Labor hours needs only recorded times. */
 const DETECTION_ACTIVITIES: Record<ReportKind, ReadonlySet<string>> = {
@@ -164,7 +164,7 @@ export async function listReports(ctx: FarmContext): Promise<SavedReportSummary[
 }
 
 export async function getReport(ctx: FarmContext, id: string): Promise<SavedReportDto> {
-  if (!UUID.test(id)) throw notFound("Report not found.");
+  if (!isUuid(id)) throw notFound("Report not found.");
   const [row] = await ctx.sql<(ReportRowDb & { document: ReportDocument })[]>`
     select id, kind, name, period_from::text as period_from, period_to::text as period_to, created_by, created_at, document->'readiness' as readiness, document
     from toph.farm_reports where farm_id = ${ctx.farmId} and id = ${id}`;
@@ -173,7 +173,7 @@ export async function getReport(ctx: FarmContext, id: string): Promise<SavedRepo
 }
 
 export async function deleteReport(ctx: FarmContext, id: string): Promise<void> {
-  if (!UUID.test(id)) throw notFound("Report not found.");
+  if (!isUuid(id)) throw notFound("Report not found.");
   const rows = await ctx.sql`delete from toph.farm_reports where farm_id = ${ctx.farmId} and id = ${id} returning id`;
   if (!rows.length) throw notFound("Report not found.");
 }

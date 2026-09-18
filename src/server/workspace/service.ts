@@ -1,6 +1,6 @@
 import "server-only";
 import type postgres from "postgres";
-import type { Message, WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
+import type { Message, Review, WorkspaceResponse, WorkspaceState } from "@/contracts/workspace";
 import type { FarmContext } from "@/server/farm-context";
 import { ApiError, validationError } from "@/server/errors";
 import { mapDatabaseError } from "@/server/db/errors";
@@ -52,6 +52,28 @@ async function validateRelationships(tx: postgres.TransactionSql, ctx: FarmConte
   }
 }
 
+/**
+ * A log is new until its Audit Manager decision. Approved or Flagged clears the flag and records
+ * the first reviewer; a decision set back to Pending makes the log new again. Only logs whose
+ * decision changed in this save are touched.
+ */
+async function syncNewFlags(tx: postgres.TransactionSql, ctx: FarmContext & { account?: { id: string } }, before: Review[], after: Review[]): Promise<void> {
+  const decided = (reviews: Review[]) => new Set(reviews.filter((review) => review.status !== "Pending").map((review) => review.logId));
+  const was = decided(before);
+  const now = decided(after);
+  const cleared = [...now].filter((id) => !was.has(id));
+  const reopened = [...was].filter((id) => !now.has(id));
+  if (cleared.length) {
+    await tx`update toph.work_logs set is_new = false, reviewed_by = coalesce(reviewed_by, ${ctx.account?.id ?? null}::uuid),
+      reviewed_at = coalesce(reviewed_at, now()), updated_at = case when is_new then now() else updated_at end
+      where farm_id = ${ctx.farmId} and id = any(${cleared}::uuid[])`;
+  }
+  if (reopened.length) {
+    await tx`update toph.work_logs set is_new = true, updated_at = now()
+      where farm_id = ${ctx.farmId} and id = any(${reopened}::uuid[]) and not is_new`;
+  }
+}
+
 /** Atomic, first-read initialization only. Existing workspace data is never reseeded. */
 export async function getWorkspace(ctx: FarmContext): Promise<WorkspaceResponse> {
   try {
@@ -88,7 +110,7 @@ export async function changeWorkspaceMessages(
 }
 
 /** Whole-section replacement under a row lock. A stale revision can never silently lose a write. */
-export async function patchWorkspace(ctx: FarmContext, body: unknown): Promise<WorkspaceResponse> {
+export async function patchWorkspace(ctx: FarmContext & { account?: { id: string } }, body: unknown): Promise<WorkspaceResponse> {
   const { patch, expectedRevision } = parseWorkspacePatch(body);
   try {
     return await ctx.sql.begin(async (tx) => {
@@ -97,8 +119,10 @@ export async function patchWorkspace(ctx: FarmContext, body: unknown): Promise<W
       if (row.revision !== expectedRevision) {
         throw new ApiError(409, "REVISION_CONFLICT", "The workspace changed in another session. Reload and try again.");
       }
-      const state = parseWorkspaceState({ ...parseWorkspaceState(decodePayload(row.payload)), ...patch });
+      const current = parseWorkspaceState(decodePayload(row.payload));
+      const state = parseWorkspaceState({ ...current, ...patch });
       await validateRelationships(tx, ctx, state);
+      await syncNewFlags(tx, ctx, current.reviews, state.reviews);
       const [access] = await tx`select farm_id from toph.farm_access where farm_id = ${ctx.farmId}`;
       if (access) {
         const memberships = await tx`select id, employee_id, name from toph.accounts where farm_id = ${ctx.farmId} and role = 'worker'`;

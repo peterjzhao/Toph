@@ -9,7 +9,6 @@ export const FARM_ID = "00000000-0000-4000-8000-000000000001";
 export const FARM = {
   id: FARM_ID,
   name: "Bays Ranch",
-  avatarPath: "/assets/avatar.jpg",
   timezone: "America/Los_Angeles",
 } as const;
 

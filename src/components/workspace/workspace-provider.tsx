@@ -21,7 +21,7 @@ type WorkspaceContextValue = {
   messageError: string;
 };
 
-type Context = WorkspaceContextValue & { account: AccountSession; session: AccountSession["account"]; signOut: () => Promise<void>; setLogTags: (id: string, tags: TagDto[]) => void; markReviewed: (id: string) => Promise<void> };
+type Context = WorkspaceContextValue & { account: AccountSession; session: AccountSession["account"]; signOut: () => Promise<void>; setLogTags: (id: string, tags: TagDto[]) => void };
 const WorkspaceContext = createContext<Context | null>(null);
 
 export async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -236,10 +236,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       window.location.assign("/login");
     } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Could not sign out. Please try again."); }
   }
-  async function markReviewed(id: string) {
-    await requestJson(`/api/logs/${id}/review`, { method: "POST", body: "{}" });
-    await reloadDashboard();
-  }
 
   if (loading) return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "#777" }} role="status">Loading your farm…</div>;
   if (!account && !error) return <div role="status" style={{ padding: 40 }}>Opening your account…</div>;
@@ -253,7 +249,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }),
   };
   const workspace = inbox && inbox.revision > state.revision ? { ...state.data, messages: inbox.messages } : state.data;
-  return <WorkspaceContext.Provider value={{ data: displayData, workspace, avatars: employeeAvatars(data), saving: pending > 0, saveError, notice, update, notify, reloadDashboard, setLogTags, account, session: account.account, signOut, markReviewed, sendMessage, markMessagesRead, messageError }}>{children}</WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ data: displayData, workspace, avatars: employeeAvatars(data), saving: pending > 0, saveError, notice, update, notify, reloadDashboard, setLogTags, account, session: account.account, signOut, sendMessage, markMessagesRead, messageError }}>{children}</WorkspaceContext.Provider>;
 }
 
 export function useWorkspace() {

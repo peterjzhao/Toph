@@ -105,6 +105,7 @@ describe("resetting the database to the demo state", () => {
         "Isaac Wang 2026-04-19", "Maya Patel 2026-04-20", "Liam Johnson 2026-04-21", "Sophia Lee 2026-04-22",
       ]);
       expect(data.logs[0].summary).not.toBe("edited");
+      expect(data.logs.every((log) => log.field.mapImageUrl === "/api/farm/image" && log.recording?.url === "/assets/sample-recording.mp3")).toBe(true);
     } finally {
       await ctx.close();
     }

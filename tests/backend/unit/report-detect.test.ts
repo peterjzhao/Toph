@@ -1,9 +1,9 @@
 import { expect, test, vi } from "vitest";
 import { DETECTION_BATCH_SIZE, detectReportFacts, validateDetections, type DetectionLog } from "@/server/reports/detect";
+import { completedResponse, refusalResponse } from "../helpers/openai";
 
 const log = (id: string, notes: string): DetectionLog => ({ id, activity: "Spraying", field: "FIELD A", date: "2026-04-19", notes, recorded: {} });
 const sprayed = log("a", "Sprayed Roundup PowerMAX, 2.5 gal over 12 acres with the tractor boom. EPA reg. 524-549.");
-const completed = (value: unknown) => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 
 test("keeps facts whose quote is in the log and whose value is in the quote", () => {
   const result = validateDetections({ logs: [{ logId: "a", facts: [
@@ -65,7 +65,7 @@ test("sends strict, unstored batches", async () => {
   const logs = Array.from({ length: DETECTION_BATCH_SIZE + 1 }, (_, index) => log(`log-${index}`, `Sprayed field ${index}.`));
   const fetcher = vi.fn(async (_url: string, init: RequestInit) => {
     const sent: DetectionLog[] = JSON.parse(JSON.parse(init.body as string).input[0].content).logs;
-    return completed({ logs: sent.map(item => ({ logId: item.id, facts: [] })) });
+    return completedResponse({ logs: sent.map(item => ({ logId: item.id, facts: [] })) });
   });
   const result = await detectReportFacts(logs, "server-key", new AbortController().signal, { fetcher: fetcher as unknown as typeof fetch });
   expect(fetcher).toHaveBeenCalledTimes(2);
@@ -77,9 +77,9 @@ test("sends strict, unstored batches", async () => {
 });
 
 test("gives every log a list even when the model leaves one out, and maps failures", async () => {
-  const quiet = vi.fn(async () => completed({ logs: [] }));
+  const quiet = vi.fn(async () => completedResponse({ logs: [] }));
   expect((await detectReportFacts([sprayed], "key", new AbortController().signal, { fetcher: quiet as unknown as typeof fetch })).get("a")).toEqual([]);
-  for (const response of [new Response("{}", { status: 500 }), Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "no" }] }] })]) {
+  for (const response of [new Response("{}", { status: 500 }), refusalResponse()]) {
     await expect(detectReportFacts([sprayed], "key", new AbortController().signal, { fetcher: vi.fn(async () => response) as unknown as typeof fetch }))
       .rejects.toMatchObject({ status: 502, code: "REPORT_FAILED" });
   }
