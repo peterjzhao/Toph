@@ -13,12 +13,30 @@ export type RealtimeCallbacks = {
   /** The channel or the peer connection closed or failed after `connectRealtime` resolved or while it ran. */
   onDown(reason: string): void;
 };
-export type RealtimeCall = { send(event: Record<string, unknown>): void; close(): void };
+export type RealtimeCall = {
+  send(event: Record<string, unknown>): void;
+  /** Turns the microphone off and keeps the call up, so the model can finish its last sentence uninterrupted. */
+  mute(): void;
+  close(): void;
+};
 /**
  * Opens the microphone and builds the offer straight away; `exchange` is where the caller waits for the
  * server's session, so the two run side by side instead of one after the other.
  */
 export type ConnectRealtime = (dataChannel: string, callbacks: RealtimeCallbacks, exchange: (offer: string) => Promise<string>) => Promise<RealtimeCall>;
+
+/**
+ * The call's recording is each worker turn fetched back as base64 PCM in one data-channel message: about
+ * 64 KB per second of speech. libwebrtc offers 256 KB, which OpenAI honours by dropping larger messages
+ * without an error, so the offer sent to OpenAI raises it; the phone's own description is unchanged.
+ * Checked against the live API on 2026-09-17 in Chrome's libwebrtc: a 14-second turn (892 KB) arrived
+ * with this change and never arrived without it.
+ */
+const maxMessageBytes = 4 * 1024 * 1024;
+export function allowLargeMessages(sdp: string) {
+  if (/^a=max-message-size:\d+/m.test(sdp)) return sdp.replace(/^a=max-message-size:\d+/m, `a=max-message-size:${maxMessageBytes}`);
+  return sdp.replace(/^(a=sctp-port:\d+)(\r?\n)/m, `$1$2a=max-message-size:${maxMessageBytes}$2`);
+}
 
 /** Null when the native module is not part of this build. The import is guarded so the app still starts. */
 export function loadWebRTC(): WebRTC | null {
@@ -56,12 +74,13 @@ export function createRealtimeConnector(webrtc: WebRTC): ConnectRealtime {
       // The remote audio track plays as soon as it arrives; there is nothing to attach.
       const offer = await peer.createOffer({});
       await peer.setLocalDescription(offer);
-      const answer = await exchange(String(offer.sdp ?? peer.localDescription?.sdp ?? ""));
+      const answer = await exchange(allowLargeMessages(String(offer.sdp ?? peer.localDescription?.sdp ?? "")));
       if (closed) throw new Error("Cancelled.");
       await peer.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer }));
     } catch (cause) { close(); throw cause; }
     return {
       send(event) { if (!closed && channel.readyState === "open") channel.send(JSON.stringify(event)); },
+      mute() { try { stream.getAudioTracks().forEach(track => { track.enabled = false; }); } catch { /* already released */ } },
       close,
     };
   };
